@@ -82,7 +82,8 @@ private val Muted = Color(0xFF9BA9B9)
 class MainActivity : ComponentActivity() {
     private val streamServer by lazy { MjpegStreamServer() }
     private val scanResult = mutableStateOf<String?>(null)
-    private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val hasCameraPermission = mutableStateOf(false)
+    private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> hasCameraPermission.value = granted }
 
     private val qrScanner = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -92,13 +93,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            cameraPermission.launch(Manifest.permission.CAMERA)
-        }
+        hasCameraPermission.value = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (!hasCameraPermission.value) cameraPermission.launch(Manifest.permission.CAMERA)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
             CSCApp(
                 server = streamServer,
+                cameraGranted = hasCameraPermission.value,
                 scannedPayload = scanResult.value,
                 onConsumeScan = { scanResult.value = null },
                 onLaunchScanner = {
@@ -144,6 +145,7 @@ private data class StreamConnection(val host: String, val port: Int, val token: 
 @Composable
 private fun CSCApp(
     server: MjpegStreamServer,
+    cameraGranted: Boolean,
     scannedPayload: String?,
     onConsumeScan: () -> Unit,
     onLaunchScanner: () -> Unit,
@@ -171,7 +173,7 @@ private fun CSCApp(
         ) { padding ->
             when (selectedTab) {
                 0 -> Dashboard(Modifier.padding(padding), onCamera = { selectedTab = 1 }, onMonitor = { selectedTab = 2 })
-                1 -> CameraScreen(server, Modifier.padding(padding), onRequestCamera)
+                1 -> CameraScreen(server, cameraGranted, Modifier.padding(padding), onRequestCamera)
                 2 -> MonitorScreen(scannedPayload, onConsumeScan, onLaunchScanner, Modifier.padding(padding))
                 else -> SettingsScreen(Modifier.padding(padding))
             }
@@ -225,12 +227,11 @@ private fun ActionCard(number: String, title: String, subtitle: String, icon: an
 }
 
 @Composable
-private fun CameraScreen(server: MjpegStreamServer, modifier: Modifier = Modifier, onRequestCamera: () -> Unit) {
+private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: Modifier = Modifier, onRequestCamera: () -> Unit) {
     val context = LocalContext.current
     var running by remember { mutableStateOf(false) }
     var connectionPayload by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     Column(modifier.fillMaxSize().background(Navy).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         androidx.compose.material3.Text("Modalità videocamera", fontSize = 25.sp, fontWeight = FontWeight.Bold)
