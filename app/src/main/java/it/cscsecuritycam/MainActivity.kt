@@ -23,6 +23,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -200,13 +201,16 @@ private fun CSCApp(
 
 @Composable
 private fun Dashboard(modifier: Modifier = Modifier, onCamera: () -> Unit, onMonitor: () -> Unit) {
-    Column(modifier.fillMaxSize().background(Navy).padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    Column(modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF0B1220), Navy, Color(0xFF111D30)))).padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(46.dp).background(Orange, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Shield, contentDescription = null, tint = Navy, modifier = Modifier.size(27.dp))
+            Box(Modifier.size(52.dp).background(Orange, RoundedCornerShape(16.dp)).border(1.dp, Color(0xFFFFB36B), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.White, modifier = Modifier.size(29.dp))
             }
             Column(Modifier.padding(start = 12.dp)) {
-                androidx.compose.material3.Text("CSC SecurityCam", fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Text("CSC", fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
+                    androidx.compose.material3.Text("SecurityCam", color = Orange, fontWeight = FontWeight.Black, letterSpacing = 0.2.sp)
+                }
                 androidx.compose.material3.Text("VIDEOSORVEGLIANZA SMART", color = Muted, fontSize = 10.sp, letterSpacing = 1.5.sp)
             }
         }
@@ -229,9 +233,9 @@ private fun Dashboard(modifier: Modifier = Modifier, onCamera: () -> Unit, onMon
 
 @Composable
 private fun ActionCard(number: String, title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(20.dp)) {
+    Card(onClick = onClick, modifier = Modifier.border(1.dp, Color(0xFF40516A), RoundedCornerShape(20.dp)), colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(20.dp)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(48.dp).background(Color(0xFF29394B), RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(48.dp).background(Color(0xFF26364B), RoundedCornerShape(15.dp)).border(1.dp, Color(0xFF53657D), RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) {
                 Icon(icon, contentDescription = null, tint = Orange, modifier = Modifier.size(25.dp))
             }
             Column(Modifier.weight(1f).padding(start = 13.dp)) {
