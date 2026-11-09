@@ -72,6 +72,7 @@ import it.cscsecuritycam.network.NetworkUtils
 import java.io.IOException
 import java.util.concurrent.Executors
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Dispatchers
 import android.webkit.WebView
@@ -234,7 +235,16 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
     val context = LocalContext.current
     var running by remember { mutableStateOf(false) }
     var connectionPayload by remember { mutableStateOf<String?>(null) }
+    var monitorConnected by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(running) {
+        while (running) {
+            monitorConnected = server.hasConnectedMonitor()
+            delay(700)
+        }
+        monitorConnected = false
+    }
 
     Column(modifier.fillMaxSize().background(Navy).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         androidx.compose.material3.Text("Modalità videocamera", fontSize = 25.sp, fontWeight = FontWeight.Bold)
@@ -243,10 +253,15 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
             CameraPreview(server, Modifier.fillMaxWidth().weight(1f))
             Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    androidx.compose.material3.Text("SCANSIONA CON IL SECONDO TELEFONO", color = Orange, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    val qr = remember(connectionPayload) { connectionPayload?.let { makeQrBitmap(it) } }
-                    if (qr != null) Image(qr.asImageBitmap(), contentDescription = "QR di collegamento", modifier = Modifier.size(170.dp).background(Color.White, RoundedCornerShape(8.dp)).padding(8.dp))
-                    androidx.compose.material3.Text("Entrambi i telefoni devono essere collegati alla stessa rete Wi-Fi.", color = Muted, fontSize = 11.sp)
+                    if (monitorConnected) {
+                        androidx.compose.material3.Text("MONITOR COLLEGATO", color = Color(0xFF62D69A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        androidx.compose.material3.Text("Il secondo telefono sta ricevendo il video in diretta.", color = Muted, fontSize = 12.sp)
+                    } else {
+                        androidx.compose.material3.Text("SCANSIONA CON IL SECONDO TELEFONO", color = Orange, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        val qr = remember(connectionPayload) { connectionPayload?.let { makeQrBitmap(it) } }
+                        if (qr != null) Image(qr.asImageBitmap(), contentDescription = "QR di collegamento", modifier = Modifier.size(170.dp).background(Color.White, RoundedCornerShape(8.dp)).padding(8.dp))
+                        androidx.compose.material3.Text("Inquadra il QR con il monitor. Il codice scomparirà al collegamento.", color = Muted, fontSize = 11.sp)
+                    }
                 }
             }
         } else {
