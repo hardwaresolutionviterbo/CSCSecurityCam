@@ -65,7 +65,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
-import com.journeyapps.barcodescanner.IntentIntegrator
+import com.google.zxing.integration.android.IntentIntegrator
 import it.cscsecuritycam.camera.YuvFrameConverter
 import it.cscsecuritycam.network.MjpegStreamServer
 import it.cscsecuritycam.network.NetworkUtils
@@ -271,7 +271,7 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
                     } else {
                         try {
                             server.rotateToken()
-                            if (!server.isAlive) server.start(MjpegStreamServer.SOCKET_READ_TIMEOUT, false)
+                            if (!server.isAlive) server.start()
                             connectionPayload = "cscam://connect?host=$ip&port=${MjpegStreamServer.PORT}&token=${server.token()}"
                             running = true
                             error = null
