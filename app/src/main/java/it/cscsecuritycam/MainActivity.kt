@@ -71,6 +71,9 @@ import it.cscsecuritycam.network.MjpegStreamServer
 import it.cscsecuritycam.network.NetworkUtils
 import java.io.IOException
 import java.util.concurrent.Executors
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Dispatchers
 import android.webkit.WebView
 import android.webkit.WebViewClient
 
@@ -393,34 +396,87 @@ private fun MonitorScreen(
 
 @Composable
 private fun MjpegViewer(url: String, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    AndroidView(
-        modifier = modifier.background(Color.Black, RoundedCornerShape(16.dp)),
-        factory = {
-            WebView(it).apply {
-                settings.javaScriptEnabled = false
-                settings.domStorageEnabled = false
-                settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
-                webViewClient = WebViewClient()
-                val html = """
-                    <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <style>html,body{margin:0;background:#000;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-                    img{width:100%;height:100%;object-fit:contain}</style></head>
-                    <body><img src="$url"></body></html>
-                """.trimIndent()
-                loadDataWithBaseURL("http://localhost/", html, "text/html", "UTF-8", null)
+    var frame by remember(url) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var streamError by remember(url) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(url) {
+        withContext(Dispatchers.IO) {
+            var connection: java.net.HttpURLConnection? = null
+            try {
+                connection = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 5000
+                    readTimeout = 20000
+                    useCaches = false
+                    setRequestProperty("Cache-Control", "no-cache")
+                    setRequestProperty("Accept", "multipart/x-mixed-replace")
+                }
+                connection.connect()
+                val code = connection.responseCode
+                if (code != 200) throw IOException("Server video: HTTP $code")
+                val input = java.io.DataInputStream(java.io.BufferedInputStream(connection.inputStream))
+                while (isActive) {
+                    var line = readMjpegLine(input)
+                    while (line.isEmpty() && isActive) line = readMjpegLine(input)
+                    if (!line.startsWith("--")) continue
+
+                    var contentLength = -1
+                    while (true) {
+                        val header = readMjpegLine(input)
+                        if (header.isEmpty()) break
+                        if (header.startsWith("Content-Length:", ignoreCase = true)) {
+                            contentLength = header.substringAfter(":").trim().toIntOrNull() ?: -1
+                        }
+                    }
+                    if (contentLength <= 0 || contentLength > 8_000_000) continue
+
+                    val jpeg = ByteArray(contentLength)
+                    input.readFully(jpeg)
+                    val bitmap = android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
+                    if (bitmap != null) {
+                        withContext(Dispatchers.Main) {
+                            frame = bitmap
+                            streamError = null
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (isActive) withContext(Dispatchers.Main) {
+                    streamError = e.localizedMessage ?: "Impossibile ricevere il video"
+                }
+            } finally {
+                connection?.disconnect()
             }
-        },
-        update = { view ->
-            val html = """
-                <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>html,body{margin:0;background:#000;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-                img{width:100%;height:100%;object-fit:contain}</style></head>
-                <body><img src="$url"></body></html>
-            """.trimIndent()
-            view.loadDataWithBaseURL("http://localhost/", html, "text/html", "UTF-8", null)
         }
-    )
+    }
+
+    Box(modifier.background(Color.Black, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+        val currentFrame = frame
+        if (currentFrame != null) {
+            Image(
+                bitmap = currentFrame.asImageBitmap(),
+                contentDescription = "Video live della videocamera",
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            androidx.compose.material3.Text(
+                streamError ?: "Connessione video in corso…",
+                color = Color.White,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+    }
+}
+
+private fun readMjpegLine(input: java.io.DataInputStream): String {
+    val bytes = java.io.ByteArrayOutputStream()
+    while (true) {
+        val value = input.read()
+        if (value == -1) throw IOException("Connessione video interrotta")
+        if (value == 10) break
+        if (value != 13) bytes.write(value)
+        if (bytes.size() > 4096) throw IOException("Intestazione MJPEG non valida")
+    }
+    return bytes.toString(Charsets.US_ASCII.name())
 }
 
 @Composable
