@@ -69,6 +69,8 @@ import com.google.zxing.integration.android.IntentIntegrator
 import it.cscsecuritycam.camera.YuvFrameConverter
 import it.cscsecuritycam.network.MjpegStreamServer
 import it.cscsecuritycam.network.NetworkUtils
+import it.cscsecuritycam.surveillance.MotionDetector
+import it.cscsecuritycam.surveillance.MotionNotifier
 import java.io.IOException
 import java.util.concurrent.Executors
 import kotlinx.coroutines.withContext
@@ -88,6 +90,7 @@ class MainActivity : ComponentActivity() {
     private val scanResult = mutableStateOf<String?>(null)
     private val hasCameraPermission = mutableStateOf(false)
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> hasCameraPermission.value = granted }
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     private val qrScanner = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -99,6 +102,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         hasCameraPermission.value = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         if (!hasCameraPermission.value) cameraPermission.launch(Manifest.permission.CAMERA)
+        if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
             CSCApp(
@@ -236,6 +240,8 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
     var running by remember { mutableStateOf(false) }
     var connectionPayload by remember { mutableStateOf<String?>(null) }
     var monitorConnected by remember { mutableStateOf(false) }
+    var motionEnabled by remember { mutableStateOf(true) }
+    var motionDetected by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(running) {
@@ -250,7 +256,7 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
         androidx.compose.material3.Text("Modalità videocamera", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         androidx.compose.material3.Text("Questo telefono acquisisce il video e lo condivide sulla rete Wi-Fi locale.", color = Muted, fontSize = 13.sp)
         if (running && granted) {
-            CameraPreview(server, Modifier.fillMaxWidth().weight(1f))
+            CameraPreview(server, motionEnabled, onMotion = { motionDetected = true; MotionNotifier.show(context) }, Modifier.fillMaxWidth().weight(1f))
             Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (monitorConnected) {
@@ -304,19 +310,29 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
         ) {
             androidx.compose.material3.Text(if (running) "Arresta videocamera" else "Avvia videocamera", fontWeight = FontWeight.Bold)
         }
-        if (running) androidx.compose.material3.Text("Streaming LAN attivo • porta ${MjpegStreamServer.PORT}", color = Muted, fontSize = 11.sp)
+        if (running) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    androidx.compose.material3.Text("Rilevamento movimento", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    androidx.compose.material3.Text(if (motionDetected) "Movimento rilevato" else "Analisi della scena attiva", color = if (motionDetected) Orange else Muted, fontSize = 11.sp)
+                }
+                androidx.compose.material3.Switch(checked = motionEnabled, onCheckedChange = { motionEnabled = it })
+            }
+            androidx.compose.material3.Text("Streaming LAN attivo • porta " + MjpegStreamServer.PORT, color = Muted, fontSize = 11.sp)
+        }
     }
 }
 
 @Composable
-private fun CameraPreview(server: MjpegStreamServer, modifier: Modifier = Modifier) {
+private fun CameraPreview(server: MjpegStreamServer, motionEnabled: Boolean, onMotion: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
 
     AndroidView(factory = { previewView }, modifier = modifier.background(Color.Black, RoundedCornerShape(18.dp)))
 
-    DisposableEffect(server, lifecycleOwner, previewView) {
+    DisposableEffect(server, lifecycleOwner, previewView, motionEnabled, onMotion) {
+        val motionDetector = MotionDetector()
         val executor = Executors.newSingleThreadExecutor()
         val providerFuture = ProcessCameraProvider.getInstance(context)
         providerFuture.addListener({
@@ -330,6 +346,7 @@ private fun CameraPreview(server: MjpegStreamServer, modifier: Modifier = Modifi
                 analysis.setAnalyzer(executor) { image ->
                     try {
                         YuvFrameConverter.toJpeg(image)?.let(server::publishFrame)
+                        if (motionEnabled && motionDetector.detect(image)) onMotion()
                     } catch (_: Exception) {
                     } finally {
                         image.close()
