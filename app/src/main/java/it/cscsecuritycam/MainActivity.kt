@@ -11,6 +11,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.Camera
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
@@ -72,6 +80,7 @@ import it.cscsecuritycam.network.NetworkUtils
 import it.cscsecuritycam.surveillance.MotionDetector
 import it.cscsecuritycam.surveillance.MotionNotifier
 import java.io.IOException
+import java.io.File
 import java.util.concurrent.Executors
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
@@ -242,6 +251,9 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
     var monitorConnected by remember { mutableStateOf(false) }
     var motionEnabled by remember { mutableStateOf(true) }
     var motionDetected by remember { mutableStateOf(false) }
+    var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
+    var activeRecording by remember { mutableStateOf<Recording?>(null) }
+    var recordingMessage by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(running) {
@@ -256,7 +268,7 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
         androidx.compose.material3.Text("Modalità videocamera", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         androidx.compose.material3.Text("Questo telefono acquisisce il video e lo condivide sulla rete Wi-Fi locale.", color = Muted, fontSize = 13.sp)
         if (running && granted) {
-            CameraPreview(server, motionEnabled, onMotion = { motionDetected = true; MotionNotifier.show(context) }, Modifier.fillMaxWidth().weight(1f))
+            CameraPreview(server, motionEnabled, onMotion = { motionDetected = true; MotionNotifier.show(context) }, onVideoCaptureReady = { videoCapture = it }, Modifier.fillMaxWidth().weight(1f))
             Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (monitorConnected) {
@@ -318,13 +330,42 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
                 }
                 androidx.compose.material3.Switch(checked = motionEnabled, onCheckedChange = { motionEnabled = it })
             }
+            Button(
+                onClick = {
+                    val currentCapture = videoCapture
+                    if (activeRecording != null) {
+                        activeRecording?.stop()
+                    } else if (currentCapture != null) {
+                        try {
+                            val folder = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES), "CSCSecurityCam")
+                            if (!folder.exists()) folder.mkdirs()
+                            val output = File(folder, "CSC_" + System.currentTimeMillis() + ".mp4")
+                            activeRecording = currentCapture.output
+                                .prepareRecording(context, FileOutputOptions.Builder(output).build())
+                                .start(ContextCompat.getMainExecutor(context)) { event ->
+                                    if (event is VideoRecordEvent.Finalize) {
+                                        activeRecording = null
+                                        recordingMessage = if (!event.hasError()) "Registrazione salvata: " + output.name else "Errore registrazione: " + event.error
+                                    }
+                                }
+                        } catch (e: Exception) {
+                            recordingMessage = "Impossibile avviare la registrazione: " + (e.localizedMessage ?: "errore")
+                        }
+                    } else recordingMessage = "Videoregistrazione non disponibile su questo dispositivo."
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = if (activeRecording != null) Color(0xFFB72E2E) else Orange)
+            ) {
+                androidx.compose.material3.Text(if (activeRecording != null) "■ Ferma registrazione" else "● Avvia registrazione video", fontWeight = FontWeight.Bold)
+            }
+            if (recordingMessage != null) androidx.compose.material3.Text(recordingMessage!!, color = Muted, fontSize = 11.sp)
             androidx.compose.material3.Text("Streaming LAN attivo • porta " + MjpegStreamServer.PORT, color = Muted, fontSize = 11.sp)
         }
     }
 }
 
 @Composable
-private fun CameraPreview(server: MjpegStreamServer, motionEnabled: Boolean, onMotion: () -> Unit, modifier: Modifier = Modifier) {
+private fun CameraPreview(server: MjpegStreamServer, motionEnabled: Boolean, onMotion: () -> Unit, onVideoCaptureReady: (VideoCapture<Recorder>?) -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
@@ -339,6 +380,11 @@ private fun CameraPreview(server: MjpegStreamServer, motionEnabled: Boolean, onM
             try {
                 val provider = providerFuture.get()
                 val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                val recorder = Recorder.Builder()
+                    .setQualitySelector(QualitySelector.from(Quality.HD))
+                    .build()
+                val videoCapture = VideoCapture.withOutput(recorder)
+                onVideoCaptureReady(videoCapture)
                 val analysis = ImageAnalysis.Builder()
                     .setTargetResolution(android.util.Size(640, 480))
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -353,12 +399,13 @@ private fun CameraPreview(server: MjpegStreamServer, motionEnabled: Boolean, onM
                     }
                 }
                 provider.unbindAll()
-                provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis, videoCapture)
             } catch (_: Exception) {
             }
         }, ContextCompat.getMainExecutor(context))
 
         onDispose {
+            onVideoCaptureReady(null)
             executor.shutdown()
             try {
                 if (providerFuture.isDone) providerFuture.get().unbindAll()
