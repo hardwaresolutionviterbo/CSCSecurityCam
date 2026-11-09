@@ -13,6 +13,7 @@
 
     <application
         android:allowBackup="false"
+        android:hardwareAccelerated="true"
         android:label="CSC SecurityCam"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
