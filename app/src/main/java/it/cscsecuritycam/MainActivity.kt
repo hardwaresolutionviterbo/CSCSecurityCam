@@ -89,10 +89,10 @@ import kotlinx.coroutines.Dispatchers
 import android.webkit.WebView
 import android.webkit.WebViewClient
 
-private val Navy = Color(0xFF101722)
-private val Panel = Color(0xFF1A2635)
-private val Orange = Color(0xFFFF8A32)
-private val Muted = Color(0xFF9BA9B9)
+private val Navy = Color(0xFF0F172A)
+private val Panel = Color(0xFF1E293B)
+private val Orange = Color(0xFFFF6A00)
+private val Muted = Color(0xFF94A3B8)
 
 class MainActivity : ComponentActivity() {
     private val streamServer by lazy { MjpegStreamServer() }
@@ -176,7 +176,7 @@ private fun CSCApp(
         Scaffold(
             containerColor = Navy,
             bottomBar = {
-                NavigationBar(containerColor = Panel, contentColor = Color.White) {
+                NavigationBar(containerColor = Color(0xFF111D30), contentColor = Color.White) {
                     NavigationBarItem(selected = selectedTab == 0, onClick = { selectedTab = 0 },
                         icon = { Icon(Icons.Default.Shield, contentDescription = "Home") }, label = { androidx.compose.material3.Text("Home") })
                     NavigationBarItem(selected = selectedTab == 1, onClick = { selectedTab = 1 },
@@ -206,13 +206,13 @@ private fun Dashboard(modifier: Modifier = Modifier, onCamera: () -> Unit, onMon
                 Icon(Icons.Default.Shield, contentDescription = null, tint = Navy, modifier = Modifier.size(27.dp))
             }
             Column(Modifier.padding(start = 12.dp)) {
-                androidx.compose.material3.Text("CSC SECURITYCAM", fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
-                androidx.compose.material3.Text("SMART HOME PROTECTION", color = Muted, fontSize = 10.sp, letterSpacing = 1.5.sp)
+                androidx.compose.material3.Text("CSC SecurityCam", fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
+                androidx.compose.material3.Text("VIDEOSORVEGLIANZA SMART", color = Muted, fontSize = 10.sp, letterSpacing = 1.5.sp)
             }
         }
         Spacer(Modifier.height(4.dp))
-        androidx.compose.material3.Text("La tua sicurezza,\nsempre sotto controllo.", fontSize = 29.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold)
-        androidx.compose.material3.Text("Scegli il ruolo di questo smartphone.", color = Muted)
+        androidx.compose.material3.Text("La tua sicurezza.\nSempre sotto controllo.", fontSize = 29.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold)
+        androidx.compose.material3.Text("Protezione smart, direttamente dal tuo smartphone.", color = Muted)
         ActionCard("01", "Usa come videocamera", "Trasmetti il video a un secondo telefono sulla stessa rete Wi-Fi.", Icons.Default.CameraAlt, onCamera)
         ActionCard("02", "Centro di controllo", "Scansiona il QR code della videocamera e guarda il flusso live.", Icons.Default.Devices, onMonitor)
         Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(20.dp)) {
@@ -254,6 +254,8 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
     var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
     var activeRecording by remember { mutableStateOf<Recording?>(null) }
     var recordingMessage by remember { mutableStateOf<String?>(null) }
+    var activeCamera by remember { mutableStateOf<Camera?>(null) }
+    var nightAssistEnabled by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(running) {
@@ -268,7 +270,7 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
         androidx.compose.material3.Text("Modalità videocamera", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         androidx.compose.material3.Text("Questo telefono acquisisce il video e lo condivide sulla rete Wi-Fi locale.", color = Muted, fontSize = 13.sp)
         if (running && granted) {
-            CameraPreview(server, motionEnabled, onMotion = { motionDetected = true; MotionNotifier.show(context) }, onVideoCaptureReady = { videoCapture = it }, Modifier.fillMaxWidth().weight(1f))
+            CameraPreview(server, motionEnabled, onMotion = { motionDetected = true; MotionNotifier.show(context) }, onVideoCaptureReady = { videoCapture = it }, onCameraReady = { activeCamera = it }, Modifier.fillMaxWidth().weight(1f))
             Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (monitorConnected) {
@@ -330,6 +332,13 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
                 }
                 androidx.compose.material3.Switch(checked = motionEnabled, onCheckedChange = { motionEnabled = it })
             }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    androidx.compose.material3.Text("Illuminazione LED di supporto", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    androidx.compose.material3.Text(if (activeCamera?.cameraInfo?.hasFlashUnit() == true) "Flash disponibile" else "Flash non supportato dal dispositivo", color = Muted, fontSize = 11.sp)
+                }
+                androidx.compose.material3.Switch(checked = nightAssistEnabled, enabled = activeCamera?.cameraInfo?.hasFlashUnit() == true, onCheckedChange = { enabled -> nightAssistEnabled = enabled; activeCamera?.cameraControl?.enableTorch(enabled) })
+            }
             Button(
                 onClick = {
                     val currentCapture = videoCapture
@@ -365,7 +374,7 @@ private fun CameraScreen(server: MjpegStreamServer, granted: Boolean, modifier: 
 }
 
 @Composable
-private fun CameraPreview(server: MjpegStreamServer, motionEnabled: Boolean, onMotion: () -> Unit, onVideoCaptureReady: (VideoCapture<Recorder>?) -> Unit, modifier: Modifier = Modifier) {
+private fun CameraPreview(server: MjpegStreamServer, motionEnabled: Boolean, onMotion: () -> Unit, onVideoCaptureReady: (VideoCapture<Recorder>?) -> Unit, onCameraReady: (Camera?) -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
@@ -399,13 +408,15 @@ private fun CameraPreview(server: MjpegStreamServer, motionEnabled: Boolean, onM
                     }
                 }
                 provider.unbindAll()
-                provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis, videoCapture)
+                val boundCamera = provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis, videoCapture)
+                onCameraReady(boundCamera)
             } catch (_: Exception) {
             }
         }, ContextCompat.getMainExecutor(context))
 
         onDispose {
             onVideoCaptureReady(null)
+            onCameraReady(null)
             executor.shutdown()
             try {
                 if (providerFuture.isDone) providerFuture.get().unbindAll()
