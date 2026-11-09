@@ -7,12 +7,16 @@ import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicInteger
 
 class MjpegStreamServer : NanoHTTPD(PORT) {
     @Volatile private var latestFrame: ByteArray? = null
     private var frameVersion: Long = 0
     private val frameLock = Object()
     @Volatile private var accessToken: String = newToken()
+    private val connectedMonitors = AtomicInteger(0)
+
+    fun hasConnectedMonitor(): Boolean = connectedMonitors.get() > 0
 
     fun token(): String = accessToken
 
@@ -57,6 +61,7 @@ class MjpegStreamServer : NanoHTTPD(PORT) {
     }
 
     private inner class MjpegInputStream : InputStream() {
+        private val counted = java.util.concurrent.atomic.AtomicBoolean(true).also { connectedMonitors.incrementAndGet() }
         private var seenVersion = -1L
         private var current = ByteArray(0)
         private var offset = 0
@@ -114,6 +119,7 @@ class MjpegStreamServer : NanoHTTPD(PORT) {
 
         override fun close() {
             closed = true
+            if (counted.compareAndSet(true, false)) connectedMonitors.decrementAndGet()
             synchronized(frameLock) { frameLock.notifyAll() }
         }
     }
