@@ -3,7 +3,7 @@ name: Import CSCSecurityCam ZIP and build APK
 on:
   push:
     branches:
-      - 'validation/**'
+      - 'validation/cscsecuritycam-20261110'
     paths:
       - 'cscsecuritycam.zip'
       - '.github/workflows/android.yml'
@@ -14,7 +14,6 @@ permissions:
 
 jobs:
   import-and-build:
-    if: ${{ hashFiles('cscsecuritycam.zip') != '' }}
     name: Extract Android project and build debug APK
     runs-on: ubuntu-latest
     env:
