@@ -1,4 +1,4 @@
-name: Import ZIP and build Android APK
+name: Import CSCSecurityCam Android source and build APK
 
 on:
   push:
@@ -11,12 +11,12 @@ permissions:
 
 jobs:
   import-and-build:
-    name: Import supplied source and build debug APK
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Finalize compact CSCSecurityCam import' }}
+    name: Import Android source and build debug APK
     runs-on: ubuntu-latest
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      SOURCE_ZIP_URL: https://assets.macaly-user-data.dev/hg98xk8o5j3v8rmof6myf280/z175gf7fx1pb9fy8xrdvciuq/bKRVDf2RvSdhSwFJyFu_w/cscsecuritycam-OgjQaPkb.zip
     steps:
       - name: Checkout isolated validation branch
         uses: actions/checkout@v4
@@ -24,23 +24,27 @@ jobs:
           ref: ${{ github.ref_name }}
           persist-credentials: true
 
-      - name: Download and extract the original project ZIP
+      - name: Reassemble and extract Android source archive
         run: |
-          curl --fail --location --retry 3 --output /tmp/cscsecuritycam.zip "$SOURCE_ZIP_URL"
-          unzip -t /tmp/cscsecuritycam.zip
-          unzip -o /tmp/cscsecuritycam.zip -d .
+          test -d .import
+          test -n "$(find .import -maxdepth 1 -name 'chunk-*.b64' -print -quit)"
+          cat .import/chunk-*.b64 > /tmp/cscsecuritycam.tar.xz.b64
+          base64 --decode /tmp/cscsecuritycam.tar.xz.b64 > /tmp/cscsecuritycam.tar.xz
+          tar -tJf /tmp/cscsecuritycam.tar.xz >/dev/null
+          tar -xJf /tmp/cscsecuritycam.tar.xz -C .
           test -f app/build.gradle.kts
           test -f settings.gradle.kts
+          test -d app/src/main/java
 
-      - name: Commit imported project to this branch
+      - name: Remove transfer fragments and commit imported Android source
         run: |
+          rm -rf .import
+          rm -f IMPORT_ZIP_TRIGGER.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "Import original CSCSecurityCam project ZIP"
-            git push origin "HEAD:${{ github.ref_name }}"
-          fi
+          git commit -m "Import CSCSecurityCam Android source"
+          git push origin "HEAD:${{ github.ref_name }}"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -51,12 +55,12 @@ jobs:
       - name: Accept Android SDK licenses and install required packages
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Set up Gradle
+      - name: Set up Gradle compatible with Android Gradle Plugin 9.1.1
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '9.3.1'
 
       - name: Build APK
         run: gradle assembleDebug
@@ -64,7 +68,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CSCSecurityCam-debug-imported
+          name: CSCSecurityCam-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
