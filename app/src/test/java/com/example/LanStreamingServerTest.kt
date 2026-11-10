@@ -19,6 +19,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
+import java.net.Socket
 import java.net.URL
 
 /**
@@ -144,6 +145,64 @@ class LanStreamingServerTest {
         } finally {
             client.disconnect()
         }
+    }
+
+    @Test
+    fun `a monitor that stops reading does not block the camera pipeline`() {
+        // Come un telefono con la scheda Monitor aperta ma che non consuma piu il flusso: il buffer
+        // TCP si riempie. Il thread della fotocamera non deve restare bloccato dentro la scrittura.
+        val stalled = openStalledLiveClient()
+        try {
+            val frame = ByteArray(256 * 1024) { 7 }
+            var slowest = 0L
+            repeat(40) {
+                val start = System.currentTimeMillis()
+                server.broadcastFrame(frame)
+                slowest = maxOf(slowest, System.currentTimeMillis() - start)
+            }
+            assertTrue("broadcastFrame ha bloccato il produttore per $slowest ms", slowest < 500)
+        } finally {
+            stalled.close()
+        }
+    }
+
+    @Test
+    fun `a stalled monitor does not stop frames reaching another monitor`() {
+        val stalled = openStalledLiveClient()
+        val client = LanStreamClient(scope)
+        try {
+            client.connect("127.0.0.1", PORT)
+            val deadline = System.currentTimeMillis() + 8_000
+            while (System.currentTimeMillis() < deadline && client.streamStats.value.status != ConnectionStatus.CONNECTED) {
+                Thread.sleep(50)
+            }
+            assertEquals(ConnectionStatus.CONNECTED, client.streamStats.value.status)
+
+            val jpeg = testJpegFrame()
+            val frameDeadline = System.currentTimeMillis() + 8_000
+            while (System.currentTimeMillis() < frameDeadline && client.latestFrame.value == null) {
+                server.broadcastFrame(jpeg)
+                Thread.sleep(60)
+            }
+            assertTrue("il secondo monitor non ha ricevuto fotogrammi", client.latestFrame.value != null)
+        } finally {
+            client.disconnect()
+            stalled.close()
+        }
+    }
+
+    /** Apre /live.mjpg senza leggere la risposta: il suo buffer si riempie e non drena piu. */
+    private fun openStalledLiveClient(): Socket {
+        val socket = Socket("127.0.0.1", PORT)
+        socket.receiveBufferSize = 1_024
+        socket.getOutputStream().write("GET /live.mjpg HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".toByteArray())
+        socket.getOutputStream().flush()
+        val deadline = System.currentTimeMillis() + 5_000
+        while (server.stats.value.connectedClients < 1 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20)
+        }
+        assertTrue("client bloccato non registrato sul server", server.stats.value.connectedClients >= 1)
+        return socket
     }
 
     private fun broadcastFor(frame: ByteArray, durationMs: Long) {

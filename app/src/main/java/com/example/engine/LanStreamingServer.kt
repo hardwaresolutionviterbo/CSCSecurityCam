@@ -16,8 +16,10 @@ import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 data class ServerStats(
     val isRunning: Boolean = false,
@@ -43,7 +45,7 @@ class LanStreamingServer(
 
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
-    private val clientStreams = ConcurrentHashMap<String, OutputStream>()
+    private val clientStreams = ConcurrentHashMap<String, ClientSink>()
     private val audioClientStreams = ConcurrentHashMap<String, OutputStream>()
 
     private val _stats = MutableStateFlow(ServerStats(port = port))
@@ -127,12 +129,14 @@ class LanStreamingServer(
                     out.write(header.toByteArray(Charsets.UTF_8))
                     out.flush()
 
-                    // Register client for live frame broadcast
-                    clientStreams[clientId] = out
+                    // Register client for live frame broadcast. Frames are written by the client's
+                    // own coroutine, so a monitor that cannot keep up never blocks this thread.
+                    val sink = ClientSink(out)
+                    clientStreams[clientId] = sink
                     _stats.value = _stats.value.copy(connectedClients = clientStreams.size)
 
                     // If we have a cached frame, send it immediately
-                    latestFrame?.let { sendFrameToStream(out, it) }
+                    latestFrame?.let { enqueueFrame(clientId, sink, it) }
 
                     // Keep connection open until socket disconnects
                     while (!socket.isClosed && socket.isConnected) {
@@ -303,20 +307,60 @@ class LanStreamingServer(
         frameCount.incrementAndGet()
         totalFrames.incrementAndGet()
 
-        if (clientStreams.isEmpty()) return
+        // Never write to a client socket from here: this runs on the camera analyzer thread. A
+        // monitor that stops reading would fill its TCP buffer and block that thread, freezing the
+        // video and making the client hit its read timeout (Online -> Offline -> Riconnessione).
+        for ((clientId, sink) in clientStreams) {
+            enqueueFrame(clientId, sink, jpegBytes)
+        }
+    }
 
-        val deadClients = mutableListOf<String>()
-        for ((clientId, stream) in clientStreams) {
-            try {
-                sendFrameToStream(stream, jpegBytes)
-            } catch (e: Exception) {
-                deadClients.add(clientId)
+    private fun enqueueFrame(clientId: String, sink: ClientSink, frame: ByteArray) {
+        if (sink.offer(frame)) {
+            scope.launch(Dispatchers.IO) { drainFrames(clientId, sink) }
+        }
+    }
+
+    private fun drainFrames(clientId: String, sink: ClientSink) {
+        try {
+            while (true) {
+                val frame = sink.takePending() ?: break
+                sendFrameToStream(sink.out, frame)
+            }
+        } catch (e: Exception) {
+            removeClient(clientId)
+        } finally {
+            if (sink.finishDrain()) {
+                scope.launch(Dispatchers.IO) { drainFrames(clientId, sink) }
             }
         }
+    }
 
-        if (deadClients.isNotEmpty()) {
-            deadClients.forEach { clientStreams.remove(it) }
-            _stats.value = _stats.value.copy(connectedClients = clientStreams.size)
+    private fun removeClient(clientId: String) {
+        clientStreams.remove(clientId)
+        _stats.value = _stats.value.copy(connectedClients = clientStreams.size)
+    }
+
+    /**
+     * Write buffer of a single monitor: only the newest frame is kept. If the monitor is slower
+     * than the camera its older frames are dropped instead of queueing up or blocking the sender.
+     */
+    private class ClientSink(val out: OutputStream) {
+        private val pending = AtomicReference<ByteArray?>(null)
+        private val draining = AtomicBoolean(false)
+
+        /** Stores [frame] as the latest one to send; returns true if the caller must start a drain. */
+        fun offer(frame: ByteArray): Boolean {
+            pending.set(frame)
+            return draining.compareAndSet(false, true)
+        }
+
+        fun takePending(): ByteArray? = pending.getAndSet(null)
+
+        /** Finishes a drain; returns true when frames arrived meanwhile and need a new drain. */
+        fun finishDrain(): Boolean {
+            draining.set(false)
+            return pending.get() != null && draining.compareAndSet(false, true)
         }
     }
 
