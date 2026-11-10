@@ -93,9 +93,6 @@ fun CameraScreen(
     onToggleStreaming: () -> Unit,
     onToggleLens: () -> Unit,
     onToggleTorch: () -> Unit,
-    onFrameEncoded: (ByteArray) -> Unit,
-    motionDetector: com.example.motion.MotionDetector? = null,
-    onMotionResult: ((com.example.motion.MotionResult) -> Unit)? = null,
     onToggleStealth: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -342,9 +339,6 @@ fun CameraScreen(
                             isTorchOn = state.isTorchOn,
                             zoomRatio = state.zoomRatio,
                             isStreaming = state.isStreamingActive,
-                            onFrameEncoded = onFrameEncoded,
-                            motionDetector = motionDetector,
-                            onMotionResult = onMotionResult,
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {

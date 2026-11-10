@@ -206,6 +206,12 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     fun initContinuousOperationManagers(context: Context) {
         initLocalIp(context)
 
+        // La fotocamera vive nel servizio: fotogrammi, eventi di movimento e stop da notifica
+        // tornano qui, così stato, server LAN e registrazioni restano nel ViewModel.
+        CameraStreamingService.frameSink = { jpeg -> broadcastEncodedFrame(jpeg) }
+        CameraStreamingService.motionSink = { result -> handleMotionResult(context, result) }
+        CameraStreamingService.stopSink = { syncStreamingStopped() }
+
         if (batteryManager == null) {
             batteryManager = BatteryOptimizationManager(
                 context = context.applicationContext,
@@ -534,10 +540,7 @@ class MainViewModel : ViewModel(), RemoteControlListener {
                 start()
             }
         } else {
-            streamingServer.stop()
-            cameraCaptureManager?.stop()
-            cameraCaptureManager = null
-            cameraPlaybackManager.stop()
+            syncStreamingStopped()
         }
 
         val intent = Intent(context, CameraStreamingService::class.java).apply {
@@ -552,6 +555,15 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    /** Riallinea lo stato quando lo streaming viene fermato dall'esterno (es. notifica). */
+    private fun syncStreamingStopped() {
+        _uiState.update { it.copy(isStreamingActive = false) }
+        streamingServer.stop()
+        cameraCaptureManager?.stop()
+        cameraCaptureManager = null
+        cameraPlaybackManager.stop()
     }
 
     fun toggleStealthPowerSaving() {

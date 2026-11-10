@@ -3,7 +3,6 @@ package com.example.camera
 import android.view.ViewGroup
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -21,97 +20,91 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
-import java.util.concurrent.Executors
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.service.CameraStreamingService
 
+/**
+ * Anteprima della schermata Camera.
+ *
+ * Con lo streaming attivo la sessione CameraX appartiene a [CameraStreamingService]: qui viene
+ * mostrata solo la superficie del PreviewView sulla sessione del servizio, così la cattura
+ * sopravvive all'uscita dalla schermata e non ci sono due sessioni sulla stessa fotocamera.
+ * Con lo streaming fermo la sessione di sola Preview è della schermata, come prima.
+ */
 @Composable
 fun CameraXPreview(
     isBackCamera: Boolean,
     isTorchOn: Boolean,
     zoomRatio: Float,
     modifier: Modifier = Modifier,
-    isStreaming: Boolean = false,
-    motionDetector: com.example.motion.MotionDetector? = null,
-    onMotionResult: ((com.example.motion.MotionResult) -> Unit)? = null,
-    onFrameEncoded: ((ByteArray) -> Unit)? = null,
-    onCameraReady: (Camera) -> Unit = {}
+    isStreaming: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var camera by remember { mutableStateOf<Camera?>(null) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
-    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    var previewCamera by remember { mutableStateOf<Camera?>(null) }
+    var screenPreview by remember { mutableStateOf<Preview?>(null) }
 
-    LaunchedEffect(isBackCamera, isStreaming) {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
-            val preview = Preview.Builder().build()
-
-            val cameraSelector = if (isBackCamera) {
-                CameraSelector.DEFAULT_BACK_CAMERA
-            } else {
-                CameraSelector.DEFAULT_FRONT_CAMERA
-            }
-
-            try {
-                cameraProvider.unbindAll()
-                previewView?.surfaceProvider?.let { preview.setSurfaceProvider(it) }
-
-                if (isStreaming && onFrameEncoded != null) {
-                    val imageAnalysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
-                        .build()
-
-                    imageAnalysis.setAnalyzer(
-                        analysisExecutor,
-                        CameraStreamAnalyzer(
-                            onFrameEncoded = onFrameEncoded,
-                            motionDetector = motionDetector,
-                            onMotionResult = onMotionResult
-                        )
-                    )
-
-                    val boundCamera = cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview,
-                        imageAnalysis
-                    )
-                    camera = boundCamera
-                    onCameraReady(boundCamera)
-                } else {
-                    val boundCamera = cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview
-                    )
-                    camera = boundCamera
-                    onCameraReady(boundCamera)
+    if (isStreaming) {
+        DisposableEffect(previewView) {
+            val provider = previewView?.surfaceProvider
+            CameraStreamingService.attachPreviewSurface(provider)
+            onDispose { CameraStreamingService.attachPreviewSurface(null) }
+        }
+    } else {
+        DisposableEffect(isBackCamera, previewView) {
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+            cameraProviderFuture.addListener({
+                try {
+                    val provider = cameraProviderFuture.get()
+                    val preview = Preview.Builder().build()
+                    previewView?.surfaceProvider?.let { preview.setSurfaceProvider(it) }
+                    val selector = if (isBackCamera) {
+                        CameraSelector.DEFAULT_BACK_CAMERA
+                    } else {
+                        CameraSelector.DEFAULT_FRONT_CAMERA
+                    }
+                    provider.unbindAll()
+                    previewCamera = provider.bindToLifecycle(lifecycleOwner, selector, preview)
+                    screenPreview = preview
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }, ContextCompat.getMainExecutor(context))
-    }
+            }, ContextCompat.getMainExecutor(context))
 
-    LaunchedEffect(isTorchOn, camera) {
-        try {
-            if (isBackCamera) {
-                camera?.cameraControl?.enableTorch(isTorchOn)
+            onDispose {
+                previewCamera = null
+                // Sgancia solo la Preview della schermata: un unbindAll spegnerebbe la sessione
+                // del servizio quando lo streaming parte mentre questa schermata è aperta.
+                val useCase = screenPreview
+                screenPreview = null
+                try {
+                    if (useCase != null) {
+                        ProcessCameraProvider.getInstance(context).get().unbind(useCase)
+                    }
+                } catch (e: Exception) {
+                    // Ignore during disposal
+                }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
-    LaunchedEffect(zoomRatio, camera) {
-        try {
-            camera?.cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, 5f))
-        } catch (e: Exception) {
-            e.printStackTrace()
+    LaunchedEffect(isTorchOn, zoomRatio, isBackCamera, isStreaming, previewCamera) {
+        if (isStreaming) {
+            // La fotocamera è del servizio: i controlli vanno applicati alla sua sessione.
+            CameraStreamingService.applyLens(isBackCamera)
+            CameraStreamingService.applyTorch(isTorchOn)
+            CameraStreamingService.applyZoom(zoomRatio)
+        } else {
+            try {
+                if (isBackCamera) {
+                    previewCamera?.cameraControl?.enableTorch(isTorchOn)
+                }
+                previewCamera?.cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, 5f))
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -132,18 +125,5 @@ fun CameraXPreview(
             },
             modifier = Modifier.fillMaxSize()
         )
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            try {
-                analysisExecutor.shutdown()
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-                val cameraProvider = cameraProviderFuture.get()
-                cameraProvider.unbindAll()
-            } catch (e: Exception) {
-                // Ignore during disposal
-            }
-        }
     }
 }

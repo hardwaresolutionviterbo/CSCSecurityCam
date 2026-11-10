@@ -114,9 +114,6 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
                         onToggleStreaming = { viewModel.toggleCameraStreaming(context) },
                         onToggleLens = { viewModel.toggleLens() },
                         onToggleTorch = { viewModel.toggleTorch() },
-                        onFrameEncoded = { viewModel.broadcastEncodedFrame(it) },
-                        motionDetector = viewModel.motionDetector,
-                        onMotionResult = { viewModel.handleMotionResult(context, it) },
                         onToggleStealth = { viewModel.toggleStealthPowerSaving() }
                     )
                 }
