@@ -27,13 +27,14 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Accept licenses and install SDK packages
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager --install "platform-tools" "platforms;android-36.1" "build-tools;36.1.0"
+          # Use the SDK already provisioned on the runner; android-actions/setup-android@v3
+          # fails because it tries to install the removed "tools" package.
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-36.1" "build-tools;36.1.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
