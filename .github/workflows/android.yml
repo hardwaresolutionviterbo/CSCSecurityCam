@@ -26,32 +26,42 @@ jobs:
           ref: ${{ github.ref_name }}
           persist-credentials: true
 
-      - name: Validate and extract supplied ZIP
+      - name: Validate supplied ZIP or confirm project is already imported
         run: |
-          unzip -t cscsecuritycam.zip
-          mkdir -p /tmp/cscsecuritycam-source
-          unzip -q cscsecuritycam.zip -d /tmp/cscsecuritycam-source
-          test -f /tmp/cscsecuritycam-source/app/build.gradle.kts
-          test -f /tmp/cscsecuritycam-source/settings.gradle.kts
-          test -f /tmp/cscsecuritycam-source/gradle/libs.versions.toml
+          if [ -f cscsecuritycam.zip ]; then
+            unzip -t cscsecuritycam.zip
+            mkdir -p /tmp/cscsecuritycam-source
+            unzip -q cscsecuritycam.zip -d /tmp/cscsecuritycam-source
+            test -f /tmp/cscsecuritycam-source/app/build.gradle.kts
+            test -f /tmp/cscsecuritycam-source/settings.gradle.kts
+            test -f /tmp/cscsecuritycam-source/gradle/libs.versions.toml
+          else
+            echo "ZIP already imported; checking project tree."
+            test -f app/build.gradle.kts
+            test -f settings.gradle.kts
+            test -f gradle/libs.versions.toml
+          fi
 
-      - name: Replace previous starter sources with supplied project
+      - name: Import supplied project into branch when ZIP is present
         run: |
-          rm -rf app gradle public .aistudio
-          rm -f build.gradle.kts settings.gradle.kts gradle.properties .gitignore .env.example README.md metadata.json
-          cp -a /tmp/cscsecuritycam-source/. .
-          rm -f cscsecuritycam.zip
+          if [ -f cscsecuritycam.zip ]; then
+            rm -rf app gradle public .aistudio
+            rm -f build.gradle.kts settings.gradle.kts gradle.properties .gitignore .env.example README.md metadata.json
+            cp -a /tmp/cscsecuritycam-source/. .
+            rm -f cscsecuritycam.zip
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m "Import supplied CSCSecurityCam Android project"
+              git push origin "HEAD:${{ github.ref_name }}"
+            fi
+          else
+            echo "Project was already imported; no replacement required."
+          fi
           test -f app/build.gradle.kts
           test -f settings.gradle.kts
           test -f gradle/libs.versions.toml
-
-      - name: Commit extracted project to validation branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Import supplied CSCSecurityCam Android project"
-          git push origin "HEAD:${{ github.ref_name }}"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -59,13 +69,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses and install packages
+      - name: Accept Android SDK licenses and install required packages
         run: |
           yes | sdkmanager --licenses
-          sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          sdkmanager --install "platform-tools" "platforms;android-36.1" "build-tools;36.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
