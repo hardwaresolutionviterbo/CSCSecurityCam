@@ -94,6 +94,14 @@ fun PlaybackScreen(
     var selectedFilter by remember { mutableStateOf("Tutti") }
     var viewingRecording by remember { mutableStateOf<RecordingItem?>(null) }
 
+    // Spazio reale del volume del telefono, non un 64 GB fisso.
+    val usedStorage = (state.storageTotalBytes - state.storageFreeBytes).coerceAtLeast(0L)
+    val storageProgress = if (state.storageTotalBytes > 0L) {
+        (usedStorage.toDouble() / state.storageTotalBytes).toFloat().coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+
     val filteredList = remember(selectedFilter, state.recordings) {
         when (selectedFilter) {
             "Movimento" -> state.recordings.filter { it.isMotionEvent }
@@ -171,7 +179,8 @@ fun PlaybackScreen(
                             color = CscTitleWhite
                         )
                         Text(
-                            text = "1.2 GB / 64 GB",
+                            text = "${MediaFormat.formatSize(usedStorage)} / " +
+                                MediaFormat.formatSize(state.storageTotalBytes),
                             fontSize = 12.sp,
                             fontFamily = MontserratFontFamily,
                             color = CscOrange,
@@ -180,7 +189,7 @@ fun PlaybackScreen(
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     LinearProgressIndicator(
-                        progress = { 0.08f },
+                        progress = { storageProgress },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(6.dp)
@@ -188,6 +197,24 @@ fun PlaybackScreen(
                         color = CscOrange,
                         trackColor = Color(0xFF1E2838)
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Registrazioni: ${MediaFormat.formatSize(state.recordingsBytes)}",
+                            fontSize = 11.sp,
+                            fontFamily = MontserratFontFamily,
+                            color = CscTextMuted
+                        )
+                        Text(
+                            text = "Liberi: ${MediaFormat.formatSize(state.storageFreeBytes)}",
+                            fontSize = 11.sp,
+                            fontFamily = MontserratFontFamily,
+                            color = CscSubtitleGray
+                        )
+                    }
                 }
             }
 

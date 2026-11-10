@@ -17,6 +17,9 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE id = :id")
     suspend fun getById(id: String): RecordingEntity?
 
+    @Query("SELECT SUM(fileSizeBytes) FROM recordings")
+    suspend fun totalSizeBytes(): Long?
+
     @Upsert
     suspend fun upsert(recording: RecordingEntity)
 

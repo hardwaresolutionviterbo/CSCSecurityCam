@@ -10,7 +10,13 @@ import java.net.URL
 /** Esito esplicito della prova di connessione verso una telecamera. */
 sealed class ProbeResult {
     /** Il server ha risposto a /status con un JSON valido. */
-    data class Reachable(val fps: Int, val clients: Int) : ProbeResult()
+    data class Reachable(
+        val fps: Int,
+        val clients: Int,
+        /** Timestamp dell'ultimo movimento: 0 se la telecamera non ne ha rilevati. */
+        val motionAt: Long = 0L,
+        val quality: String = ""
+    ) : ProbeResult()
 
     /** Nessuna risposta entro il timeout (IP inesistente, host spento, Wi-Fi diversa). */
     data object Timeout : ProbeResult()
@@ -57,11 +63,20 @@ object CameraProbe {
                     .find(body)?.groupValues?.get(1)?.toIntOrNull()
                 val clients = Regex("\"clients\"\\s*:\\s*(\\d+)")
                     .find(body)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                val motionAt = Regex("\"motionAt\"\\s*:\\s*(\\d+)")
+                    .find(body)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+                val quality = Regex("\"quality\"\\s*:\\s*\"([^\"]*)\"")
+                    .find(body)?.groupValues?.get(1) ?: ""
 
                 if (!body.contains("\"status\"") || fps == null) {
                     ProbeResult.Unexpected("non sembra un server CSCSecurityCam")
                 } else {
-                    ProbeResult.Reachable(fps = fps, clients = clients)
+                    ProbeResult.Reachable(
+                        fps = fps,
+                        clients = clients,
+                        motionAt = motionAt,
+                        quality = quality
+                    )
                 }
             } catch (e: SocketTimeoutException) {
                 ProbeResult.Timeout

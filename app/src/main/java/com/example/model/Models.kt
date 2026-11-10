@@ -57,7 +57,7 @@ data class RecordingItem(
 }
 
 data class AppSettings(
-    val videoQuality: String = "1080p (Full HD)",
+    val videoQuality: String = "Auto",
     val audioMode: String = "Bidirezionale",
     val motionDetectionEnabled: Boolean = true,
     val motionSensitivity: Float = 0.75f,

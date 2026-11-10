@@ -242,7 +242,7 @@ fun SettingsScreen(
 
     // Quality Selection Dialog
     if (showQualityDialog) {
-        val qualities = listOf("720p (HD)", "1080p (Full HD)", "2K (QHD)", "4K (Ultra HD)")
+        val qualities = com.example.media.StreamQuality.options().map { it.label }
         AlertDialog(
             onDismissRequest = { showQualityDialog = false },
             containerColor = CscPanelBlue,

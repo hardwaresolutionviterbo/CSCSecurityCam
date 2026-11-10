@@ -15,6 +15,9 @@ class RecordingRepository(private val dao: RecordingDao) {
 
     suspend fun find(id: String): RecordingItem? = dao.getById(id)?.toRecordingItem()
 
+    /** Byte occupati davvero dai media salvati. */
+    suspend fun totalBytes(): Long = dao.totalSizeBytes() ?: 0L
+
     suspend fun save(item: RecordingItem) {
         dao.upsert(item.toEntity())
     }

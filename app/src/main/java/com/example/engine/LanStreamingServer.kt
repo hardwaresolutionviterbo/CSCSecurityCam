@@ -35,6 +35,9 @@ interface RemoteControlListener {
     fun onSwitchLensCommand()
     fun onZoomCommand(ratio: Float)
     fun onTriggerSnapshotCommand()
+
+    /** Il centro di controllo chiede una qualità di flusso; solo la telecamera la applica. */
+    fun onQualityCommand(quality: String) {}
 }
 
 class LanStreamingServer(
@@ -60,6 +63,13 @@ class LanStreamingServer(
 
     @Volatile
     private var latestFrame: ByteArray? = null
+
+    /** Timestamp dell'ultimo movimento rilevato: il centro di controllo lo legge da /status. */
+    @Volatile
+    private var lastMotionAt: Long = 0L
+
+    @Volatile
+    private var qualityLabel: String = "Auto"
 
     fun start() {
         if (serverJob?.isActive == true) return
@@ -164,7 +174,8 @@ class LanStreamingServer(
                 }
 
                 path.startsWith("/status") -> {
-                    val jsonResp = "{\"server\":\"CSCSecurityCam\",\"status\":\"online\",\"fps\":${_stats.value.currentFps},\"clients\":${clientStreams.size}}"
+                    val safeQuality = qualityLabel.replace("\"", "")
+                    val jsonResp = "{\"server\":\"CSCSecurityCam\",\"status\":\"online\",\"fps\":${_stats.value.currentFps},\"clients\":${clientStreams.size},\"motionAt\":$lastMotionAt,\"quality\":\"$safeQuality\"}"
                     val resp = (
                         "HTTP/1.1 200 OK\r\n" +
                         "Content-Type: application/json; charset=utf-8\r\n" +
@@ -280,7 +291,7 @@ class LanStreamingServer(
     private fun handleControlQuery(query: String) {
         val params = query.split("&").mapNotNull {
             val kv = it.split("=")
-            if (kv.size == 2) kv[0] to kv[1] else null
+            if (kv.size == 2) kv[0] to decode(kv[1]) else null
         }.toMap()
 
         val action = params["action"] ?: params["cmd"]
@@ -299,7 +310,25 @@ class LanStreamingServer(
             "snapshot" -> {
                 remoteControlListener?.onTriggerSnapshotCommand()
             }
+            "quality" -> {
+                remoteControlListener?.onQualityCommand(params["val"] ?: "Auto")
+            }
         }
+    }
+
+    private fun decode(value: String): String = try {
+        java.net.URLDecoder.decode(value, "UTF-8")
+    } catch (e: Exception) {
+        value
+    }
+
+    /** La telecamera pubblica qui un movimento: il monitor lo trova nel prossimo /status. */
+    fun publishMotion() {
+        lastMotionAt = System.currentTimeMillis()
+    }
+
+    fun publishQuality(label: String) {
+        qualityLabel = label
     }
 
     fun broadcastFrame(jpegBytes: ByteArray) {

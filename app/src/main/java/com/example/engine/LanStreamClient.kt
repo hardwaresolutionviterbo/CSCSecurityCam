@@ -177,7 +177,9 @@ class LanStreamClient(
     fun sendRemoteCommand(action: String, value: String = "") {
         scope.launch(Dispatchers.IO) {
             try {
-                val urlStr = "http://$targetIp:$targetPort/control?action=$action&val=$value"
+                // Le etichette di qualità contengono spazi e parentesi: il server le decodifica.
+                val encodedValue = java.net.URLEncoder.encode(value, "UTF-8")
+                val urlStr = "http://$targetIp:$targetPort/control?action=$action&val=$encodedValue"
                 val connection = (URL(urlStr).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 3000
                     readTimeout = 3000

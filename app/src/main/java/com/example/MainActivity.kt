@@ -147,6 +147,8 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
                         onToggleAudio = { viewModel.toggleAudioListening() },
                         onTakeSnapshot = { viewModel.takeSnapshot() },
                         onToggleRecord = { viewModel.toggleRecording() },
+                        onRotateView = { viewModel.rotateView() },
+                        onSelectQuality = { quality -> viewModel.setStreamQuality(quality) },
                         onPanTilt = { dx, dy -> viewModel.panTilt(dx, dy) },
                         onResetPtz = { viewModel.resetPtz() },
                         onZoomIn = { viewModel.zoomIn() },

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.example.engine.ConnectionStatus
 import com.example.engine.LanStreamClient
 import com.example.engine.LanStreamingServer
+import com.example.engine.RemoteControlListener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -65,6 +66,36 @@ class LanStreamingServerTest {
         val (snapshotCode, snapshotBody) = httpGetBytes("/snapshot")
         assertEquals("lo snapshot deve trovare un fotogramma", 200, snapshotCode)
         assertArrayEquals(jpeg, snapshotBody)
+    }
+
+    @Test
+    fun `status exposes motion events and the applied quality`() {
+        server.publishMotion()
+        server.publishQuality("720p (HD)")
+
+        val (code, body) = httpGet("/status")
+        assertEquals(200, code)
+        val motionAt = Regex("\"motionAt\":(\\d+)").find(body)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+        assertTrue("motionAt atteso > 0, risposta: $body", motionAt > 0L)
+        assertTrue("qualità assente dalla risposta: $body", body.contains("\"quality\":\"720p (HD)\""))
+    }
+
+    @Test
+    fun `quality command reaches the camera listener decoded`() {
+        var received: String? = null
+        server.remoteControlListener = object : RemoteControlListener {
+            override fun onTorchCommand(enabled: Boolean) = Unit
+            override fun onSwitchLensCommand() = Unit
+            override fun onZoomCommand(ratio: Float) = Unit
+            override fun onTriggerSnapshotCommand() = Unit
+            override fun onQualityCommand(quality: String) {
+                received = quality
+            }
+        }
+
+        val (code, _) = httpGet("/control?action=quality&val=720p%20%28HD%29")
+        assertEquals(200, code)
+        assertEquals("720p (HD)", received)
     }
 
     @Test

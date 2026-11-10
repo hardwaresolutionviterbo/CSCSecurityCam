@@ -26,13 +26,17 @@ class CameraProbeTest {
 
     @Test
     fun `reachable when status answers with camera json`() = runBlocking {
-        val server = serverWithBody("""{"status":"streaming","fps":24,"clients":2}""")
+        val server = serverWithBody(
+            """{"status":"streaming","fps":24,"clients":2,"motionAt":1700000000000,"quality":"720p (HD)"}"""
+        )
         try {
             val result = CameraProbe.probe("127.0.0.1", server.address.port, timeoutMs = 2_000)
             assertTrue("atteso Reachable, ottenuto $result", result is ProbeResult.Reachable)
             result as ProbeResult.Reachable
             assertEquals(24, result.fps)
             assertEquals(2, result.clients)
+            assertEquals(1_700_000_000_000L, result.motionAt)
+            assertEquals("720p (HD)", result.quality)
         } finally {
             server.stop(0)
         }

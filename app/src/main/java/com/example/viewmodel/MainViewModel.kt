@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.RectF
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.StatFs
 import android.text.format.Formatter
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -25,6 +26,7 @@ import com.example.data.RecordingRepository
 import com.example.data.SettingsRepository
 import com.example.media.MediaFormat
 import com.example.media.MediaStoreStorage
+import com.example.media.StreamQuality
 import com.example.service.ClipResult
 import com.example.pairing.CameraProbe
 import com.example.pairing.PairingPayload
@@ -45,8 +47,10 @@ import com.example.power.BatteryOptimizationManager
 import com.example.remote.RemoteAccessManager
 import com.example.remote.RemoteTunnelStats
 import com.example.service.CameraStreamingService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,6 +68,11 @@ data class MainUiState(
     val isBackCamera: Boolean = true,
     val isTorchOn: Boolean = false,
     val zoomRatio: Float = 1.0f,
+    /** Rotazione della visuale nel centro di controllo: 0, 90, 180 o 270 gradi. */
+    val viewRotationDegrees: Int = 0,
+    val storageTotalBytes: Long = 0L,
+    val storageFreeBytes: Long = 0L,
+    val recordingsBytes: Long = 0L,
     val localIpAddress: String = "",
     val streamingPort: Int = 8765,
     val isStealthPowerSavingActive: Boolean = false,
@@ -122,6 +131,7 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     private var statusPollJob: Job? = null
     private var clipCameraName: String = "Videocamera"
     private var clipIsMotionEvent: Boolean = false
+    private var lastNotifiedMotionAt: Long = 0L
 
     val cameraPlaybackManager = AudioPlaybackManager()
     private var cameraCaptureManager: AudioCaptureManager? = null
@@ -197,6 +207,8 @@ class MainViewModel : ViewModel(), RemoteControlListener {
             viewModelScope.launch {
                 recordings.recordings.collect { saved ->
                     _uiState.update { it.copy(recordings = saved) }
+                    // Salvataggi ed eliminazioni cambiano lo spazio occupato: si rilegge.
+                    refreshStorageStats()
                 }
             }
 
@@ -204,9 +216,16 @@ class MainViewModel : ViewModel(), RemoteControlListener {
             settingsRepository = persistedSettings
             viewModelScope.launch {
                 val saved = persistedSettings.get()
-                motionDetector.sensitivity = saved.motionSensitivity
-                _uiState.update { it.copy(settings = saved) }
-                if (saved.remoteAccessWebRtc) {
+                // Le qualità salvate da versioni precedenti (2K/4K) non esistono più.
+                val normalized = saved.copy(
+                    videoQuality = StreamQuality.fromLabel(saved.videoQuality).label
+                )
+                motionDetector.sensitivity = normalized.motionSensitivity
+                _uiState.update { it.copy(settings = normalized) }
+                if (normalized != saved) {
+                    persistedSettings.save(normalized)
+                }
+                if (normalized.remoteAccessWebRtc) {
                     remoteAccessManager?.startRemoteAccess()
                 }
             }
@@ -329,14 +348,8 @@ class MainViewModel : ViewModel(), RemoteControlListener {
                 )
             }
 
-            // Send push notification if enabled
-            if (_uiState.value.settings.notificationsEnabled) {
-                CscNotificationHelper.sendMotionAlert(
-                    context,
-                    localDev.name,
-                    localDev.location
-                )
-            }
+            // L'evento è già pubblicato dal servizio: sono i telefoni del centro di controllo a
+            // notificarlo, non il telefono che sta riprendendo.
 
             // Auto-start recording clip if configured
             if (_uiState.value.settings.autoRecordingOnlyMotion && !_uiState.value.isRecording) {
@@ -474,6 +487,10 @@ class MainViewModel : ViewModel(), RemoteControlListener {
             )
         }
 
+        if (screen == Screen.PLAYBACK) {
+            refreshStorageStats()
+        }
+
         if (screen == Screen.MONITOR) {
             refreshSelectedStatus()
             val dev = getSelectedDevice()
@@ -587,6 +604,11 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         _uiState.update { it.copy(isStreamingActive = newState) }
 
         if (newState) {
+            // La qualità scelta dal centro di controllo vale già dalla prima sessione.
+            val quality = _uiState.value.settings.videoQuality
+            CameraStreamingService.applyQuality(quality)
+            streamingServer.publishQuality(quality)
+
             // Il server LAN lo avvia il servizio in primo piano: vive più a lungo dell'Activity.
             cameraCaptureManager?.stop()
             cameraCaptureManager = AudioCaptureManager(
@@ -771,6 +793,46 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         streamClient.sendRemoteCommand("zoom", "1.0")
     }
 
+    /** Ruota la visuale del monitor di 90° a ogni tocco. */
+    fun rotateView() {
+        _uiState.update {
+            it.copy(viewRotationDegrees = (it.viewRotationDegrees + 90) % 360)
+        }
+    }
+
+    /** Il centro di controllo cambia la qualità: si salva e si chiede alla telecamera. */
+    fun setStreamQuality(label: String) {
+        val quality = StreamQuality.fromLabel(label)
+        updateSettings { it.copy(videoQuality = quality.label) }
+    }
+
+    override fun onQualityCommand(quality: String) {
+        val parsed = StreamQuality.fromLabel(quality)
+        CameraStreamingService.applyQuality(parsed.label)
+        streamingServer.publishQuality(parsed.label)
+    }
+
+    /** Spazio reale del telefono: niente più "64 GB" scritto a mano. */
+    fun refreshStorageStats() {
+        val context = appContext ?: return
+        viewModelScope.launch {
+            val usage = withContext(Dispatchers.IO) {
+                val dir = context.getExternalFilesDir(null) ?: context.filesDir
+                val stat = StatFs(dir.absolutePath)
+                (stat.blockCountLong * stat.blockSizeLong) to
+                    (stat.availableBlocksLong * stat.blockSizeLong)
+            }
+            val recordingsBytes = recordingRepository?.totalBytes() ?: 0L
+            _uiState.update {
+                it.copy(
+                    storageTotalBytes = usage.first,
+                    storageFreeBytes = usage.second,
+                    recordingsBytes = recordingsBytes
+                )
+            }
+        }
+    }
+
     fun selectDevice(deviceId: String) {
         _uiState.update {
             it.copy(
@@ -913,13 +975,38 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         statusPollJob = viewModelScope.launch {
             while (true) {
                 pollDeviceStatuses()
-                delay(5_000)
+                // Sul centro di controllo si interroga più spesso: l'allarme deve arrivare subito.
+                delay(if (_uiState.value.currentScreen == Screen.MONITOR) 2_000 else 5_000)
             }
         }
     }
 
     fun refreshSelectedStatus() {
         viewModelScope.launch { pollDeviceStatuses() }
+    }
+
+    /**
+     * Gli avvisi di movimento arrivano qui, sul telefono che guarda: la telecamera li pubblica
+     * soltanto su /status.
+     */
+    private fun notifyMotionIfNeeded(device: CameraDevice, motionAt: Long) {
+        if (motionAt <= 0L || motionAt <= lastNotifiedMotionAt) return
+        lastNotifiedMotionAt = motionAt
+
+        // Un allarme già vecchio quando si apre il monitor non deve suonare.
+        if (System.currentTimeMillis() - motionAt > 20_000L) return
+        if (!_uiState.value.settings.notificationsEnabled) return
+        val context = appContext ?: return
+
+        CscNotificationHelper.sendMotionAlert(context, device.name, device.location)
+        _uiState.update {
+            it.copy(isMotionAlarmActive = true, lastMotionTimestamp = motionAt)
+        }
+        motionResetJob?.cancel()
+        motionResetJob = viewModelScope.launch {
+            delay(3000)
+            _uiState.update { it.copy(isMotionAlarmActive = false) }
+        }
     }
 
     /** Online/Offline dall'esito reale di GET /status, non da un'etichetta scritta a mano. */
@@ -945,6 +1032,14 @@ class MainViewModel : ViewModel(), RemoteControlListener {
                 selectedDeviceReachable = selectedResult?.let { it is ProbeResult.Reachable },
                 selectedDeviceProbeMessage = selectedResult?.describe()
             )
+        }
+
+        val selectedDevice = _uiState.value.selectedDeviceId?.let { id ->
+            _uiState.value.devices.firstOrNull { it.id == id }
+        }
+        val selectedProbe = selectedDevice?.let { results[it.id] }
+        if (selectedDevice != null && selectedProbe is ProbeResult.Reachable) {
+            notifyMotionIfNeeded(selectedDevice, selectedProbe.motionAt)
         }
     }
 
@@ -985,6 +1080,10 @@ class MainViewModel : ViewModel(), RemoteControlListener {
                     remoteAccessManager?.stopRemoteAccess()
                 }
             }
+            if (updated.videoQuality != it.settings.videoQuality) {
+                // La nuova qualità va applicata alla telecamera, non solo salvata.
+                streamClient.sendRemoteCommand("quality", updated.videoQuality)
+            }
             it.copy(settings = updated)
         }
         toPersist?.let { updated ->
@@ -1013,5 +1112,6 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         cameraSpeakerResetJob?.cancel()
         statusPollJob?.cancel()
         CameraStreamingService.clipSink = null
+        CameraStreamingService.motionSink = null
     }
 }

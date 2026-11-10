@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,13 +41,14 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MotionPhotosOn
 import androidx.compose.material.icons.filled.Nightlight
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -64,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -81,6 +84,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.engine.ConnectionStatus
+import com.example.media.StreamQuality
 import com.example.model.DeviceType
 import com.example.model.Screen
 import com.example.ui.components.PairCameraDialog
@@ -110,6 +114,8 @@ fun MonitorScreen(
     onToggleAudio: () -> Unit,
     onTakeSnapshot: () -> Unit,
     onToggleRecord: () -> Unit,
+    onRotateView: () -> Unit,
+    onSelectQuality: (String) -> Unit,
     onPanTilt: (dx: Float, dy: Float) -> Unit,
     onResetPtz: () -> Unit,
     onZoomIn: () -> Unit,
@@ -232,28 +238,39 @@ fun MonitorScreen(
                 contentAlignment = Alignment.Center
             ) {
                 if (liveBitmap != null) {
-                    // Real incoming live video stream from second phone!
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .offset {
-                                IntOffset(
-                                    state.panOffset.first.toInt(),
-                                    state.panOffset.second.toInt()
-                                )
-                            }
-                            .scale(state.zoomRatio),
+                    // Il video ricevuto ruota con la visuale; a 90° e 270° il riquadro viene
+                    // ridimensionato per continuare a riempire il monitor.
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Image(
-                            bitmap = liveBitmap.asImageBitmap(),
-                            contentDescription = "Live Security Stream Feed",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                            colorFilter = if (state.nightVisionActive) {
-                                ColorFilter.lighting(Color(0xFF88FF88), Color(0xFF003300))
-                            } else null
-                        )
+                        val rotated = (state.viewRotationDegrees / 90) % 2 == 1
+                        Box(
+                            modifier = (if (rotated) {
+                                Modifier.size(width = maxHeight, height = maxWidth)
+                            } else {
+                                Modifier.fillMaxSize()
+                            })
+                                .rotate(state.viewRotationDegrees.toFloat())
+                                .offset {
+                                    IntOffset(
+                                        state.panOffset.first.toInt(),
+                                        state.panOffset.second.toInt()
+                                    )
+                                }
+                                .scale(state.zoomRatio),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                bitmap = liveBitmap.asImageBitmap(),
+                                contentDescription = "Live Security Stream Feed",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                                colorFilter = if (state.nightVisionActive) {
+                                    ColorFilter.lighting(Color(0xFF88FF88), Color(0xFF003300))
+                                } else null
+                            )
+                        }
                     }
                 } else {
                     // Fallback / Loading / Connection state view
@@ -447,6 +464,23 @@ fun MonitorScreen(
                     }
                 }
 
+                if (state.viewRotationDegrees != 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(12.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.7f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Ruotata ${state.viewRotationDegrees}°",
+                            fontSize = 11.sp,
+                            color = CscIceWhite
+                        )
+                    }
+                }
+
                 // Active Recording Overlay Timer
                 if (state.isRecording) {
                     val minutes = state.recordingDurationSeconds / 60
@@ -558,17 +592,76 @@ fun MonitorScreen(
                     )
                 }
 
-                // Fullscreen
+                // Rotazione della visuale: 0°, 90°, 180°, 270°
                 IconButton(
-                    onClick = { /* Fullscreen toggle */ },
-                    modifier = Modifier.size(46.dp)
+                    onClick = onRotateView,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .testTag("action_rotate_btn")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Fullscreen,
-                        contentDescription = "Schermo intero",
-                        tint = CscIceWhite,
-                        modifier = Modifier.size(26.dp)
+                        imageVector = Icons.Default.RotateRight,
+                        contentDescription = "Ruota visuale",
+                        tint = if (state.viewRotationDegrees != 0) CscOrange else CscIceWhite,
+                        modifier = Modifier.size(24.dp)
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Qualità del flusso chiesta alla telecamera (AUTO = miglior compromesso)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(CscGlassCard)
+                    .border(1.dp, CscGlassBorder, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Videocam,
+                    contentDescription = null,
+                    tint = CscOrange,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Qualità",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = CscTextMuted
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+
+                val activeQuality = StreamQuality.fromLabel(state.settings.videoQuality)
+                StreamQuality.options().forEach { quality ->
+                    val selected = activeQuality == quality
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 2.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (selected) CscOrange else Color.Transparent)
+                            .border(
+                                1.dp,
+                                if (selected) CscOrange else CscSteel,
+                                RoundedCornerShape(9.dp)
+                            )
+                            .clickable { onSelectQuality(quality.label) }
+                            .padding(vertical = 6.dp)
+                            .testTag("quality_${quality.name.lowercase()}"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = quality.shortLabel,
+                            fontSize = 10.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (selected) Color.White else CscIceWhite,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
 

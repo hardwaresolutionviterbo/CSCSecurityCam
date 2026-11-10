@@ -16,6 +16,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
+import android.util.Size
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -40,8 +41,15 @@ import com.example.R
 import com.example.camera.CameraStreamAnalyzer
 import com.example.engine.StreamingHub
 import com.example.media.MediaStoreStorage
+import com.example.media.StreamQuality
 import com.example.motion.MotionDetector
 import com.example.motion.MotionResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -70,6 +78,11 @@ class CameraStreamingService : Service(), LifecycleOwner {
     private var wifiLock: WifiManager.WifiLock? = null
 
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val qualityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var autoQualityJob: Job? = null
+    private var autoFallbackActive = false
+    private var appliedQuality = StreamQuality.AUTO
+    private var pendingQualityRebind = false
     private val motionDetector = MotionDetector(sensitivity = 0.65f)
 
     private var cameraProvider: ProcessCameraProvider? = null
@@ -150,6 +163,17 @@ class CameraStreamingService : Service(), LifecycleOwner {
         fun applyLens(useBack: Boolean) {
             instance?.setLens(useBack)
         }
+
+        /** Qualità richiesta dal centro di controllo; vale anche alla sessione successiva. */
+        @Volatile
+        var streamQualityLabel: String = StreamQuality.AUTO.label
+            private set
+
+        fun applyQuality(label: String) {
+            val quality = StreamQuality.fromLabel(label)
+            streamQualityLabel = quality.label
+            instance?.setStreamQuality(quality)
+        }
     }
 
     override fun onCreate() {
@@ -189,6 +213,7 @@ class CameraStreamingService : Service(), LifecycleOwner {
 
         // Il server LAN appartiene al servizio: resta attivo finché la videocamera è accesa.
         StreamingHub.server.start()
+        startAutoQualityWatch()
 
         if (wakeLock?.isHeld == false) {
             wakeLock?.acquire(24 * 60 * 60 * 1000L /* 24 hours */)
@@ -237,9 +262,15 @@ class CameraStreamingService : Service(), LifecycleOwner {
                 previewUseCase = preview
                 applyPreviewSurface(attachedSurface)
 
+                // La qualità scelta dal monitor diventa la risoluzione reale dell'analyzer:
+                // niente full HD dichiarato e poi trasmesso a 640 pixel.
+                val streamQuality = StreamQuality.fromLabel(streamQualityLabel)
+                appliedQuality = streamQuality
+                val dimensions = streamQuality.dimensions(autoFallbackActive)
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+                    .setTargetResolution(Size(dimensions.first, dimensions.second))
                     .build()
                 analysisUseCase = imageAnalysis
 
@@ -267,7 +298,12 @@ class CameraStreamingService : Service(), LifecycleOwner {
                             StreamingHub.server.broadcastFrame(bytes)
                         },
                         motionDetector = motionDetector,
-                        onMotionResult = { result -> motionSink?.invoke(result) }
+                        onMotionResult = { result ->
+                            // L'evento va al server di processo: il centro di controllo lo vede
+                            // anche quando l'app della telecamera è chiusa.
+                            if (result.hasMotion) StreamingHub.server.publishMotion()
+                            motionSink?.invoke(result)
+                        }
                     )
                 )
 
@@ -338,6 +374,56 @@ class CameraStreamingService : Service(), LifecycleOwner {
         bindCamera()
     }
 
+    private fun setStreamQuality(quality: StreamQuality) {
+        if (appliedQuality == quality && !pendingQualityRebind) return
+        // Cambiare risoluzione durante una clip la interromperebbe: si rimanda alla fine.
+        if (activeRecording != null) {
+            pendingQualityRebind = true
+            return
+        }
+        pendingQualityRebind = false
+        autoFallbackActive = false
+        rebindCamera()
+    }
+
+    /**
+     * AUTO = miglior compromesso: parte da 720p e, se il monitor resta sotto gli 8 fps per 5
+     * secondi, scende a 480p; torna a 720p quando il flusso supera i 20 fps.
+     */
+    private fun startAutoQualityWatch() {
+        if (autoQualityJob?.isActive == true) return
+        autoQualityJob = qualityScope.launch {
+            var slowTicks = 0
+            StreamingHub.server.stats.collect { stats ->
+                val isAuto = StreamQuality.fromLabel(streamQualityLabel) == StreamQuality.AUTO
+                if (!isAuto || !isRunning || activeRecording != null ||
+                    stats.connectedClients == 0 || stats.currentFps <= 0
+                ) {
+                    slowTicks = 0
+                    return@collect
+                }
+
+                when {
+                    stats.currentFps < 8 -> {
+                        slowTicks++
+                        if (slowTicks >= 5 && !autoFallbackActive) {
+                            autoFallbackActive = true
+                            rebindCamera()
+                        }
+                    }
+                    stats.currentFps >= 20 -> {
+                        slowTicks = 0
+                        if (autoFallbackActive) {
+                            autoFallbackActive = false
+                            rebindCamera()
+                        }
+                    }
+                    else -> slowTicks = 0
+                }
+            }
+        }
+    }
+
     /**
      * Sgancia solo le use case del servizio: un unbindAll spegnerebbe anche la Preview che la
      * schermata riaggancia quando lo streaming viene fermato dall'interfaccia.
@@ -382,6 +468,10 @@ class CameraStreamingService : Service(), LifecycleOwner {
                 .start(ContextCompat.getMainExecutor(this)) { event ->
                     if (event is VideoRecordEvent.Finalize) {
                         activeRecording = null
+                        if (pendingQualityRebind) {
+                            pendingQualityRebind = false
+                            rebindCamera()
+                        }
                         val uri = event.outputResults.outputUri
                         val success = !event.hasError() && uri != Uri.EMPTY
                         val seconds = (event.recordingStats.recordedDurationNanos / 1_000_000_000L)
@@ -492,6 +582,8 @@ class CameraStreamingService : Service(), LifecycleOwner {
     override fun onDestroy() {
         stopStreaming()
         serviceLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        autoQualityJob?.cancel()
+        qualityScope.cancel()
         analysisExecutor.shutdown()
         if (instance === this) instance = null
         attachedSurface = null

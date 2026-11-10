@@ -97,6 +97,34 @@ class MainViewModelTest {
     }
 
     @Test
+    fun testViewRotationCyclesThroughFourQuarters() {
+        val viewModel = MainViewModel()
+        assertEquals(0, viewModel.uiState.value.viewRotationDegrees)
+
+        viewModel.rotateView()
+        assertEquals(90, viewModel.uiState.value.viewRotationDegrees)
+        viewModel.rotateView()
+        assertEquals(180, viewModel.uiState.value.viewRotationDegrees)
+        viewModel.rotateView()
+        assertEquals(270, viewModel.uiState.value.viewRotationDegrees)
+        viewModel.rotateView()
+        assertEquals(0, viewModel.uiState.value.viewRotationDegrees)
+    }
+
+    @Test
+    fun testStreamQualitySelectionPersistsInSettings() {
+        val viewModel = MainViewModel()
+        assertEquals("Auto", viewModel.uiState.value.settings.videoQuality)
+
+        viewModel.setStreamQuality("720p (HD)")
+        assertEquals("720p (HD)", viewModel.uiState.value.settings.videoQuality)
+
+        // Etichette non riconosciute non restano nello stato: ricadono su Auto.
+        viewModel.setStreamQuality("8K")
+        assertEquals("Auto", viewModel.uiState.value.settings.videoQuality)
+    }
+
+    @Test
     fun testSettingsMotionSensitivityUpdate() {
         val viewModel = MainViewModel()
         viewModel.updateSettings { it.copy(motionSensitivity = 0.85f) }
