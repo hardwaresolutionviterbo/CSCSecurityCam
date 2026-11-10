@@ -1,42 +1,22 @@
-# CSCSecurityCam
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-App Android nativa per trasformare uno smartphone in una videocamera di sicurezza e usare un secondo dispositivo come centro di controllo.
+# Run and deploy your AI Studio app
 
-## Versione 0.2 – Streaming LAN sperimentale
+This contains everything you need to run your app locally.
 
-Questa versione implementa il primo collegamento video reale tra due telefoni sulla stessa rete Wi-Fi:
-- Il telefono videocamera acquisisce immagini con CameraX.
-- Un server HTTP locale trasmette fotogrammi JPEG in formato MJPEG.
-- Il telefono monitor scansiona un QR temporaneo e apre il flusso live.
-- Il flusso è protetto da un token casuale temporaneo.
-- Il monitor può anche ricevere il codice di collegamento incollato manualmente.
+View your app in AI Studio: https://ai.studio/apps/92ae6691-7e13-4335-9b96-54473d928487
 
-**Limiti noti di questa fase:** il telefono videocamera deve restare nell'app in primo piano; il collegamento funziona solo sulla stessa rete locale; l'audio non è ancora trasmesso; MJPEG è un trasporto iniziale di prova e non sostituisce WebRTC per una soluzione remota e a bassa latenza. Non usare questa versione su reti pubbliche o non fidate.
+## Run Locally
 
-## Prova con due telefoni
+**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
 
-1. Installa lo stesso APK su entrambi i telefoni.
-2. Collega entrambi alla stessa rete Wi-Fi (non alla rete ospiti).
-3. Sul primo telefono apri **Camera** e premi **Avvia videocamera**.
-4. Con il secondo telefono apri **Monitor**, premi **Scansiona QR code** e inquadra il codice mostrato sul primo.
-5. Attendi il caricamento del flusso; per interrompere, premi **Arresta videocamera** sul primo o **Disconnetti** sul secondo.
 
-Se il router isola i dispositivi Wi-Fi tra loro, il collegamento LAN non sarà possibile: disattiva l'isolamento client/AP isolation nelle impostazioni del router.
-
-## Stack
-- Kotlin
-- Jetpack Compose + Material 3
-- CameraX
-- NanoHTTPD (server LAN)
-- ZXing (QR code)
-- GitHub Actions per build APK
-
-## Prossime fasi
-1. Stabilizzare e testare il flusso su dispositivi reali, rotazione, rete e riconnessione.
-2. Aggiungere audio e controlli sessione.
-3. Sostituire il trasporto MJPEG con WebRTC e un server di signaling proprietario per collegamenti remoti.
-4. Implementare pairing autenticato, cifratura, notifiche e servizio foreground.
-5. Integrare progressivamente ONVIF/RTSP per telecamere IP compatibili.
-
-## Sicurezza
-Non inserire password, chiavi API, certificati privati o credenziali nel repository. Il token QR è temporaneo ma il flusso LAN in questa versione non è cifrato: usare solo una rete Wi-Fi fidata. Per build firmate usare GitHub Actions Secrets.
+1. Open Android Studio
+2. Select **Open** and choose the directory containing this project
+3. Allow Android Studio to fix any incompatibilities as it imports the project.
+4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
+5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
+6. Run the app on an emulator or physical device
+7. If you have already published your app in AI Studio, please [request upload key reset](https://support.google.com/googleplay/android-developer/answer/9842756#zippy=%2Crequest-an-upload-key-reset) in Google Play Console.
