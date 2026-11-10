@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -57,7 +61,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.R
+import com.example.media.MediaFormat
 import com.example.model.RecordingItem
 import com.example.model.Screen
 import com.example.ui.components.CscBottomNav
@@ -251,6 +257,8 @@ fun PlaybackScreen(
     }
 
     // Playback Preview Dialog
+    val playerContext = androidx.compose.ui.platform.LocalContext.current
+
     viewingRecording?.let { item ->
         AlertDialog(
             onDismissRequest = { viewingRecording = null },
@@ -273,12 +281,21 @@ fun PlaybackScreen(
                             .background(Color.Black),
                         contentAlignment = Alignment.Center
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_csc_logo),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        if (item.isSnapshot && item.uri.isNotEmpty()) {
+                            AsyncImage(
+                                model = item.uri,
+                                contentDescription = item.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_csc_logo),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                         Box(
                             modifier = Modifier
                                 .size(50.dp)
@@ -296,18 +313,28 @@ fun PlaybackScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "${item.cameraName} • ${item.timestamp} • ${if (item.isSnapshot) "Istantanea" else "${item.durationSeconds}s"}",
+                        text = "${item.cameraName} • ${item.timestamp} • " +
+                            if (item.isSnapshot) {
+                                MediaFormat.formatSize(item.fileSizeBytes)
+                            } else {
+                                "${MediaFormat.formatDuration(item.durationSeconds)} · ${MediaFormat.formatSize(item.fileSizeBytes)}"
+                            },
                         color = CscTextMuted,
                         fontSize = 12.sp
                     )
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = { viewingRecording = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = CscOrange)
-                ) {
-                    Text("Chiudi", color = Color.White)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { openMedia(playerContext, item) },
+                        colors = ButtonDefaults.buttonColors(containerColor = CscOrange)
+                    ) {
+                        Text("Apri", color = Color.White)
+                    }
+                    TextButton(onClick = { viewingRecording = null }) {
+                        Text("Chiudi", color = CscTextMuted)
+                    }
                 }
             }
         )
@@ -338,12 +365,21 @@ fun RecordingCard(
                 .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_csc_logo),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+            if (item.isSnapshot && item.uri.isNotEmpty()) {
+                AsyncImage(
+                    model = item.uri,
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_csc_logo),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
             Box(
                 modifier = Modifier
                     .size(26.dp)
@@ -407,10 +443,16 @@ fun RecordingCard(
             )
 
             Text(
-                text = "${item.timestamp} • ${item.cameraName}",
+                text = "${item.timestamp} • ${item.cameraName} • " +
+                    if (item.isSnapshot) {
+                        MediaFormat.formatSize(item.fileSizeBytes)
+                    } else {
+                        "${MediaFormat.formatDuration(item.durationSeconds)} · ${MediaFormat.formatSize(item.fileSizeBytes)}"
+                    },
                 fontSize = 11.sp,
                 fontFamily = MontserratFontFamily,
-                color = CscSubtitleGray
+                color = CscSubtitleGray,
+                maxLines = 1
             )
         }
 
@@ -425,5 +467,22 @@ fun RecordingCard(
                 modifier = Modifier.size(20.dp)
             )
         }
+    }
+}
+
+/** Apre il media salvato con l'app di sistema (galleria o lettore video). */
+private fun openMedia(context: Context, item: RecordingItem) {
+    val uri = item.uri.ifEmpty { item.filePath }
+    if (uri.isEmpty()) {
+        Toast.makeText(context, "File non disponibile", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val mime = item.mimeType.ifEmpty { if (item.isSnapshot) "image/jpeg" else "video/mp4" }
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(Uri.parse(uri), mime)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    runCatching { context.startActivity(intent) }.onFailure {
+        Toast.makeText(context, "Nessuna app per aprire il file", Toast.LENGTH_SHORT).show()
     }
 }

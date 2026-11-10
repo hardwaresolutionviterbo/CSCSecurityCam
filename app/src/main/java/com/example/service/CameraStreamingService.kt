@@ -8,16 +8,27 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
+import android.provider.MediaStore
 import android.util.Log
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FallbackStrategy
+import androidx.camera.video.MediaStoreOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -28,6 +39,7 @@ import com.example.MainActivity
 import com.example.R
 import com.example.camera.CameraStreamAnalyzer
 import com.example.engine.StreamingHub
+import com.example.media.MediaStoreStorage
 import com.example.motion.MotionDetector
 import com.example.motion.MotionResult
 import java.util.concurrent.ExecutorService
@@ -40,6 +52,15 @@ import java.util.concurrent.Executors
  * La PreviewView della schermata si aggancia a questa stessa sessione tramite
  * [attachPreviewSurface], così non esistono due sessioni CameraX contemporanee sulla fotocamera.
  */
+/** Esito della clip: uri reale, durata e dimensione lette dal file finalizzato. */
+data class ClipResult(
+    val uri: String,
+    val durationSeconds: Int,
+    val sizeBytes: Long,
+    val mimeType: String,
+    val success: Boolean
+)
+
 class CameraStreamingService : Service(), LifecycleOwner {
 
     private val serviceLifecycle = LifecycleRegistry(this)
@@ -55,6 +76,8 @@ class CameraStreamingService : Service(), LifecycleOwner {
     private var camera: Camera? = null
     private var previewUseCase: Preview? = null
     private var analysisUseCase: ImageAnalysis? = null
+    private var videoCapture: VideoCapture<Recorder>? = null
+    private var activeRecording: Recording? = null
 
     @Volatile
     private var useBackCamera = true
@@ -84,6 +107,22 @@ class CameraStreamingService : Service(), LifecycleOwner {
         /** Il ViewModel registra qui la sincronizzazione quando lo stop arriva dalla notifica. */
         @Volatile
         var stopSink: (() -> Unit)? = null
+
+        /** Ultimo fotogramma JPEG: è la base delle istantanee reali. */
+        @Volatile
+        var latestFrame: ByteArray? = null
+
+        /** Il ViewModel riceve qui l'esito della clip quando il file è finalizzato. */
+        @Volatile
+        var clipSink: ((ClipResult) -> Unit)? = null
+
+        /** Avvia una clip video in MediaStore; false se il servizio non è in esecuzione. */
+        fun startClip(displayName: String): Boolean =
+            instance?.startVideoClip(displayName) ?: false
+
+        fun stopClip() {
+            instance?.stopVideoClip()
+        }
 
         @Volatile
         private var attachedSurface: Preview.SurfaceProvider? = null
@@ -204,10 +243,24 @@ class CameraStreamingService : Service(), LifecycleOwner {
                     .build()
                 analysisUseCase = imageAnalysis
 
+                // Registrazione video reale: CameraX usa MediaRecorder/MediaMuxer e scrive
+                // direttamente l'MP4 in MediaStore.
+                val recorder = Recorder.Builder()
+                    .setQualitySelector(
+                        QualitySelector.from(
+                            Quality.FHD,
+                            FallbackStrategy.lowerQualityOrHigherThan(Quality.HD)
+                        )
+                    )
+                    .build()
+                val recorderCapture = VideoCapture.withOutput(recorder)
+                videoCapture = recorderCapture
+
                 imageAnalysis.setAnalyzer(
                     analysisExecutor,
                     CameraStreamAnalyzer(
                         onFrameEncoded = { bytes ->
+                            latestFrame = bytes
                             frameSink?.invoke(bytes)
                             // Il server è di processo: i fotogrammi continuano ad arrivare ai
                             // monitor anche con l'app chiusa o lo schermo spento.
@@ -224,7 +277,13 @@ class CameraStreamingService : Service(), LifecycleOwner {
                     CameraSelector.DEFAULT_FRONT_CAMERA
                 }
 
-                camera = provider.bindToLifecycle(this, selector, preview, imageAnalysis)
+                camera = provider.bindToLifecycle(
+                    this,
+                    selector,
+                    preview,
+                    imageAnalysis,
+                    recorderCapture
+                )
                 applyTorchState()
                 applyZoomState()
                 Log.i(TAG, "Sessione CameraX del servizio attiva")
@@ -285,7 +344,8 @@ class CameraStreamingService : Service(), LifecycleOwner {
      */
     private fun unbindOwnUseCases() {
         val provider = cameraProvider
-        val useCases = listOfNotNull(previewUseCase, analysisUseCase).toTypedArray()
+        stopVideoClip()
+        val useCases = listOfNotNull(previewUseCase, analysisUseCase, videoCapture).toTypedArray()
         if (provider != null && useCases.isNotEmpty()) {
             try {
                 provider.unbind(*useCases)
@@ -296,6 +356,64 @@ class CameraStreamingService : Service(), LifecycleOwner {
         camera = null
         previewUseCase = null
         analysisUseCase = null
+        videoCapture = null
+    }
+
+    private fun startVideoClip(displayName: String): Boolean {
+        val capture = videoCapture ?: return false
+        if (activeRecording != null) return false
+
+        val name = if (displayName.endsWith(".mp4", ignoreCase = true)) {
+            displayName
+        } else {
+            "$displayName.mp4"
+        }
+
+        return try {
+            val outputOptions = MediaStoreOutputOptions.Builder(
+                contentResolver,
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            )
+                .setContentValues(MediaStoreStorage.videoContentValues(name))
+                .build()
+
+            activeRecording = capture.output
+                .prepareRecording(this, outputOptions)
+                .start(ContextCompat.getMainExecutor(this)) { event ->
+                    if (event is VideoRecordEvent.Finalize) {
+                        activeRecording = null
+                        val uri = event.outputResults.outputUri
+                        val success = !event.hasError() && uri != Uri.EMPTY
+                        val seconds = (event.recordingStats.recordedDurationNanos / 1_000_000_000L)
+                            .toInt()
+                            .coerceAtLeast(0)
+                        val size = if (success) MediaStoreStorage.querySizeBytes(this, uri) else 0L
+                        clipSink?.invoke(
+                            ClipResult(
+                                uri = uri.toString(),
+                                durationSeconds = seconds,
+                                sizeBytes = size,
+                                mimeType = MediaStoreStorage.VIDEO_MIME,
+                                success = success
+                            )
+                        )
+                    }
+                }
+            SystemClock.elapsedRealtime()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Avvio registrazione non riuscito", e)
+            activeRecording = null
+            false
+        }
+    }
+
+    private fun stopVideoClip() {
+        try {
+            activeRecording?.stop()
+        } catch (e: Exception) {
+            Log.w(TAG, "Stop registrazione non riuscito", e)
+        }
     }
 
     private fun stopStreaming() {

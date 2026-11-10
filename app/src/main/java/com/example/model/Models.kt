@@ -46,8 +46,15 @@ data class RecordingItem(
     val isMotionEvent: Boolean = false,
     val isSnapshot: Boolean = false,
     val filePath: String = "",
-    val cameraName: String = "Camera Principale"
-)
+    val cameraName: String = "Camera Principale",
+    /** Uri MediaStore (o file://) del media salvato davvero su disco. */
+    val uri: String = "",
+    val fileSizeBytes: Long = 0L,
+    val createdAtMillis: Long = 0L,
+    val mimeType: String = ""
+) {
+    val hasFile: Boolean get() = uri.isNotEmpty()
+}
 
 data class AppSettings(
     val videoQuality: String = "1080p (Full HD)",

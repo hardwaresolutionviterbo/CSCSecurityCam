@@ -56,13 +56,16 @@ class MainViewModelTest {
     }
 
     @Test
-    fun testSnapshotCreation() {
+    fun testSnapshotWithoutCameraFrameDoesNotInventEntry() {
         val viewModel = MainViewModel()
-        val initialRecordings = viewModel.uiState.value.recordings.size
 
+        // Senza un fotogramma reale non si salva nulla: nessuna voce finta nell'elenco.
         viewModel.takeSnapshot()
-        assertEquals(initialRecordings + 1, viewModel.uiState.value.recordings.size)
-        assertTrue(viewModel.uiState.value.recordings.first().isSnapshot)
+        assertTrue(viewModel.uiState.value.recordings.isEmpty())
+        assertEquals(
+            "Istantanea non disponibile: avvia prima la videocamera",
+            viewModel.uiState.value.toastMessage
+        )
     }
 
     @Test

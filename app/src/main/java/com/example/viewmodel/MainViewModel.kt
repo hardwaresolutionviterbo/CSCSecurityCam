@@ -21,6 +21,11 @@ import com.example.engine.ServerStats
 import com.example.engine.StreamingHub
 import com.example.data.AppDatabase
 import com.example.data.DeviceRepository
+import com.example.data.RecordingRepository
+import com.example.data.SettingsRepository
+import com.example.media.MediaFormat
+import com.example.media.MediaStoreStorage
+import com.example.service.ClipResult
 import com.example.pairing.CameraProbe
 import com.example.pairing.PairingPayload
 import com.example.pairing.ProbeResult
@@ -111,7 +116,12 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     private var batteryManager: BatteryOptimizationManager? = null
     private var networkRecoveryManager: NetworkRecoveryManager? = null
     private var deviceRepository: DeviceRepository? = null
+    private var recordingRepository: RecordingRepository? = null
+    private var settingsRepository: SettingsRepository? = null
+    private var appContext: Context? = null
     private var statusPollJob: Job? = null
+    private var clipCameraName: String = "Videocamera"
+    private var clipIsMotionEvent: Boolean = false
 
     val cameraPlaybackManager = AudioPlaybackManager()
     private var cameraCaptureManager: AudioCaptureManager? = null
@@ -156,6 +166,8 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         // più nel percorso del video, così chiudere l'app non interrompe lo streaming.
         CameraStreamingService.motionSink = { result -> handleMotionResult(context, result) }
         CameraStreamingService.stopSink = { syncStreamingStopped() }
+        CameraStreamingService.clipSink = { clip -> handleClipFinalized(clip) }
+        appContext = context.applicationContext
 
         // I dispositivi esistono solo se sono stati accoppiati e salvati su Room.
         if (deviceRepository == null) {
@@ -174,6 +186,30 @@ class MainViewModel : ViewModel(), RemoteControlListener {
                 }
             }
             startStatusPolling()
+        }
+
+        // Registrazioni e impostazioni vivono su Room: sopravvivono alla chiusura dell'app.
+        if (recordingRepository == null) {
+            val database = AppDatabase.getInstance(context)
+
+            val recordings = RecordingRepository(database.recordingDao())
+            recordingRepository = recordings
+            viewModelScope.launch {
+                recordings.recordings.collect { saved ->
+                    _uiState.update { it.copy(recordings = saved) }
+                }
+            }
+
+            val persistedSettings = SettingsRepository(database.settingsDao())
+            settingsRepository = persistedSettings
+            viewModelScope.launch {
+                val saved = persistedSettings.get()
+                motionDetector.sensitivity = saved.motionSensitivity
+                _uiState.update { it.copy(settings = saved) }
+                if (saved.remoteAccessWebRtc) {
+                    remoteAccessManager?.startRemoteAccess()
+                }
+            }
         }
 
         if (batteryManager == null) {
@@ -317,25 +353,11 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     }
 
     private fun startAutoMotionRecording(context: Context, cameraName: String) {
-        _uiState.update {
-            it.copy(
-                isRecording = true,
-                isAutoRecordingFromMotion = true,
-                recordingDurationSeconds = 0,
-                toastMessage = "Movimento rilevato! Registrazione automatica avviata"
-            )
-        }
+        // Anche la clip da movimento è un file reale: senza videocamera attiva non si inventa nulla.
+        if (!startRealRecording(isMotionTriggered = true)) return
 
         if (_uiState.value.settings.notificationsEnabled) {
             CscNotificationHelper.sendRecordingNotification(context, cameraName, "Rilevamento movimento automatico")
-        }
-
-        recordingTimerJob?.cancel()
-        recordingTimerJob = viewModelScope.launch {
-            while (true) {
-                delay(1000)
-                _uiState.update { it.copy(recordingDurationSeconds = it.recordingDurationSeconds + 1) }
-            }
         }
 
         // Auto-stop after 15 seconds buffer
@@ -351,23 +373,95 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     private fun stopMotionRecording(isMotionTriggered: Boolean) {
         recordingTimerJob?.cancel()
         autoStopMotionRecordingJob?.cancel()
-        val duration = _uiState.value.recordingDurationSeconds
-        val nowStr = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date())
-        val newRec = RecordingItem(
-            id = UUID.randomUUID().toString(),
-            title = if (isMotionTriggered) "Movimento Rilevato (${duration}s)" else "Registrazione Live (${duration}s)",
-            timestamp = nowStr,
-            durationSeconds = duration,
-            isMotionEvent = isMotionTriggered,
-            cameraName = getSelectedDevice()?.name ?: "Videocamera Principale"
+        // È il servizio a chiudere il file: la riga in Room nasce quando arriva ClipResult.
+        CameraStreamingService.stopClip()
+        _uiState.update {
+            it.copy(
+                isRecording = false,
+                isAutoRecordingFromMotion = false,
+                recordingDurationSeconds = 0
+            )
+        }
+    }
+
+    /** Avvia una clip reale su MediaStore; false se la videocamera non è attiva. */
+    private fun startRealRecording(isMotionTriggered: Boolean): Boolean {
+        if (!_uiState.value.isStreamingActive) {
+            _uiState.update { it.copy(toastMessage = "Avvia la videocamera prima di registrare") }
+            return false
+        }
+
+        val started = CameraStreamingService.startClip(
+            MediaFormat.clipFileName(System.currentTimeMillis())
         )
+        if (!started) {
+            _uiState.update { it.copy(toastMessage = "Registrazione non disponibile: riavvia la videocamera") }
+            return false
+        }
+
+        clipCameraName = getSelectedDevice()?.name ?: getLocalDevice().name
+        clipIsMotionEvent = isMotionTriggered
+        _uiState.update {
+            it.copy(
+                isRecording = true,
+                isAutoRecordingFromMotion = isMotionTriggered,
+                recordingDurationSeconds = 0,
+                toastMessage = if (isMotionTriggered) "Movimento rilevato! Registrazione avviata" else null
+            )
+        }
+
+        recordingTimerJob?.cancel()
+        recordingTimerJob = viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                _uiState.update { it.copy(recordingDurationSeconds = it.recordingDurationSeconds + 1) }
+            }
+        }
+        return true
+    }
+
+    /** Il file è stato finalizzato: si salva la riga con durata e dimensione reali. */
+    private fun handleClipFinalized(clip: ClipResult) {
+        recordingTimerJob?.cancel()
+        autoStopMotionRecordingJob?.cancel()
+
+        if (!clip.success) {
+            _uiState.update {
+                it.copy(
+                    isRecording = false,
+                    isAutoRecordingFromMotion = false,
+                    recordingDurationSeconds = 0,
+                    toastMessage = "Registrazione non riuscita"
+                )
+            }
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val item = RecordingItem(
+            id = UUID.randomUUID().toString(),
+            title = if (clipIsMotionEvent) {
+                "Movimento ${MediaFormat.formatDuration(clip.durationSeconds)}"
+            } else {
+                "Clip ${MediaFormat.formatDuration(clip.durationSeconds)}"
+            },
+            timestamp = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(now)),
+            durationSeconds = clip.durationSeconds,
+            isMotionEvent = clipIsMotionEvent,
+            isSnapshot = false,
+            cameraName = clipCameraName,
+            uri = clip.uri,
+            fileSizeBytes = clip.sizeBytes,
+            createdAtMillis = now,
+            mimeType = clip.mimeType
+        )
+        viewModelScope.launch { recordingRepository?.save(item) }
         _uiState.update {
             it.copy(
                 isRecording = false,
                 isAutoRecordingFromMotion = false,
                 recordingDurationSeconds = 0,
-                recordings = listOf(newRec) + it.recordings,
-                toastMessage = "Clip salvata in Registrazioni!"
+                toastMessage = "Clip salvata (${MediaFormat.formatSize(clip.sizeBytes)})"
             )
         }
     }
@@ -589,34 +683,54 @@ class MainViewModel : ViewModel(), RemoteControlListener {
 
     fun toggleRecording() {
         if (!_uiState.value.isRecording) {
-            _uiState.update { it.copy(isRecording = true, isAutoRecordingFromMotion = false, recordingDurationSeconds = 0) }
-            recordingTimerJob?.cancel()
-            recordingTimerJob = viewModelScope.launch {
-                while (true) {
-                    delay(1000)
-                    _uiState.update { it.copy(recordingDurationSeconds = it.recordingDurationSeconds + 1) }
-                }
-            }
+            startRealRecording(isMotionTriggered = false)
         } else {
             stopMotionRecording(isMotionTriggered = _uiState.value.isAutoRecordingFromMotion)
         }
     }
 
     fun takeSnapshot() {
-        val nowStr = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date())
-        val snapshot = RecordingItem(
-            id = UUID.randomUUID().toString(),
-            title = "Istantanea Centro Controllo",
-            timestamp = nowStr,
-            durationSeconds = 0,
-            isSnapshot = true,
-            cameraName = getSelectedDevice()?.name ?: "Camera"
-        )
-        _uiState.update {
-            it.copy(
-                recordings = listOf(snapshot) + it.recordings,
-                toastMessage = "Istantanea catturata e salvata!"
+        val context = appContext
+        val jpeg = CameraStreamingService.latestFrame
+        if (context == null || jpeg == null) {
+            _uiState.update {
+                it.copy(toastMessage = "Istantanea non disponibile: avvia prima la videocamera")
+            }
+            return
+        }
+
+        // Il JPEG corrente viene scritto davvero su disco, poi la riga va in Room.
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val saved = MediaStoreStorage.saveSnapshot(
+                context,
+                jpeg,
+                MediaFormat.snapshotFileName(now)
             )
+            if (saved == null) {
+                _uiState.update { it.copy(toastMessage = "Salvataggio dell'istantanea non riuscito") }
+                return@launch
+            }
+
+            val nowStr = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(now))
+            val snapshot = RecordingItem(
+                id = UUID.randomUUID().toString(),
+                title = "Istantanea $nowStr",
+                timestamp = nowStr,
+                durationSeconds = 0,
+                isSnapshot = true,
+                cameraName = getSelectedDevice()?.name ?: getLocalDevice().name,
+                uri = saved.uri.toString(),
+                fileSizeBytes = saved.sizeBytes,
+                createdAtMillis = now,
+                mimeType = saved.mimeType
+            )
+            recordingRepository?.save(snapshot)
+            _uiState.update {
+                it.copy(
+                    toastMessage = "Istantanea salvata (${MediaFormat.formatSize(saved.sizeBytes)})"
+                )
+            }
         }
         streamClient.sendRemoteCommand("snapshot")
     }
@@ -835,12 +949,34 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     }
 
     fun deleteRecording(id: String) {
-        _uiState.update { it.copy(recordings = it.recordings.filter { rec -> rec.id != id }) }
+        val context = appContext
+        viewModelScope.launch {
+            val stored = recordingRepository?.find(id)
+                ?: _uiState.value.recordings.firstOrNull { it.id == id }
+            val removed = if (context != null && stored != null) {
+                MediaStoreStorage.delete(context, stored.uri.ifEmpty { stored.filePath })
+            } else {
+                false
+            }
+            recordingRepository?.delete(id)
+            _uiState.update {
+                it.copy(
+                    recordings = it.recordings.filter { rec -> rec.id != id },
+                    toastMessage = if (removed) {
+                        "File eliminato dal dispositivo"
+                    } else {
+                        "Voce eliminata dall'elenco"
+                    }
+                )
+            }
+        }
     }
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) {
+        var toPersist: AppSettings? = null
         _uiState.update {
             val updated = transform(it.settings)
+            toPersist = updated
             motionDetector.sensitivity = updated.motionSensitivity
             if (updated.remoteAccessWebRtc != it.settings.remoteAccessWebRtc) {
                 if (updated.remoteAccessWebRtc) {
@@ -850,6 +986,9 @@ class MainViewModel : ViewModel(), RemoteControlListener {
                 }
             }
             it.copy(settings = updated)
+        }
+        toPersist?.let { updated ->
+            viewModelScope.launch { settingsRepository?.save(updated) }
         }
     }
 
@@ -873,5 +1012,6 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         autoStopMotionRecordingJob?.cancel()
         cameraSpeakerResetJob?.cancel()
         statusPollJob?.cancel()
+        CameraStreamingService.clipSink = null
     }
 }
