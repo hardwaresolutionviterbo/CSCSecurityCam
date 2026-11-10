@@ -282,6 +282,15 @@ fun MonitorScreen(
                                     fontSize = 11.sp,
                                     textAlign = TextAlign.Center
                                 )
+                                state.clientStats.errorMessage?.let { message ->
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = message,
+                                        color = CscLiveRed,
+                                        fontSize = 11.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Button(
                                     onClick = onReconnect,

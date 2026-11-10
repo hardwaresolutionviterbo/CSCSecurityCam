@@ -341,6 +341,7 @@ fun CameraScreen(
                             isBackCamera = state.isBackCamera,
                             isTorchOn = state.isTorchOn,
                             zoomRatio = state.zoomRatio,
+                            isStreaming = state.isStreamingActive,
                             onFrameEncoded = onFrameEncoded,
                             motionDetector = motionDetector,
                             onMotionResult = onMotionResult,
