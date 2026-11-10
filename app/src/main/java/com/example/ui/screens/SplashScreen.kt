@@ -74,6 +74,7 @@ import com.example.ui.theme.CscNightBlue
 import com.example.ui.theme.CscOrange
 import com.example.ui.theme.CscOrangeGlow
 import com.example.ui.theme.CscPanel
+import com.example.ui.components.CscBrandMark
 import com.example.ui.theme.CscPanelBlue
 import com.example.ui.theme.CscSecondaryText
 import com.example.ui.theme.CscWhite
@@ -187,68 +188,9 @@ fun SplashScreen(
         ) {
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 1. Central Camera Logo Badge with Glowing Orange Aura
-            Box(
-                modifier = Modifier
-                    .size(150.dp)
-                    .scale(haloPulse),
-                contentAlignment = Alignment.Center
-            ) {
-                // Neon halo ring
-                Box(
-                    modifier = Modifier
-                        .size(146.dp)
-                        .clip(RoundedCornerShape(36.dp))
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    CscOrange.copy(alpha = 0.45f),
-                                    CscOrangeGlow.copy(alpha = 0.18f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
-
-                // Main Logo Box
-                Box(
-                    modifier = Modifier
-                        .size(126.dp)
-                        .shadow(
-                            elevation = 20.dp,
-                            shape = RoundedCornerShape(32.dp),
-                            spotColor = CscOrange,
-                            ambientColor = Color.Black
-                        )
-                        .clip(RoundedCornerShape(32.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color(0xFF1E283E),
-                                    CscNightBlue
-                                )
-                            )
-                        )
-                        .border(
-                            width = 2.dp,
-                            brush = Brush.verticalGradient(
-                                listOf(
-                                    CscOrangeGlow,
-                                    CscOrange
-                                )
-                            ),
-                            shape = RoundedCornerShape(32.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_csc_logo),
-                        contentDescription = "CSC SecurityCam Logo",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(30.dp))
-                    )
-                }
+            // 1. Marchio: badge con anello arancione e alone pulsante.
+            Box(modifier = Modifier.scale(haloPulse)) {
+                CscBrandMark(size = 138.dp)
             }
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -258,7 +200,7 @@ fun SplashScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "CSC",
-                    fontSize = 30.sp,
+                    fontSize = 32.sp,
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.Bold,
                     color = CscWhite,
@@ -267,7 +209,7 @@ fun SplashScreen(
                 )
                 Text(
                     text = "SecurityCam",
-                    fontSize = 30.sp,
+                    fontSize = 32.sp,
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.Bold,
                     color = CscOrange,
@@ -312,28 +254,33 @@ fun SplashScreen(
             // 3. Five Feature Highlights Row (Exact style from mockup)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.Top
             ) {
                 FeatureHighlightItem(
                     iconType = FeatureIconType.LIVE,
-                    label = "Monitoraggio\nLive"
+                    label = "Monitoraggio\nLive",
+                    modifier = Modifier.weight(1f)
                 )
                 FeatureHighlightItem(
                     iconType = FeatureIconType.MOTION,
-                    label = "Rilevamento\nMovimento"
+                    label = "Rilevamento\nMovimento",
+                    modifier = Modifier.weight(1f)
                 )
                 FeatureHighlightItem(
                     iconType = FeatureIconType.REC,
-                    label = "Registrazione\nVideo"
+                    label = "Registrazione\nVideo",
+                    modifier = Modifier.weight(1f)
                 )
                 FeatureHighlightItem(
                     iconType = FeatureIconType.NOTIFICATIONS,
-                    label = "Notifiche\nSmart"
+                    label = "Notifiche\nSmart",
+                    modifier = Modifier.weight(1f)
                 )
                 FeatureHighlightItem(
                     iconType = FeatureIconType.REMOTE,
-                    label = "Accesso\nRemoto"
+                    label = "Accesso\nRemoto",
+                    modifier = Modifier.weight(1f)
                 )
             }
 
@@ -500,11 +447,12 @@ enum class FeatureIconType {
 @Composable
 private fun FeatureHighlightItem(
     iconType: FeatureIconType,
-    label: String
+    label: String,
+    modifier: Modifier = Modifier
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(62.dp)
+        modifier = modifier
     ) {
         Box(
             modifier = Modifier
@@ -594,12 +542,15 @@ private fun FeatureHighlightItem(
 
         Text(
             text = label,
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             fontFamily = MontserratFontFamily,
             fontWeight = FontWeight.Medium,
             color = CscWhite,
             textAlign = TextAlign.Center,
-            lineHeight = 13.sp
+            lineHeight = 12.sp,
+            // Le due righe sono esplicite nel testo: niente spezzature a metà parola.
+            maxLines = 2,
+            softWrap = false
         )
     }
 }

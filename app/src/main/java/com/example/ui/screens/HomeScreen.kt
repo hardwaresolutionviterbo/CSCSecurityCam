@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.Screen
 import com.example.ui.components.CscBottomNav
+import com.example.ui.components.CscBrandMark
 import com.example.ui.theme.CscBackground
 import com.example.ui.theme.CscGlassBorder
 import com.example.ui.theme.CscGlassCard
@@ -99,26 +100,44 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Wordmark ufficiale: "CSC" bianco, "SecurityCam" arancione.
-                    Text(
-                        text = "CSC",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = CscTitleWhite,
-                        letterSpacing = 0.5.sp,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                    Text(
-                        text = "SecurityCam",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = CscOrange,
-                        letterSpacing = 0.sp,
-                        maxLines = 1,
-                        softWrap = false
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    CscBrandMark(size = 44.dp, showGlow = false)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Wordmark ufficiale: "CSC" bianco, "SecurityCam" arancione.
+                            Text(
+                                text = "CSC",
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CscTitleWhite,
+                                letterSpacing = 0.5.sp,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                            Text(
+                                text = "SecurityCam",
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CscOrange,
+                                letterSpacing = 0.sp,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                        Text(
+                            text = "VIDEOSORVEGLIANZA SMART",
+                            fontSize = 7.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = CscSubtitleGray,
+                            letterSpacing = 1.6.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
                 }
 
                 // Frosted Glass Settings Button
@@ -163,15 +182,27 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Subtitle Tagline
-            Text(
-                text = "MODALITÀ OPERATIVA",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Normal,
-                color = CscSubtitleGray,
-                letterSpacing = 2.5.sp,
+            // Etichetta di sezione con barretta arancione.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)
-            )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(18.dp)
+                        .height(2.dp)
+                        .background(CscOrange)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "MODALITÀ OPERATIVA",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = CscSubtitleGray,
+                    letterSpacing = 2.5.sp,
+                    maxLines = 1
+                )
+            }
 
             // 2x2 Grid of Mode Cards
             Column(
@@ -245,18 +276,28 @@ private fun FeaturePill(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = CscOrange,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(CscPanelBlueVariant)
+                .border(1.dp, CscGlassBorder, RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = CscOrange,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(5.dp))
         Text(
             text = label,
             fontSize = 9.sp,
             fontWeight = FontWeight.Medium,
-            color = CscSubtitleGray
+            color = CscSubtitleGray,
+            maxLines = 1
         )
     }
 }

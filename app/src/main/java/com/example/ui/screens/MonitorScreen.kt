@@ -421,26 +421,28 @@ fun MonitorScreen(
                     }
                 }
 
-                // Bottom-Right Resolution / FPS Badge
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(12.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha = 0.7f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    val resText = if (state.clientStats.currentFps > 0) {
-                        "${state.clientStats.resolution} ${state.clientStats.currentFps} fps"
-                    } else {
-                        "1920 × 1080"
+                // Badge risoluzione/fps: solo a flusso attivo, per non coprire lo stato vuoto.
+                if (isConnected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(12.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.7f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        val resText = if (state.clientStats.currentFps > 0) {
+                            "${state.clientStats.resolution} ${state.clientStats.currentFps} fps"
+                        } else {
+                            "1920 × 1080"
+                        }
+                        Text(
+                            text = resText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = CscIceWhite
+                        )
                     }
-                    Text(
-                        text = resText,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = CscIceWhite
-                    )
                 }
 
                 // Active Recording Overlay Timer
