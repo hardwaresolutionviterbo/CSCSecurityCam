@@ -26,21 +26,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatteryStd
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,23 +46,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.CameraDevice
 import com.example.model.DeviceType
 import com.example.model.Screen
 import com.example.ui.components.CscBottomNav
+import com.example.ui.components.PairCameraDialog
 import com.example.ui.theme.CscBackground
 import com.example.ui.theme.CscGlassBorder
 import com.example.ui.theme.CscGlassCard
 import com.example.ui.theme.CscIceWhite
-import com.example.ui.theme.CscMidnightBlue
-import com.example.ui.theme.CscNeonGlow
 import com.example.ui.theme.CscOnlineGreen
 import com.example.ui.theme.CscOrange
 import com.example.ui.theme.CscPanelBlue
-import com.example.ui.theme.CscPanelBlueVariant
-import com.example.ui.theme.CscSteel
 import com.example.ui.theme.CscSubtitleGray
 import com.example.ui.theme.CscTextMuted
 import com.example.ui.theme.CscTitleWhite
@@ -81,11 +73,11 @@ fun DevicesScreen(
     onBack: () -> Unit,
     onNavigate: (Screen) -> Unit,
     onSelectDevice: (String) -> Unit,
-    onAddDevice: (name: String, ip: String, location: String, type: DeviceType) -> Unit,
+    onSaveDevice: (name: String, ip: String, location: String, type: DeviceType, port: Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
-    var showAddDialog by remember { mutableStateOf(false) }
+    var showPairDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -98,13 +90,13 @@ fun DevicesScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddDialog = true },
+                onClick = { showPairDialog = true },
                 containerColor = CscOrange,
                 contentColor = Color.White,
                 shape = CircleShape,
                 modifier = Modifier.testTag("add_device_fab")
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Aggiungi videocamera")
+                Icon(Icons.Default.Add, contentDescription = "Accoppia telecamera")
             }
         }
     ) { innerPadding ->
@@ -115,7 +107,6 @@ fun DevicesScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(horizontal = 20.dp, vertical = 6.dp)
         ) {
-            // Top Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -157,6 +148,11 @@ fun DevicesScreen(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (state.devices.isEmpty()) {
+                    item(key = "empty_devices") {
+                        EmptyDevicesCard(onPair = { showPairDialog = true })
+                    }
+                }
                 items(state.devices, key = { it.id }) { device ->
                     DeviceCard(
                         device = device,
@@ -171,109 +167,59 @@ fun DevicesScreen(
         }
     }
 
-    if (showAddDialog) {
-        var name by remember { mutableStateOf("") }
-        var ip by remember { mutableStateOf("") }
-        var location by remember { mutableStateOf("") }
-        var isIpCamera by remember { mutableStateOf(false) }
-
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            containerColor = CscPanelBlue,
-            title = {
-                Text(
-                    text = "Aggiungi Videocamera",
-                    fontWeight = FontWeight.Bold,
-                    color = CscIceWhite
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Nome camera") },
-                        placeholder = { Text("Es. Camera Giardino") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CscOrange,
-                            unfocusedBorderColor = CscSteel,
-                            focusedTextColor = CscIceWhite,
-                            unfocusedTextColor = CscIceWhite
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = location,
-                        onValueChange = { location = it },
-                        label = { Text("Ambiente / Stanza") },
-                        placeholder = { Text("Es. Salotto, Esterno") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CscOrange,
-                            unfocusedBorderColor = CscSteel,
-                            focusedTextColor = CscIceWhite,
-                            unfocusedTextColor = CscIceWhite
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = ip,
-                        onValueChange = { ip = it },
-                        label = { Text("Indirizzo IP") },
-                        placeholder = { Text("192.168.1.xxx") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CscOrange,
-                            unfocusedBorderColor = CscSteel,
-                            focusedTextColor = CscIceWhite,
-                            unfocusedTextColor = CscIceWhite
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isIpCamera = !isIpCamera },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isIpCamera) CscOrange else Color.Transparent)
-                                .border(1.dp, if (isIpCamera) CscOrange else CscSteel, RoundedCornerShape(6.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isIpCamera) {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("Videocamera IP (RTSP / ONVIF)", color = CscIceWhite, fontSize = 13.sp)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (name.isNotBlank() && ip.isNotBlank()) {
-                            val type = if (isIpCamera) DeviceType.IP_ONVIF else DeviceType.SMARTPHONE
-                            onAddDevice(name, ip, location.ifBlank { "Casa" }, type)
-                            showAddDialog = false
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = CscOrange)
-                ) {
-                    Text("Salva", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
-                    Text("Annulla", color = CscTextMuted)
-                }
+    if (showPairDialog) {
+        PairCameraDialog(
+            isStreamingActive = state.isStreamingActive,
+            onDismiss = { showPairDialog = false },
+            onSave = { name, location, ip, port, type ->
+                onSaveDevice(name, ip, location, type, port)
+                showPairDialog = false
             }
         )
+    }
+}
+
+@Composable
+private fun EmptyDevicesCard(onPair: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(CscPanelBlue)
+            .border(1.dp, CscGlassBorder, RoundedCornerShape(18.dp))
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Default.Videocam,
+            contentDescription = null,
+            tint = CscOrange,
+            modifier = Modifier.size(32.dp)
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "Nessuna telecamera accoppiata",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = CscTitleWhite,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Scansiona il QR mostrato dal secondo telefono, oppure inserisci indirizzo e porta. La telecamera viene salvata solo se risponde.",
+            fontSize = 11.sp,
+            color = CscSubtitleGray,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+            onClick = onPair,
+            colors = ButtonDefaults.buttonColors(containerColor = CscOrange),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.testTag("empty_pair_camera_btn")
+        ) {
+            Text("Accoppia telecamera", color = Color.White, fontSize = 12.sp)
+        }
     }
 }
 

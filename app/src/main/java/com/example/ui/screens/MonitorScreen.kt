@@ -56,6 +56,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -76,7 +79,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.engine.ConnectionStatus
+import com.example.model.DeviceType
 import com.example.model.Screen
+import com.example.ui.components.PairCameraDialog
 import com.example.ui.components.CscBottomNav
 import com.example.ui.components.PtzController
 import com.example.ui.theme.CscBackground
@@ -112,9 +117,11 @@ fun MonitorScreen(
     onRemoteTorch: () -> Unit,
     onRemoteFlipLens: () -> Unit,
     onTwoWayTalk: (Boolean) -> Unit,
+    onSavePairedDevice: (name: String, location: String, ip: String, port: Int, type: DeviceType) -> Unit,
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
+    var showPairDialog by remember { mutableStateOf(false) }
 
     val pulseTransition = rememberInfiniteTransition(label = "pulse_live")
     val pulseAlpha by pulseTransition.animateFloat(
@@ -127,7 +134,8 @@ fun MonitorScreen(
         label = "pulseAlpha"
     )
 
-    val dev = state.devices.firstOrNull { it.id == state.selectedDeviceId } ?: state.devices.firstOrNull()
+    // Solo il dispositivo selezionato: nessun ripiego sul primo della lista.
+    val dev = state.devices.firstOrNull { it.id == state.selectedDeviceId }
     val isConnected = state.clientStats.status == ConnectionStatus.CONNECTED
 
     Scaffold(
@@ -203,7 +211,8 @@ fun MonitorScreen(
                     ConnectionStatus.DISCONNECTED -> "In attesa"
                 }
                 Text(
-                    text = "Videocamera: ${dev?.ipAddress ?: state.localIpAddress} • $statusLabel",
+                    text = dev?.let { "${it.name} • ${it.ipAddress}:${it.port} • $statusLabel" }
+                        ?: "Nessuna telecamera accoppiata • $statusLabel",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = CscIceWhite
@@ -271,13 +280,19 @@ fun MonitorScreen(
                                 Icon(Icons.Default.Warning, contentDescription = null, tint = CscLiveRed, modifier = Modifier.size(32.dp))
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "Videocamera non raggiungibile",
+                                    text = if (dev == null) "Nessuna telecamera selezionata" else "Videocamera non raggiungibile",
                                     color = CscIceWhite,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Verifica che il secondo smartphone sia in modalità Videocamera",
+                                    text = when {
+                                        dev == null -> "Accoppia una telecamera per iniziare a ricevere il video"
+                                        state.selectedDeviceReachable == false ->
+                                            "Nessuna risposta da ${dev.ipAddress}:${dev.port}: la telecamera è spenta, su un'altra Wi-Fi o l'app non è aperta"
+                                        else ->
+                                            "La telecamera risponde ma non invia video: lo streaming è spento su questo telefono"
+                                    },
                                     color = CscTextMuted,
                                     fontSize = 11.sp,
                                     textAlign = TextAlign.Center
@@ -291,25 +306,71 @@ fun MonitorScreen(
                                         textAlign = TextAlign.Center
                                     )
                                 }
+                                state.selectedDeviceProbeMessage?.let { message ->
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = message,
+                                        color = CscTextMuted,
+                                        fontSize = 10.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(10.dp))
-                                Button(
-                                    onClick = onReconnect,
-                                    colors = ButtonDefaults.buttonColors(containerColor = CscPanelBlue),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = CscOrange, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Riconnetti", color = CscIceWhite, fontSize = 12.sp)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = { if (dev == null) showPairDialog = true else onReconnect() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = CscPanelBlue),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, tint = CscOrange, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (dev == null) "Accoppia telecamera" else "Riconnetti",
+                                            color = CscIceWhite,
+                                            fontSize = 12.sp
+                                        )
+                                    }
                                 }
                             }
                         }
                         else -> {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_csc_logo),
-                                contentDescription = "Live Security Stream Feed",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                            if (dev == null) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Nessuna telecamera",
+                                        color = CscIceWhite,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Accoppia una telecamera scansionando il suo QR o inserendo IP e porta.",
+                                        color = CscTextMuted,
+                                        fontSize = 11.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Button(
+                                        onClick = { showPairDialog = true },
+                                        colors = ButtonDefaults.buttonColors(containerColor = CscOrange),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.testTag("monitor_pair_camera_btn")
+                                    ) {
+                                        Text("Accoppia telecamera", color = Color.White, fontSize = 12.sp)
+                                    }
+                                }
+                            } else {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_csc_logo),
+                                    contentDescription = "Live Security Stream Feed",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
                 }
@@ -703,5 +764,16 @@ fun MonitorScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
         }
+    }
+
+    if (showPairDialog) {
+        PairCameraDialog(
+            isStreamingActive = state.isStreamingActive,
+            onDismiss = { showPairDialog = false },
+            onSave = { name, location, ip, port, type ->
+                onSavePairedDevice(name, location, ip, port, type)
+                showPairDialog = false
+            }
+        )
     }
 }

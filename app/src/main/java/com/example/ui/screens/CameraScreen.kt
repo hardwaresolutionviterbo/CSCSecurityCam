@@ -464,10 +464,12 @@ fun CameraScreen(
                         .padding(14.dp),
                     contentAlignment = Alignment.Center
                 ) {
+                    // L'id deriva dall'indirizzo del telefono videocamera: due telefoni diversi
+                    // restano dispositivi distinti quando vengono accoppiati.
                     val qrData = if (state.settings.remoteAccessWebRtc) {
-                        "csc://cam?ip=${state.localIpAddress}&port=${state.streamingPort}&remote=1&p2p=${state.remoteTunnelStats.pairingCode}&nat=${state.remoteTunnelStats.natType}"
+                        "csc://cam?ip=${state.localIpAddress}&port=${state.streamingPort}&id=${state.localIpAddress}&remote=1&p2p=${state.remoteTunnelStats.pairingCode}&nat=${state.remoteTunnelStats.natType}"
                     } else {
-                        "csc://cam?ip=${state.localIpAddress}&port=${state.streamingPort}&id=cam_local"
+                        "csc://cam?ip=${state.localIpAddress}&port=${state.streamingPort}&id=${state.localIpAddress}"
                     }
                     QrCodeView(
                         data = qrData,

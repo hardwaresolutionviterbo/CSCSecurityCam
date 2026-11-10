@@ -27,6 +27,7 @@ import androidx.lifecycle.LifecycleRegistry
 import com.example.MainActivity
 import com.example.R
 import com.example.camera.CameraStreamAnalyzer
+import com.example.engine.StreamingHub
 import com.example.motion.MotionDetector
 import com.example.motion.MotionResult
 import java.util.concurrent.ExecutorService
@@ -147,6 +148,9 @@ class CameraStreamingService : Service(), LifecycleOwner {
         if (isRunning) return
         isRunning = true
 
+        // Il server LAN appartiene al servizio: resta attivo finché la videocamera è accesa.
+        StreamingHub.server.start()
+
         if (wakeLock?.isHeld == false) {
             wakeLock?.acquire(24 * 60 * 60 * 1000L /* 24 hours */)
         }
@@ -203,7 +207,12 @@ class CameraStreamingService : Service(), LifecycleOwner {
                 imageAnalysis.setAnalyzer(
                     analysisExecutor,
                     CameraStreamAnalyzer(
-                        onFrameEncoded = { bytes -> frameSink?.invoke(bytes) },
+                        onFrameEncoded = { bytes ->
+                            frameSink?.invoke(bytes)
+                            // Il server è di processo: i fotogrammi continuano ad arrivare ai
+                            // monitor anche con l'app chiusa o lo schermo spento.
+                            StreamingHub.server.broadcastFrame(bytes)
+                        },
                         motionDetector = motionDetector,
                         onMotionResult = { result -> motionSink?.invoke(result) }
                     )
@@ -290,6 +299,8 @@ class CameraStreamingService : Service(), LifecycleOwner {
     }
 
     private fun stopStreaming() {
+        // Anche se lo stato interno non era "running", il server condiviso va fermato qui.
+        StreamingHub.server.stop()
         if (!isRunning) {
             releaseLocks()
             return

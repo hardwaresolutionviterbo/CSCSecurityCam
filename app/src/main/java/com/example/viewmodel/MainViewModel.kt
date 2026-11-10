@@ -18,6 +18,15 @@ import com.example.engine.LanStreamClient
 import com.example.engine.LanStreamingServer
 import com.example.engine.RemoteControlListener
 import com.example.engine.ServerStats
+import com.example.engine.StreamingHub
+import com.example.data.AppDatabase
+import com.example.data.DeviceRepository
+import com.example.pairing.CameraProbe
+import com.example.pairing.PairingPayload
+import com.example.pairing.ProbeResult
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import com.example.model.AppSettings
 import com.example.model.CameraDevice
 import com.example.model.DeviceType
@@ -50,7 +59,7 @@ data class MainUiState(
     val isBackCamera: Boolean = true,
     val isTorchOn: Boolean = false,
     val zoomRatio: Float = 1.0f,
-    val localIpAddress: String = "192.168.0.9",
+    val localIpAddress: String = "",
     val streamingPort: Int = 8765,
     val isStealthPowerSavingActive: Boolean = false,
     val batteryPercentage: Int = 85,
@@ -75,79 +84,13 @@ data class MainUiState(
     val lastMotionTimestamp: Long = 0L,
     val isTwoWayTalkActive: Boolean = false,
     val panOffset: Pair<Float, Float> = Pair(0f, 0f),
-    val devices: List<CameraDevice> = listOf(
-        CameraDevice(
-            id = "cam_local",
-            name = "Videocamera Principale",
-            location = "Salotto",
-            ipAddress = "192.168.0.9",
-            port = 8765,
-            isOnline = true,
-            batteryPercent = 85,
-            isLocalPhone = true,
-            resolution = "1080p (Full HD)",
-            type = DeviceType.SMARTPHONE
-        ),
-        CameraDevice(
-            id = "cam_kitchen",
-            name = "Camera Cucina",
-            location = "Cucina",
-            ipAddress = "192.168.0.12",
-            port = 8765,
-            isOnline = true,
-            batteryPercent = 78,
-            isLocalPhone = false,
-            resolution = "1080p (Full HD)",
-            type = DeviceType.SMARTPHONE
-        ),
-        CameraDevice(
-            id = "cam_entrance",
-            name = "Ingresso Esterno",
-            location = "Ingresso",
-            ipAddress = "192.168.0.25",
-            port = 554,
-            isOnline = true,
-            batteryPercent = 100,
-            isLocalPhone = false,
-            resolution = "2K (QHD)",
-            type = DeviceType.IP_ONVIF
-        )
-    ),
-    val selectedDeviceId: String = "cam_local",
-    val recordings: List<RecordingItem> = listOf(
-        RecordingItem(
-            id = "rec_01",
-            title = "Movimento Rilevato - Salotto",
-            timestamp = "Oggi, 14:12",
-            durationSeconds = 45,
-            isMotionEvent = true,
-            cameraName = "Videocamera Principale"
-        ),
-        RecordingItem(
-            id = "rec_02",
-            title = "Istantanea Live",
-            timestamp = "Oggi, 12:45",
-            durationSeconds = 0,
-            isSnapshot = true,
-            cameraName = "Videocamera Principale"
-        ),
-        RecordingItem(
-            id = "rec_03",
-            title = "Registrazione Manuale",
-            timestamp = "Ieri, 21:30",
-            durationSeconds = 180,
-            isMotionEvent = false,
-            cameraName = "Ingresso Esterno"
-        ),
-        RecordingItem(
-            id = "rec_04",
-            title = "Movimento Notturno",
-            timestamp = "Ieri, 03:15",
-            durationSeconds = 62,
-            isMotionEvent = true,
-            cameraName = "Camera Cucina"
-        )
-    ),
+    /** Solo telecamere accoppiate e verificate: all'avvio l'elenco è vuoto. */
+    val devices: List<CameraDevice> = emptyList(),
+    val selectedDeviceId: String? = null,
+    /** false = /status non risponde, true = risponde, null = non ancora verificato. */
+    val selectedDeviceReachable: Boolean? = null,
+    val selectedDeviceProbeMessage: String? = null,
+    val recordings: List<RecordingItem> = emptyList(),
     val settings: AppSettings = AppSettings(),
     val userProfile: com.example.model.UserProfile = com.example.model.UserProfile(),
     val toastMessage: String? = null
@@ -158,7 +101,8 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-    val streamingServer = LanStreamingServer(port = 8765, scope = viewModelScope)
+    // Server di processo: non muore quando l'Activity viene distrutta.
+    val streamingServer = StreamingHub.server
     val streamClient = LanStreamClient(scope = viewModelScope)
     val motionDetector = MotionDetector(sensitivity = 0.65f)
 
@@ -166,6 +110,8 @@ class MainViewModel : ViewModel(), RemoteControlListener {
 
     private var batteryManager: BatteryOptimizationManager? = null
     private var networkRecoveryManager: NetworkRecoveryManager? = null
+    private var deviceRepository: DeviceRepository? = null
+    private var statusPollJob: Job? = null
 
     val cameraPlaybackManager = AudioPlaybackManager()
     private var cameraCaptureManager: AudioCaptureManager? = null
@@ -206,11 +152,29 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     fun initContinuousOperationManagers(context: Context) {
         initLocalIp(context)
 
-        // La fotocamera vive nel servizio: fotogrammi, eventi di movimento e stop da notifica
-        // tornano qui, così stato, server LAN e registrazioni restano nel ViewModel.
-        CameraStreamingService.frameSink = { jpeg -> broadcastEncodedFrame(jpeg) }
+        // I fotogrammi vanno dal servizio direttamente al server di processo: il ViewModel non è
+        // più nel percorso del video, così chiudere l'app non interrompe lo streaming.
         CameraStreamingService.motionSink = { result -> handleMotionResult(context, result) }
         CameraStreamingService.stopSink = { syncStreamingStopped() }
+
+        // I dispositivi esistono solo se sono stati accoppiati e salvati su Room.
+        if (deviceRepository == null) {
+            val repository = DeviceRepository(AppDatabase.getInstance(context).deviceDao())
+            deviceRepository = repository
+            viewModelScope.launch {
+                repository.devices.collect { saved ->
+                    _uiState.update { current ->
+                        val selectedStillPresent = current.selectedDeviceId != null &&
+                            saved.any { it.id == current.selectedDeviceId }
+                        current.copy(
+                            devices = saved,
+                            selectedDeviceId = if (selectedStillPresent) current.selectedDeviceId else null
+                        )
+                    }
+                }
+            }
+            startStatusPolling()
+        }
 
         if (batteryManager == null) {
             batteryManager = BatteryOptimizationManager(
@@ -417,6 +381,7 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         }
 
         if (screen == Screen.MONITOR) {
+            refreshSelectedStatus()
             val dev = getSelectedDevice()
             if (dev != null) {
                 streamClient.connect(dev.ipAddress, dev.port)
@@ -528,7 +493,7 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         _uiState.update { it.copy(isStreamingActive = newState) }
 
         if (newState) {
-            streamingServer.start()
+            // Il server LAN lo avvia il servizio in primo piano: vive più a lungo dell'Activity.
             cameraCaptureManager?.stop()
             cameraCaptureManager = AudioCaptureManager(
                 context = context.applicationContext,
@@ -560,7 +525,6 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     /** Riallinea lo stato quando lo streaming viene fermato dall'esterno (es. notifica). */
     private fun syncStreamingStopped() {
         _uiState.update { it.copy(isStreamingActive = false) }
-        streamingServer.stop()
         cameraCaptureManager?.stop()
         cameraCaptureManager = null
         cameraPlaybackManager.stop()
@@ -568,12 +532,6 @@ class MainViewModel : ViewModel(), RemoteControlListener {
 
     fun toggleStealthPowerSaving() {
         _uiState.update { it.copy(isStealthPowerSavingActive = !it.isStealthPowerSavingActive) }
-    }
-
-    fun broadcastEncodedFrame(jpegBytes: ByteArray) {
-        if (_uiState.value.isStreamingActive) {
-            streamingServer.broadcastFrame(jpegBytes)
-        }
     }
 
     fun toggleLens() {
@@ -700,33 +658,180 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     }
 
     fun selectDevice(deviceId: String) {
-        _uiState.update { it.copy(selectedDeviceId = deviceId) }
-        val dev = getSelectedDevice()
-        if (dev != null && _uiState.value.currentScreen == Screen.MONITOR) {
+        _uiState.update {
+            it.copy(
+                selectedDeviceId = deviceId,
+                selectedDeviceReachable = null,
+                selectedDeviceProbeMessage = null
+            )
+        }
+        val dev = getSelectedDevice() ?: return
+        refreshSelectedStatus()
+        if (_uiState.value.currentScreen == Screen.MONITOR) {
             streamClient.connect(dev.ipAddress, dev.port)
+            if (_uiState.value.isAudioListening) {
+                twoWayAudioClient?.startAmbientListening(dev.ipAddress, dev.port)
+            }
         }
     }
 
     fun getLocalDevice(): CameraDevice {
         return _uiState.value.devices.firstOrNull { it.isLocalPhone }
-            ?: CameraDevice("cam_local", "Videocamera Principale", "Salotto", _uiState.value.localIpAddress, 8765)
+            ?: CameraDevice(
+                id = "local_phone",
+                name = "Questo telefono",
+                location = "Casa",
+                ipAddress = _uiState.value.localIpAddress,
+                port = _uiState.value.streamingPort,
+                isLocalPhone = true
+            )
     }
 
+    /** Solo il dispositivo scelto: nessun ripiego sul primo della lista. */
     fun getSelectedDevice(): CameraDevice? {
-        return _uiState.value.devices.firstOrNull { it.id == _uiState.value.selectedDeviceId }
-            ?: _uiState.value.devices.firstOrNull()
+        val selected = _uiState.value.selectedDeviceId ?: return null
+        return _uiState.value.devices.firstOrNull { it.id == selected }
     }
 
-    fun addDevice(name: String, ip: String, location: String, type: DeviceType) {
+    /** Valida IP e porta, salva su Room e seleziona il nuovo dispositivo. */
+    fun addDevice(name: String, ip: String, location: String, type: DeviceType, port: Int? = null): Boolean {
+        val cleanIp = ip.trim()
+        if (!PairingPayload.isValidIp(cleanIp)) {
+            _uiState.update { it.copy(toastMessage = "Indirizzo IP non valido: $cleanIp") }
+            return false
+        }
+        val effectivePort = port ?: if (type == DeviceType.SMARTPHONE) PairingPayload.DEFAULT_PORT else 554
+        if (!PairingPayload.isValidPort(effectivePort)) {
+            _uiState.update { it.copy(toastMessage = "Porta non valida: $effectivePort") }
+            return false
+        }
+
         val newDevice = CameraDevice(
             id = UUID.randomUUID().toString(),
-            name = name,
-            location = location,
-            ipAddress = ip,
-            port = if (type == DeviceType.SMARTPHONE) 8765 else 554,
+            name = name.trim().ifBlank { "Videocamera" },
+            location = location.trim().ifBlank { "Casa" },
+            ipAddress = cleanIp,
+            port = effectivePort,
             type = type
         )
-        _uiState.update { it.copy(devices = it.devices + newDevice, toastMessage = "Dispositivo $name aggiunto!") }
+        _uiState.update {
+            it.copy(
+                devices = it.devices + newDevice,
+                selectedDeviceId = newDevice.id,
+                toastMessage = "Dispositivo ${newDevice.name} aggiunto!"
+            )
+        }
+        viewModelScope.launch { deviceRepository?.save(newDevice) }
+        refreshSelectedStatus()
+        return true
+    }
+
+    fun deleteDevice(deviceId: String) {
+        val device = _uiState.value.devices.firstOrNull { it.id == deviceId } ?: return
+        _uiState.update {
+            it.copy(
+                devices = it.devices.filterNot { d -> d.id == deviceId },
+                selectedDeviceId = if (it.selectedDeviceId == deviceId) null else it.selectedDeviceId,
+                toastMessage = "Dispositivo ${device.name} rimosso"
+            )
+        }
+        viewModelScope.launch { deviceRepository?.delete(deviceId) }
+    }
+
+    /** "Riconnetti" usa il dispositivo selezionato, mai il primo della lista. */
+    fun reconnectSelected() {
+        val device = getSelectedDevice()
+        if (device == null) {
+            _uiState.update { it.copy(toastMessage = "Nessuna telecamera selezionata") }
+            return
+        }
+        streamClient.disconnect()
+        streamClient.connect(device.ipAddress, device.port)
+        if (_uiState.value.isAudioListening) {
+            twoWayAudioClient?.startAmbientListening(device.ipAddress, device.port)
+        }
+        refreshSelectedStatus()
+    }
+
+    /**
+     * Link csc://cam?ip=..&port=.. (o "ip:porta"): si prova la connessione e si salva solo se la
+     * telecamera risponde davvero a /status.
+     */
+    fun handlePairingLink(rawLink: String) {
+        val info = PairingPayload.parse(rawLink)
+        if (info == null) {
+            _uiState.update { it.copy(toastMessage = "QR non riconosciuto: serve csc://cam?ip=..&port=..") }
+            return
+        }
+        val alreadySaved = _uiState.value.devices.firstOrNull {
+            it.ipAddress == info.ip && it.port == info.port
+        }
+        viewModelScope.launch {
+            val result = CameraProbe.probe(info.ip, info.port)
+            if (result !is ProbeResult.Reachable) {
+                _uiState.update {
+                    it.copy(toastMessage = "Telecamera non raggiungibile (${info.ip}:${info.port}): ${result.describe()}")
+                }
+                return@launch
+            }
+
+            if (alreadySaved != null) {
+                selectDevice(alreadySaved.id)
+                _uiState.update {
+                    it.copy(currentScreen = Screen.MONITOR, toastMessage = "Telecamera ${alreadySaved.name} collegata")
+                }
+            } else {
+                addDevice(
+                    name = info.id?.takeIf { it.isNotBlank() } ?: "Videocamera ${info.ip}",
+                    ip = info.ip,
+                    location = "Casa",
+                    type = DeviceType.SMARTPHONE,
+                    port = info.port
+                )
+                _uiState.update { it.copy(currentScreen = Screen.MONITOR) }
+            }
+            streamClient.connect(info.ip, info.port)
+        }
+    }
+
+    private fun startStatusPolling() {
+        if (statusPollJob != null) return
+        statusPollJob = viewModelScope.launch {
+            while (true) {
+                pollDeviceStatuses()
+                delay(5_000)
+            }
+        }
+    }
+
+    fun refreshSelectedStatus() {
+        viewModelScope.launch { pollDeviceStatuses() }
+    }
+
+    /** Online/Offline dall'esito reale di GET /status, non da un'etichetta scritta a mano. */
+    private suspend fun pollDeviceStatuses() {
+        val devices = _uiState.value.devices
+        if (devices.isEmpty()) {
+            _uiState.update { it.copy(selectedDeviceReachable = null, selectedDeviceProbeMessage = null) }
+            return
+        }
+
+        val results = coroutineScope {
+            devices.map { device ->
+                async { device.id to CameraProbe.probe(device.ipAddress, device.port, timeoutMs = 1_200) }
+            }.awaitAll()
+        }.toMap()
+
+        _uiState.update { current ->
+            val selectedResult = current.selectedDeviceId?.let { results[it] }
+            current.copy(
+                devices = current.devices.map { device ->
+                    device.copy(isOnline = results[device.id] is ProbeResult.Reachable)
+                },
+                selectedDeviceReachable = selectedResult?.let { it is ProbeResult.Reachable },
+                selectedDeviceProbeMessage = selectedResult?.describe()
+            )
+        }
     }
 
     fun deleteRecording(id: String) {
@@ -754,7 +859,8 @@ class MainViewModel : ViewModel(), RemoteControlListener {
 
     override fun onCleared() {
         super.onCleared()
-        streamingServer.stop()
+        // Il server LAN NON viene fermato qui: appartiene al servizio in primo piano. Fermarlo
+        // all'uscita dall'app era la causa della disconnessione con app chiusa o schermo spento.
         streamClient.disconnect()
         cameraCaptureManager?.stop()
         cameraPlaybackManager.stop()
@@ -766,5 +872,6 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         motionResetJob?.cancel()
         autoStopMotionRecordingJob?.cancel()
         cameraSpeakerResetJob?.cancel()
+        statusPollJob?.cancel()
     }
 }

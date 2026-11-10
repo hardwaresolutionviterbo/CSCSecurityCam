@@ -1,5 +1,6 @@
 package com.example
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -36,9 +37,13 @@ import com.example.viewmodel.MainViewModel
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
+    /** Link csc://cam ricevuto all'avvio: viene consumato dopo l'inizializzazione del repository. */
+    private var pendingPairingLink: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        pendingPairingLink = intent?.pairingLink()
 
         setContent {
             MyApplicationTheme {
@@ -46,6 +51,17 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.pairingLink()?.let { viewModel.handlePairingLink(it) }
+    }
+
+    fun consumePendingPairingLink(): String? = pendingPairingLink.also { pendingPairingLink = null }
+
+    private fun Intent.pairingLink(): String? =
+        data?.takeIf { it.scheme == "csc" && it.host == "cam" }?.toString()
 }
 
 @Composable
@@ -56,6 +72,10 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
 
     LaunchedEffect(Unit) {
         viewModel.initContinuousOperationManagers(context)
+        // Accoppiamento da link/QR con l'app chiusa: il repository è ora pronto.
+        (context as? MainActivity)?.consumePendingPairingLink()?.let { link ->
+            viewModel.handlePairingLink(link)
+        }
     }
 
     LaunchedEffect(state.toastMessage) {
@@ -124,7 +144,7 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
                         liveBitmap = liveBitmap,
                         onBack = { viewModel.navigateBack() },
                         onNavigate = { viewModel.navigateTo(it) },
-                        onReconnect = { viewModel.selectDevice(state.selectedDeviceId) },
+                        onReconnect = { viewModel.reconnectSelected() },
                         onToggleAudio = { viewModel.toggleAudioListening() },
                         onTakeSnapshot = { viewModel.takeSnapshot() },
                         onToggleRecord = { viewModel.toggleRecording() },
@@ -136,7 +156,10 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
                         onToggleMotionDetection = { viewModel.toggleMotionDetection() },
                         onRemoteTorch = { viewModel.sendRemoteTorch() },
                         onRemoteFlipLens = { viewModel.sendRemoteFlipLens() },
-                        onTwoWayTalk = { active -> viewModel.setTwoWayTalk(active) }
+                        onTwoWayTalk = { active -> viewModel.setTwoWayTalk(active) },
+                        onSavePairedDevice = { name, location, ip, port, type ->
+                            viewModel.addDevice(name, ip, location, type, port)
+                        }
                     )
                 }
 
@@ -146,7 +169,9 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
                         onBack = { viewModel.navigateBack() },
                         onNavigate = { viewModel.navigateTo(it) },
                         onSelectDevice = { viewModel.selectDevice(it) },
-                        onAddDevice = { name, ip, loc, type -> viewModel.addDevice(name, ip, loc, type) }
+                        onSaveDevice = { name, ip, loc, type, port ->
+                            viewModel.addDevice(name, ip, loc, type, port)
+                        }
                     )
                 }
 
