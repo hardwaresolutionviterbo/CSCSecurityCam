@@ -30,7 +30,7 @@ val CscOrangeContainer = Color(0x33FF6A00)
 val CscOrangeBorder = Color(0xFFFF6A00)
 
 // Tipografia
-val CscTitleWhite = Color(0xFFE2E8F0)        // Testo #E2E8F0
+val CscTitleWhite = Color(0xFFFFFFFF)        // Titoli bianco puro
 val CscWhite = Color(0xFFE2E8F0)
 val CscIceWhite = Color(0xFFE2E8F0)
 val CscSubtitleGray = Color(0xFF94A3B8)      // Testo secondario #94A3B8

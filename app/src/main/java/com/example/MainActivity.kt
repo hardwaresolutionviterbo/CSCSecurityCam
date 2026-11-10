@@ -98,9 +98,8 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
             when (targetScreen) {
                 Screen.SPLASH -> {
                     SplashScreen(
-                        onLoginClick = { viewModel.navigateTo(Screen.LOGIN) },
-                        onRegisterClick = { viewModel.navigateTo(Screen.REGISTER) },
-                        onGuestClick = { viewModel.continueAsGuest() }
+                        onStart = { viewModel.navigateTo(Screen.HOME) },
+                        onOpenSettings = { viewModel.navigateTo(Screen.SETTINGS) }
                     )
                 }
 

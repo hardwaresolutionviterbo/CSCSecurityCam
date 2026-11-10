@@ -7,7 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -32,18 +30,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.DirectionsRun
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material3.ripple
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -55,155 +46,143 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
-import com.example.ui.theme.CscBrightBlue
-import com.example.ui.theme.CscDeepBackground
-import com.example.ui.theme.CscGlassBorder
-import com.example.ui.theme.CscNeonGlow
-import com.example.ui.theme.CscNightBlue
-import com.example.ui.theme.CscOrange
-import com.example.ui.theme.CscOrangeGlow
-import com.example.ui.theme.CscPanel
 import com.example.ui.components.CscBrandMark
+import com.example.ui.theme.CscBackground
+import com.example.ui.theme.CscOrange
 import com.example.ui.theme.CscPanelBlue
-import com.example.ui.theme.CscSecondaryText
-import com.example.ui.theme.CscWhite
+import com.example.ui.theme.CscSteel
+import com.example.ui.theme.CscSubtitleGray
+import com.example.ui.theme.CscTitleWhite
 import com.example.ui.theme.MontserratFontFamily
 
+/**
+ * Schermata 1 del riferimento: marchio con alone arancione, wordmark, tagline e i due pulsanti
+ * "Avvia" (pieno) e "Configurazione" (solo bordo). Nessun elenco di funzioni: quelle stanno
+ * nella dashboard.
+ */
 @Composable
 fun SplashScreen(
-    onLoginClick: () -> Unit,
-    onRegisterClick: () -> Unit,
-    onGuestClick: () -> Unit,
+    onStart: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse_halo")
-    val haloPulse by infiniteTransition.animateFloat(
-        initialValue = 0.95f,
-        targetValue = 1.05f,
+    val transition = rememberInfiniteTransition(label = "splash_glow")
+    val glowScale by transition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.04f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = FastOutSlowInEasing),
+            animation = tween(2600, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "haloPulse"
+        label = "glowScale"
+    )
+    val glowAlpha by transition.animateFloat(
+        initialValue = 0.75f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
     )
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(CscDeepBackground)
+            .background(CscBackground)
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
-        // Decorative glowing cyber background arcs
+        // Alone ambientale arancione e linea d'orizzonte, come nel riferimento.
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.width
-            val height = size.height
-
-            // Top-left orange ambient arc
-            val topArcPath = Path().apply {
-                moveTo(0f, height * 0.16f)
-                cubicTo(
-                    width * 0.3f, height * 0.12f,
-                    width * 0.7f, height * 0.18f,
-                    width, height * 0.08f
-                )
-            }
-            drawPath(
-                path = topArcPath,
-                brush = Brush.horizontalGradient(
+            val centerTop = Offset(size.width * 0.5f, size.height * 0.26f)
+            val topRadius = size.width * 0.78f
+            drawCircle(
+                brush = Brush.radialGradient(
                     colors = listOf(
-                        Color.Transparent,
-                        CscOrange.copy(alpha = 0.5f),
-                        CscOrangeGlow.copy(alpha = 0.8f),
+                        CscOrange.copy(alpha = 0.26f * glowAlpha),
+                        CscOrange.copy(alpha = 0.08f * glowAlpha),
                         Color.Transparent
-                    )
+                    ),
+                    center = centerTop,
+                    radius = topRadius
                 ),
-                style = Stroke(width = 2.5f, cap = StrokeCap.Round)
+                radius = topRadius,
+                center = centerTop
             )
 
-            // Middle arc above buttons
-            val midArcPath = Path().apply {
-                moveTo(-width * 0.1f, height * 0.44f)
-                cubicTo(
-                    width * 0.35f, height * 0.41f,
-                    width * 0.65f, height * 0.41f,
-                    width * 1.1f, height * 0.44f
-                )
-            }
-            drawPath(
-                path = midArcPath,
+            val sideCenter = Offset(size.width * 1.05f, size.height * 0.66f)
+            val sideRadius = size.width * 0.62f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        CscOrange.copy(alpha = 0.14f * glowAlpha),
+                        Color.Transparent
+                    ),
+                    center = sideCenter,
+                    radius = sideRadius
+                ),
+                radius = sideRadius,
+                center = sideCenter
+            )
+
+            val horizonY = size.height * 0.88f
+            drawLine(
                 brush = Brush.horizontalGradient(
                     colors = listOf(
                         Color.Transparent,
                         CscOrange.copy(alpha = 0.65f),
-                        CscOrangeGlow,
+                        CscOrange.copy(alpha = 0.9f),
                         CscOrange.copy(alpha = 0.65f),
                         Color.Transparent
                     )
                 ),
-                style = Stroke(width = 2f, cap = StrokeCap.Round)
+                start = Offset(0f, horizonY),
+                end = Offset(size.width, horizonY),
+                strokeWidth = 2.5f,
+                cap = StrokeCap.Round
             )
 
-            // Bottom horizon glow curve
-            val bottomCurve = Path().apply {
-                moveTo(-width * 0.2f, height * 0.94f)
-                cubicTo(
-                    width * 0.3f, height * 0.88f,
-                    width * 0.7f, height * 0.88f,
-                    width * 1.2f, height * 0.94f
+            // Griglia prospettica appena percettibile sotto l'orizzonte.
+            for (i in 1..5) {
+                val y = horizonY + (size.height - horizonY) * (i / 6f)
+                drawLine(
+                    color = CscSteel.copy(alpha = 0.18f),
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = 1f
                 )
             }
-            drawPath(
-                path = bottomCurve,
-                brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        CscOrange.copy(alpha = 0.5f),
-                        CscOrangeGlow.copy(alpha = 0.85f),
-                        CscOrange.copy(alpha = 0.5f),
-                        Color.Transparent
-                    )
-                ),
-                style = Stroke(width = 3f)
-            )
         }
 
-        // Scrollable content column ensuring compatibility across all screen heights
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 22.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(48.dp))
 
-            // 1. Marchio: badge con anello arancione e alone pulsante.
-            Box(modifier = Modifier.scale(haloPulse)) {
-                CscBrandMark(size = 138.dp)
+            Box(modifier = Modifier.scale(glowScale)) {
+                CscBrandMark(size = 136.dp)
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(26.dp))
 
-            // 2. Title & Payoff
-            // Wordmark ufficiale: "CSC" bianco, "SecurityCam" arancione.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "CSC",
                     fontSize = 32.sp,
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.Bold,
-                    color = CscWhite,
+                    color = CscTitleWhite,
                     maxLines = 1,
                     softWrap = false
                 )
@@ -218,502 +197,113 @@ fun SplashScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Payoff: VIDEOSORVEGLIANZA SMART
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(28.dp)
-                        .height(1.dp)
-                        .background(CscSecondaryText.copy(alpha = 0.6f))
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "VIDEOSORVEGLIANZA SMART",
-                    fontSize = 11.sp,
-                    fontFamily = MontserratFontFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    color = CscSecondaryText,
-                    letterSpacing = 2.5.sp
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Box(
-                    modifier = Modifier
-                        .width(28.dp)
-                        .height(1.dp)
-                        .background(CscSecondaryText.copy(alpha = 0.6f))
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 3. Five Feature Highlights Row (Exact style from mockup)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                FeatureHighlightItem(
-                    iconType = FeatureIconType.LIVE,
-                    label = "Monitoraggio\nLive",
-                    modifier = Modifier.weight(1f)
-                )
-                FeatureHighlightItem(
-                    iconType = FeatureIconType.MOTION,
-                    label = "Rilevamento\nMovimento",
-                    modifier = Modifier.weight(1f)
-                )
-                FeatureHighlightItem(
-                    iconType = FeatureIconType.REC,
-                    label = "Registrazione\nVideo",
-                    modifier = Modifier.weight(1f)
-                )
-                FeatureHighlightItem(
-                    iconType = FeatureIconType.NOTIFICATIONS,
-                    label = "Notifiche\nSmart",
-                    modifier = Modifier.weight(1f)
-                )
-                FeatureHighlightItem(
-                    iconType = FeatureIconType.REMOTE,
-                    label = "Accesso\nRemoto",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(30.dp))
-
-            // 4. Three Main Buttons
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                // PULSANTE 1 – ACCEDI (Pieno Arancione con bagliore)
-                MainActionButton(
-                    text = "Accedi",
-                    icon = Icons.Default.Person,
-                    backgroundBrush = Brush.horizontalGradient(
-                        listOf(
-                            Color(0xFFFF7A1A),
-                            CscOrange,
-                            Color(0xFFE65500)
-                        )
-                    ),
-                    borderColor = Color.Transparent,
-                    hasGlow = true,
-                    testTag = "btn_auth_login",
-                    onClick = onLoginClick
-                )
-
-                // PULSANTE 2 – REGISTRATI (Blu notte con bordo arancione luminoso)
-                MainActionButton(
-                    text = "Registrati",
-                    icon = Icons.Default.PersonAdd,
-                    backgroundBrush = Brush.horizontalGradient(
-                        listOf(
-                            Color(0xFF131D31),
-                            CscNightBlue
-                        )
-                    ),
-                    borderColor = CscOrange,
-                    hasGlow = false,
-                    testTag = "btn_auth_register",
-                    onClick = onRegisterClick
-                )
-
-                // PULSANTE 3 – CONTINUA COME OSPITE (Blu acciaio con bordo blu luminoso)
-                MainActionButton(
-                    text = "Continua come ospite",
-                    icon = Icons.Default.Group,
-                    backgroundBrush = Brush.horizontalGradient(
-                        listOf(
-                            Color(0xFF1E2D47),
-                            Color(0xFF152238)
-                        )
-                    ),
-                    borderColor = CscBrightBlue.copy(alpha = 0.85f),
-                    hasGlow = false,
-                    testTag = "btn_auth_guest",
-                    onClick = onGuestClick
-                )
-            }
-
-            Spacer(modifier = Modifier.height(22.dp))
-
-            // 5. Social Login Divider
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(1.dp)
-                        .background(CscPanel.copy(alpha = 0.8f))
-                )
-                Text(
-                    text = "oppure accedi con",
-                    fontSize = 12.sp,
-                    fontFamily = MontserratFontFamily,
-                    color = CscSecondaryText,
-                    modifier = Modifier.padding(horizontal = 14.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(1.dp)
-                        .background(CscPanel.copy(alpha = 0.8f))
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Social Buttons Row (Google & Facebook)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                SocialLoginButton(
-                    provider = SocialProvider.GOOGLE,
-                    label = "Google",
-                    modifier = Modifier.weight(1f),
-                    onClick = onLoginClick
-                )
-                SocialLoginButton(
-                    provider = SocialProvider.FACEBOOK,
-                    label = "Facebook",
-                    modifier = Modifier.weight(1f),
-                    onClick = onLoginClick
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 6. Security Shield Padlock with Horizon Line
-            Box(
-                modifier = Modifier
-                    .size(54.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(
-                                CscOrange.copy(alpha = 0.35f),
-                                Color.Transparent
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color(0xFF2B1F17),
-                                    Color(0xFF140E0A)
-                                )
-                            )
-                        )
-                        .border(1.5.dp, CscOrange, RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "Sicurezza Protetta",
-                        tint = CscOrange,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-
             Spacer(modifier = Modifier.height(14.dp))
+
+            Text(
+                text = "VIDEOSORVEGLIANZA SMART",
+                fontSize = 11.sp,
+                fontFamily = MontserratFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                color = CscSubtitleGray,
+                letterSpacing = 3.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+
+            Spacer(modifier = Modifier.height(56.dp))
+
+            SplashPrimaryButton(onClick = onStart)
+            Spacer(modifier = Modifier.height(14.dp))
+            SplashSecondaryButton(onClick = onOpenSettings)
+
+            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }
 
-// ----------------------------------------------------------------------------
-// Feature Highlights Components
-// ----------------------------------------------------------------------------
-
-enum class FeatureIconType {
-    LIVE, MOTION, REC, NOTIFICATIONS, REMOTE
-}
-
 @Composable
-private fun FeatureHighlightItem(
-    iconType: FeatureIconType,
-    label: String,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-    ) {
-        Box(
-            modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(CscPanelBlue)
-                .border(1.dp, CscGlassBorder, RoundedCornerShape(14.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            when (iconType) {
-                FeatureIconType.LIVE -> {
-                    // LIVE badge container with camera
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .border(1.dp, CscOrange, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "LIVE",
-                                fontSize = 8.sp,
-                                fontFamily = MontserratFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                color = CscOrange
-                            )
-                        }
-                    }
-                }
-                FeatureIconType.MOTION -> {
-                    Icon(
-                        imageVector = Icons.Default.DirectionsRun,
-                        contentDescription = null,
-                        tint = CscOrange,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
-                FeatureIconType.REC -> {
-                    // REC badge container
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .border(1.dp, CscOrange, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFEF4444))
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "REC",
-                                fontSize = 8.sp,
-                                fontFamily = MontserratFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                color = CscOrange
-                            )
-                        }
-                    }
-                }
-                FeatureIconType.NOTIFICATIONS -> {
-                    Icon(
-                        imageVector = Icons.Default.Notifications,
-                        contentDescription = null,
-                        tint = CscOrange,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                FeatureIconType.REMOTE -> {
-                    Icon(
-                        imageVector = Icons.Default.Cloud,
-                        contentDescription = null,
-                        tint = CscOrange,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Text(
-            text = label,
-            fontSize = 9.sp,
-            fontFamily = MontserratFontFamily,
-            fontWeight = FontWeight.Medium,
-            color = CscWhite,
-            textAlign = TextAlign.Center,
-            lineHeight = 12.sp,
-            // Le due righe sono esplicite nel testo: niente spezzature a metà parola.
-            maxLines = 2,
-            softWrap = false
-        )
-    }
-}
-
-// ----------------------------------------------------------------------------
-// Action Pill Button
-// ----------------------------------------------------------------------------
-
-@Composable
-private fun MainActionButton(
-    text: String,
-    icon: ImageVector,
-    backgroundBrush: Brush,
-    borderColor: Color,
-    hasGlow: Boolean,
-    testTag: String,
-    onClick: () -> Unit
-) {
+private fun SplashPrimaryButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
-            .then(
-                if (hasGlow) {
-                    Modifier.shadow(
-                        elevation = 16.dp,
-                        shape = RoundedCornerShape(50.dp),
-                        spotColor = CscOrange,
-                        ambientColor = CscNeonGlow
-                    )
-                } else Modifier
+            .shadow(
+                elevation = 16.dp,
+                shape = RoundedCornerShape(50.dp),
+                spotColor = CscOrange,
+                ambientColor = CscOrange.copy(alpha = 0.5f)
             )
             .clip(RoundedCornerShape(50.dp))
-            .background(backgroundBrush)
-            .then(
-                if (borderColor != Color.Transparent) {
-                    Modifier.border(1.5.dp, borderColor, RoundedCornerShape(50.dp))
-                } else Modifier
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(Color(0xFFFF8A1F), CscOrange, Color(0xFFE65700))
+                )
             )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(color = Color.White.copy(alpha = 0.2f)),
-                onClick = onClick
-            )
-            .padding(horizontal = 22.dp)
-            .testTag(testTag),
+                indication = ripple(color = Color.White.copy(alpha = 0.25f))
+            ) { onClick() }
+            .testTag("btn_start_app"),
         contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.Center
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier.size(28.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(14.dp))
-
-                Text(
-                    text = text,
-                    fontSize = 16.sp,
-                    fontFamily = MontserratFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
-
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                imageVector = Icons.Default.PlayArrow,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.85f),
-                modifier = Modifier.size(16.dp)
+                tint = Color.White,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Avvia",
+                fontSize = 17.sp,
+                fontFamily = MontserratFontFamily,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1
             )
         }
     }
 }
 
-// ----------------------------------------------------------------------------
-// Social Login Button
-// ----------------------------------------------------------------------------
-
-enum class SocialProvider {
-    GOOGLE, FACEBOOK
-}
-
 @Composable
-private fun SocialLoginButton(
-    provider: SocialProvider,
-    label: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = modifier
-            .height(48.dp)
+private fun SplashSecondaryButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
             .clip(RoundedCornerShape(50.dp))
-            .background(Color(0xFF131D31))
-            .border(1.dp, CscGlassBorder, RoundedCornerShape(50.dp))
+            .background(CscPanelBlue.copy(alpha = 0.55f))
+            .border(1.5.dp, CscOrange, RoundedCornerShape(50.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(color = Color.White.copy(alpha = 0.2f)),
-                onClick = onClick
-            )
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+                indication = ripple(color = CscOrange.copy(alpha = 0.25f))
+            ) { onClick() }
+            .testTag("btn_open_settings"),
+        contentAlignment = Alignment.Center
     ) {
-        if (provider == SocialProvider.GOOGLE) {
-            // Google 'G' stylized logo
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .clip(CircleShape)
-                    .background(Color.White),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "G",
-                    fontSize = 13.sp,
-                    fontFamily = MontserratFontFamily,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF4285F4)
-                )
-            }
-        } else {
-            // Facebook 'f' logo
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF1877F2)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "f",
-                    fontSize = 14.sp,
-                    fontFamily = MontserratFontFamily,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White
-                )
-            }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = null,
+                tint = CscOrange,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Configurazione",
+                fontSize = 16.sp,
+                fontFamily = MontserratFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                color = CscTitleWhite,
+                maxLines = 1
+            )
         }
-
-        Spacer(modifier = Modifier.width(10.dp))
-
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            fontFamily = MontserratFontFamily,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White
-        )
     }
 }

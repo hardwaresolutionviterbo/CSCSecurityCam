@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,6 +69,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -640,68 +642,38 @@ fun MonitorScreen(
                 }
             }
 
-            // Bottom Quick Controls Row
+            // Riga finale: tre pulsanti arrotondati, come nel riferimento.
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Night Vision
-                IconButton(
+                MonitorToolButton(
+                    label = "Notte",
+                    icon = Icons.Default.Nightlight,
+                    active = state.nightVisionActive,
                     onClick = onToggleNightVision,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(CircleShape)
-                        .background(if (state.nightVisionActive) CscOrange.copy(alpha = 0.2f) else CscPanelBlue)
-                        .border(
-                            1.dp,
-                            if (state.nightVisionActive) CscOrange else CscSteel,
-                            CircleShape
-                        )
-                        .testTag("action_night_vision_btn")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Nightlight,
-                        contentDescription = "Visione Notturna",
-                        tint = if (state.nightVisionActive) CscOrange else CscIceWhite,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Remote Torch Trigger
-                IconButton(
+                    modifier = Modifier.weight(1f)
+                )
+                MonitorToolButton(
+                    label = "Torcia",
+                    icon = Icons.Default.FlashOn,
+                    active = state.isTorchOn,
                     onClick = onRemoteTorch,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(CircleShape)
-                        .background(if (state.isTorchOn) CscOrange.copy(alpha = 0.25f) else CscPanelBlue)
-                        .border(
-                            1.dp,
-                            if (state.isTorchOn) CscOrange else CscSteel,
-                            CircleShape
-                        )
-                        .testTag("action_remote_torch_btn")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FlashOn,
-                        contentDescription = "Torcia Remota",
-                        tint = if (state.isTorchOn) CscOrange else CscIceWhite,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                    modifier = Modifier.weight(1f)
+                )
 
-                // Push-To-Talk Two Way Audio Mic Button
+                // Push-to-talk: si tiene premuto per parlare.
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(if (state.isTwoWayTalkActive) CscOrange else Color(0xFF263345))
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (state.isTwoWayTalkActive) CscOrange else CscPanelBlue)
                         .border(
-                            2.dp,
+                            1.dp,
                             if (state.isTwoWayTalkActive) CscOrangeGlow else CscSteel,
-                            CircleShape
+                            RoundedCornerShape(14.dp)
                         )
                         .pointerInput(Unit) {
                             detectTapGestures(
@@ -715,52 +687,22 @@ fun MonitorScreen(
                         .testTag("action_ptt_mic_btn"),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Push-to-Talk Parla",
-                        tint = if (state.isTwoWayTalkActive) Color.White else CscIceWhite,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                // Motion Detection
-                IconButton(
-                    onClick = onToggleMotionDetection,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(CircleShape)
-                        .background(if (state.motionDetectionActive) CscOrange.copy(alpha = 0.2f) else CscPanelBlue)
-                        .border(
-                            1.dp,
-                            if (state.motionDetectionActive) CscOrange else CscSteel,
-                            CircleShape
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "Parla",
+                            tint = if (state.isTwoWayTalkActive) Color.White else CscIceWhite,
+                            modifier = Modifier.size(18.dp)
                         )
-                        .testTag("action_motion_detect_btn")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MotionPhotosOn,
-                        contentDescription = "Rilevamento Movimento",
-                        tint = if (state.motionDetectionActive) CscOrange else CscIceWhite,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Remote Switch Camera Lens
-                IconButton(
-                    onClick = onRemoteFlipLens,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(CircleShape)
-                        .background(CscPanelBlue)
-                        .border(1.dp, CscSteel, CircleShape)
-                        .testTag("action_remote_switch_lens_btn")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Cameraswitch,
-                        contentDescription = "Cambia Camera Remota",
-                        tint = CscIceWhite,
-                        modifier = Modifier.size(24.dp)
-                    )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Parla",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (state.isTwoWayTalkActive) Color.White else CscIceWhite,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
 
@@ -776,6 +718,46 @@ fun MonitorScreen(
                 onSavePairedDevice(name, location, ip, port, type)
                 showPairDialog = false
             }
+        )
+    }
+}
+
+/** Pulsante arrotondato della riga finale del Centro di controllo. */
+@Composable
+private fun MonitorToolButton(
+    label: String,
+    icon: ImageVector,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .height(48.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (active) CscOrange.copy(alpha = 0.18f) else CscPanelBlue)
+            .border(
+                1.dp,
+                if (active) CscOrange else CscSteel,
+                RoundedCornerShape(14.dp)
+            )
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (active) CscOrange else CscIceWhite,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (active) CscOrange else CscIceWhite,
+            maxLines = 1
         )
     }
 }

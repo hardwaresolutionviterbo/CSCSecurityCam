@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -61,7 +62,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -80,6 +83,7 @@ import com.example.ui.theme.CscNeonGlow
 import com.example.ui.theme.CscOnlineGreen
 import com.example.ui.theme.CscOrange
 import com.example.ui.theme.CscOrangeGlow
+import com.example.ui.theme.CscPanelBlue
 import com.example.ui.theme.CscSubtitleGray
 import com.example.ui.theme.CscTitleWhite
 import com.example.viewmodel.MainUiState
@@ -456,15 +460,14 @@ fun CameraScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Stylized QR Code Box with Cyber Orange Corner Brackets
+                // QR dentro una cornice con i quattro angoli arancioni, come nel riferimento.
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
-                        .size(200.dp)
+                        .size(212.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(CscGlassCard)
-                        .border(2.dp, CscOrange, RoundedCornerShape(20.dp))
-                        .padding(14.dp),
+                        .background(CscPanelBlue)
+                        .padding(18.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     // L'id deriva dall'indirizzo del telefono videocamera: due telefoni diversi
@@ -479,8 +482,28 @@ fun CameraScreen(
                         modifier = Modifier.fillMaxSize(),
                         backgroundColor = Color.White,
                         codeColor = Color(0xFF0A0F1C),
-                        cornerColor = CscOrange
+                        cornerColor = Color.Transparent
                     )
+
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val stroke = 3.dp.toPx()
+                        val arm = 26.dp.toPx()
+                        val w = size.width
+                        val h = size.height
+
+                        // Angolo in alto a sinistra
+                        drawLine(CscOrange, Offset(0f, 0f), Offset(arm, 0f), stroke, StrokeCap.Round)
+                        drawLine(CscOrange, Offset(0f, 0f), Offset(0f, arm), stroke, StrokeCap.Round)
+                        // Angolo in alto a destra
+                        drawLine(CscOrange, Offset(w - arm, 0f), Offset(w, 0f), stroke, StrokeCap.Round)
+                        drawLine(CscOrange, Offset(w, 0f), Offset(w, arm), stroke, StrokeCap.Round)
+                        // Angolo in basso a sinistra
+                        drawLine(CscOrange, Offset(0f, h - arm), Offset(0f, h), stroke, StrokeCap.Round)
+                        drawLine(CscOrange, Offset(0f, h), Offset(arm, h), stroke, StrokeCap.Round)
+                        // Angolo in basso a destra
+                        drawLine(CscOrange, Offset(w - arm, h), Offset(w, h), stroke, StrokeCap.Round)
+                        drawLine(CscOrange, Offset(w, h - arm), Offset(w, h), stroke, StrokeCap.Round)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
