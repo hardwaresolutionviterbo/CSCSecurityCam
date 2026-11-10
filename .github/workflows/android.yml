@@ -1,85 +1,62 @@
-name: Import CSCSecurityCam ZIP and build APK
+name: Android CI
 
 on:
   push:
     branches:
-      - 'validation/**'
-    paths:
-      - 'cscsecuritycam.zip'
-      - '.github/workflows/android.yml'
+      - main
+  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  import-and-build:
-    if: ${{ hashFiles('cscsecuritycam.zip') != '' }}
-    name: Extract Android project and build debug APK
+  build:
+    name: Build and test
     runs-on: ubuntu-latest
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
-      - name: Checkout isolated validation branch
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
-          persist-credentials: true
 
-      - name: Validate and extract supplied ZIP
-        run: |
-          unzip -t cscsecuritycam.zip
-          mkdir -p /tmp/cscsecuritycam-source
-          unzip -q cscsecuritycam.zip -d /tmp/cscsecuritycam-source
-          test -f /tmp/cscsecuritycam-source/app/build.gradle.kts
-          test -f /tmp/cscsecuritycam-source/settings.gradle.kts
-          test -f /tmp/cscsecuritycam-source/gradle/libs.versions.toml
-
-      - name: Replace previous starter sources with supplied project
-        run: |
-          rm -rf app gradle public .aistudio
-          rm -f build.gradle.kts settings.gradle.kts gradle.properties .gitignore .env.example README.md metadata.json
-          cp -a /tmp/cscsecuritycam-source/. .
-          rm -f cscsecuritycam.zip
-          test -f app/build.gradle.kts
-          test -f settings.gradle.kts
-          test -f gradle/libs.versions.toml
-
-      - name: Commit extracted project to validation branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Import supplied CSCSecurityCam Android project"
-          git push origin "HEAD:${{ github.ref_name }}"
-
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Install Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Android SDK licenses and install packages
+      - name: Accept licenses and install SDK packages
         run: |
           yes | sdkmanager --licenses
-          sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          sdkmanager --install "platform-tools" "platforms;android-36.1" "build-tools;36.1.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.3.1'
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon test
 
       - name: Build debug APK
-        run: gradle assembleDebug
+        run: ./gradlew --no-daemon assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: CSCSecurityCam-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CSCSecurityCam-test-reports
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
           retention-days: 14

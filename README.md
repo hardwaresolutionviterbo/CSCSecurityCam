@@ -1,42 +1,41 @@
 # CSCSecurityCam
 
-App Android nativa per trasformare uno smartphone in una videocamera di sicurezza e usare un secondo dispositivo come centro di controllo.
+App Android per usare uno smartphone come videocamera di sicurezza, con funzioni di monitor,
+controllo PTZ, rilevamento movimento e accesso remoto.
 
-## Versione 0.2 – Streaming LAN sperimentale
+## Requisiti di build
 
-Questa versione implementa il primo collegamento video reale tra due telefoni sulla stessa rete Wi-Fi:
-- Il telefono videocamera acquisisce immagini con CameraX.
-- Un server HTTP locale trasmette fotogrammi JPEG in formato MJPEG.
-- Il telefono monitor scansiona un QR temporaneo e apre il flusso live.
-- Il flusso è protetto da un token casuale temporaneo.
-- Il monitor può anche ricevere il codice di collegamento incollato manualmente.
+- JDK 21
+- Android SDK con `platforms;android-36.1` e `build-tools;36.1.0` (compileSdk 36.1, targetSdk 36,
+  minSdk 24)
+- Gradle tramite wrapper incluso (`./gradlew`)
 
-**Limiti noti di questa fase:** il telefono videocamera deve restare nell'app in primo piano; il collegamento funziona solo sulla stessa rete locale; l'audio non è ancora trasmesso; MJPEG è un trasporto iniziale di prova e non sostituisce WebRTC per una soluzione remota e a bassa latenza. Non usare questa versione su reti pubbliche o non fidate.
+Configura il percorso dell'SDK in `local.properties` (file non versionato):
 
-## Prova con due telefoni
+```
+sdk.dir=/percorso/Android/Sdk
+```
 
-1. Installa lo stesso APK su entrambi i telefoni.
-2. Collega entrambi alla stessa rete Wi-Fi (non alla rete ospiti).
-3. Sul primo telefono apri **Camera** e premi **Avvia videocamera**.
-4. Con il secondo telefono apri **Monitor**, premi **Scansiona QR code** e inquadra il codice mostrato sul primo.
-5. Attendi il caricamento del flusso; per interrompere, premi **Arresta videocamera** sul primo o **Disconnetti** sul secondo.
+## Comandi
 
-Se il router isola i dispositivi Wi-Fi tra loro, il collegamento LAN non sarà possibile: disattiva l'isolamento client/AP isolation nelle impostazioni del router.
+```bash
+./gradlew assembleDebug   # APK in app/build/outputs/apk/debug/app-debug.apk
+./gradlew test            # test unitari JVM + Robolectric
+./gradlew assembleRelease # APK non firmato se le credenziali non sono impostate
+```
 
-## Stack
-- Kotlin
-- Jetpack Compose + Material 3
-- CameraX
-- NanoHTTPD (server LAN)
-- ZXing (QR code)
-- GitHub Actions per build APK
+## Firma
 
-## Prossime fasi
-1. Stabilizzare e testare il flusso su dispositivi reali, rotazione, rete e riconnessione.
-2. Aggiungere audio e controlli sessione.
-3. Sostituire il trasporto MJPEG con WebRTC e un server di signaling proprietario per collegamenti remoti.
-4. Implementare pairing autenticato, cifratura, notifiche e servizio foreground.
-5. Integrare progressivamente ONVIF/RTSP per telecamere IP compatibili.
+- **Debug**: usa il keystore di debug generato automaticamente da Android Gradle Plugin
+  (`~/.android/debug.keystore`). Nessun keystore è versionato.
+- **Release**: la firma viene applicata solo se sono presenti tutte le variabili d'ambiente
+  `KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_PASSWORD` (e opzionalmente `KEY_ALIAS`, default `upload`).
+  Il keystore deve restare fuori dal repository; senza queste variabili la build release produce un
+  APK non firmato.
 
-## Sicurezza
-Non inserire password, chiavi API, certificati privati o credenziali nel repository. Il token QR è temporaneo ma il flusso LAN in questa versione non è cifrato: usare solo una rete Wi-Fi fidata. Per build firmate usare GitHub Actions Secrets.
+Non inserire chiavi, keystore o credenziali nel repository: in CI usare i secret del repository.
+
+## Versioni archiviate
+
+Il vecchio prototipo 0.2 (streaming LAN MJPEG) è conservato nel branch `archivio/0.2` e non fa parte
+del ramo principale.

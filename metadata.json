@@ -1,0 +1,8 @@
+{
+  "name": "CSCSecurityCam",
+  "description": "Videosorveglianza smart tramite smartphone e videocamere IP stile Alfred Camera",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
