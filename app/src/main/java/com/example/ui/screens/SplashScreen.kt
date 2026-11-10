@@ -74,6 +74,7 @@ import com.example.ui.theme.CscNightBlue
 import com.example.ui.theme.CscOrange
 import com.example.ui.theme.CscOrangeGlow
 import com.example.ui.theme.CscPanel
+import com.example.ui.theme.CscPanelBlue
 import com.example.ui.theme.CscSecondaryText
 import com.example.ui.theme.CscWhite
 import com.example.ui.theme.MontserratFontFamily
@@ -253,27 +254,25 @@ fun SplashScreen(
             Spacer(modifier = Modifier.height(18.dp))
 
             // 2. Title & Payoff
+            // Wordmark ufficiale: "CSC" bianco, "SecurityCam" arancione.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "CSC ",
-                    fontSize = 32.sp,
+                    text = "CSC",
+                    fontSize = 30.sp,
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = CscWhite,
+                    maxLines = 1,
+                    softWrap = false
                 )
                 Text(
-                    text = "Security",
-                    fontSize = 32.sp,
+                    text = "SecurityCam",
+                    fontSize = 30.sp,
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.Bold,
-                    color = CscOrange
-                )
-                Text(
-                    text = "Cam",
-                    fontSize = 32.sp,
-                    fontFamily = MontserratFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = CscOrange,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
 
@@ -296,7 +295,7 @@ fun SplashScreen(
                     fontSize = 11.sp,
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.SemiBold,
-                    color = CscWhite,
+                    color = CscSecondaryText,
                     letterSpacing = 2.5.sp
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -511,8 +510,8 @@ private fun FeatureHighlightItem(
             modifier = Modifier
                 .size(52.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFF0F1A2E).copy(alpha = 0.85f))
-                .border(1.dp, Color(0x3338BDF8), RoundedCornerShape(14.dp)),
+                .background(CscPanelBlue)
+                .border(1.dp, CscGlassBorder, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center
         ) {
             when (iconType) {

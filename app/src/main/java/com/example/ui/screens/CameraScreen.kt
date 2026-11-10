@@ -12,6 +12,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -241,47 +242,8 @@ fun CameraScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // Battery Status Badge
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(CscGlassCard)
-                                .border(1.dp, CscGlassBorder, RoundedCornerShape(12.dp))
-                                .padding(horizontal = 8.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (state.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryStd,
-                                contentDescription = null,
-                                tint = if (state.isCharging) CscOrange else if (state.batteryPercentage <= 20) CscLiveRed else CscOnlineGreen,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "${state.batteryPercentage}%",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = CscTitleWhite
-                            )
-                        }
-
-                        // Stealth Power Saving Button
-                        IconButton(
-                            onClick = onToggleStealth,
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(CscGlassCard)
-                                .border(1.dp, CscGlassBorder, CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Bedtime,
-                                contentDescription = "Modalità Risparmio Schermo",
-                                tint = CscTitleWhite,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
+                        // Intestazione essenziale: solo torcia e cambio fotocamera. Batteria e
+                        // risparmio schermo stanno nella riga compatta sotto l'anteprima.
                         // Torch Button
                         IconButton(
                             onClick = onToggleTorch,
@@ -437,6 +399,47 @@ fun CameraScreen(
                             color = CscTitleWhite
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Riga compatta sotto l'anteprima: batteria e risparmio schermo.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = if (state.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryStd,
+                        contentDescription = null,
+                        tint = if (state.isCharging) CscOrange else if (state.batteryPercentage <= 20) CscLiveRed else CscOnlineGreen,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "${state.batteryPercentage}%",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = CscSubtitleGray
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Icon(
+                        imageVector = Icons.Default.Bedtime,
+                        contentDescription = null,
+                        tint = if (state.isStealthPowerSavingActive) CscOrange else CscSubtitleGray,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Risparmio schermo",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = CscSubtitleGray,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onToggleStealth() }
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(18.dp))

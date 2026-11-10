@@ -211,8 +211,8 @@ fun MonitorScreen(
                     ConnectionStatus.DISCONNECTED -> "In attesa"
                 }
                 Text(
-                    text = dev?.let { "${it.name} • ${it.ipAddress}:${it.port} • $statusLabel" }
-                        ?: "Nessuna telecamera accoppiata • $statusLabel",
+                    text = dev?.let { "Videocamera: ${it.name} • ${it.ipAddress}:${it.port}" }
+                        ?: "Nessuna telecamera accoppiata",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = CscIceWhite

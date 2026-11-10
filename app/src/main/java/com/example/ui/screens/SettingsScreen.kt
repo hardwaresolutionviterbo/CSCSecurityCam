@@ -67,6 +67,7 @@ import com.example.ui.theme.CscPanelBlue
 import com.example.ui.theme.CscSteel
 import com.example.ui.theme.CscSubtitleGray
 import com.example.ui.theme.CscTextMuted
+import com.example.ui.theme.CscRowDivider
 import com.example.ui.theme.CscTitleWhite
 import com.example.ui.theme.MontserratFontFamily
 import com.example.viewmodel.MainUiState
@@ -140,10 +141,13 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Settings Items List matching the official board exactly
+            // Elenco raggruppato: righe separate da 1dp bianco all'8%, come nel riferimento.
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(CscGlassCard)
+                    .border(1.dp, CscGlassBorder, RoundedCornerShape(20.dp))
             ) {
                 // 1. Qualità video
                 SettingNavigationCard(
@@ -154,6 +158,8 @@ fun SettingsScreen(
                     onClick = { showQualityDialog = true }
                 )
 
+                SettingsDivider()
+
                 // 2. Audio
                 SettingNavigationCard(
                     title = "Audio",
@@ -162,6 +168,8 @@ fun SettingsScreen(
                     testTag = "setting_audio",
                     onClick = { showAudioDialog = true }
                 )
+
+                SettingsDivider()
 
                 // 3. Rilevamento movimento (Switch + tuning)
                 val sensitivityLabel = when {
@@ -179,6 +187,8 @@ fun SettingsScreen(
                     onClickBody = { showSensitivityDialog = true }
                 )
 
+                SettingsDivider()
+
                 // 4. Registrazione automatica (Switch)
                 SettingSwitchCard(
                     title = "Registrazione automatica",
@@ -188,6 +198,8 @@ fun SettingsScreen(
                     testTag = "setting_auto_rec_switch",
                     onCheckedChange = onToggleAutoRecording
                 )
+
+                SettingsDivider()
 
                 // 5. Notifiche (Switch)
                 SettingSwitchCard(
@@ -199,6 +211,8 @@ fun SettingsScreen(
                     onCheckedChange = onToggleNotifications
                 )
 
+                SettingsDivider()
+
                 // 6. Accesso remoto (Switch)
                 SettingSwitchCard(
                     title = "Accesso remoto",
@@ -209,6 +223,8 @@ fun SettingsScreen(
                     onCheckedChange = onToggleRemoteAccess,
                     onClickBody = { showRemoteDialog = true }
                 )
+
+                SettingsDivider()
 
                 // 7. Informazioni app
                 SettingNavigationCard(
@@ -473,11 +489,8 @@ fun SettingNavigationCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(CscGlassCard)
-            .border(1.dp, CscGlassBorder, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
             .testTag(testTag),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -488,33 +501,34 @@ fun SettingNavigationCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color(0xFF263345).copy(alpha = 0.7f))
-                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp)),
+                    .border(1.dp, CscGlassBorder, RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = CscOrange,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             Column {
                 Text(
                     text = title,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     fontFamily = MontserratFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    color = CscTitleWhite
+                    fontWeight = FontWeight.SemiBold,
+                    color = CscTitleWhite,
+                    maxLines = 1
                 )
                 Text(
                     text = subtitle,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.Normal,
                     color = CscSubtitleGray
@@ -532,6 +546,17 @@ fun SettingNavigationCard(
 }
 
 @Composable
+private fun SettingsDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 68.dp)
+            .height(1.dp)
+            .background(CscRowDivider)
+    )
+}
+
+@Composable
 fun SettingSwitchCard(
     title: String,
     subtitle: String,
@@ -544,10 +569,7 @@ fun SettingSwitchCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(CscGlassCard)
-            .border(1.dp, CscGlassBorder, RoundedCornerShape(18.dp))
-            .padding(horizontal = 16.dp, vertical = 11.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
             .testTag(testTag),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -560,33 +582,34 @@ fun SettingSwitchCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color(0xFF263345).copy(alpha = 0.7f))
-                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp)),
+                    .border(1.dp, CscGlassBorder, RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = CscOrange,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             Column {
                 Text(
                     text = title,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     fontFamily = MontserratFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    color = CscTitleWhite
+                    fontWeight = FontWeight.SemiBold,
+                    color = CscTitleWhite,
+                    maxLines = 1
                 )
                 Text(
                     text = subtitle,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.Normal,
                     color = CscSubtitleGray

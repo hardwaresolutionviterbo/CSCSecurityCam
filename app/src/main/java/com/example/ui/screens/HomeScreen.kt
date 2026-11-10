@@ -63,6 +63,8 @@ import com.example.ui.theme.CscNeonGlow
 import com.example.ui.theme.CscNeonGlowSubtle
 import com.example.ui.theme.CscOrange
 import com.example.ui.theme.CscOrangeGlow
+import com.example.ui.theme.CscPanelBlue
+import com.example.ui.theme.CscPanelBlueVariant
 import com.example.ui.theme.CscSubtitleGray
 import com.example.ui.theme.CscTitleWhite
 
@@ -98,19 +100,24 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Wordmark ufficiale: "CSC" bianco, "SecurityCam" arancione.
                     Text(
                         text = "CSC",
-                        fontSize = 26.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        color = CscOrange,
-                        letterSpacing = 1.sp
+                        color = CscTitleWhite,
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        softWrap = false
                     )
                     Text(
                         text = "SecurityCam",
-                        fontSize = 26.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        color = CscTitleWhite,
-                        letterSpacing = 0.5.sp
+                        color = CscOrange,
+                        letterSpacing = 0.sp,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
 
@@ -140,7 +147,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0x991A233A))
+                    .background(CscPanelBlue)
                     .border(1.dp, CscGlassBorder, RoundedCornerShape(18.dp))
                     .padding(horizontal = 10.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
@@ -278,13 +285,13 @@ fun CyberDashboardCard(
                 Brush.verticalGradient(
                     colors = if (isSelected) {
                         listOf(
-                            Color(0xFF2C2219), // Warm dark gradient for selected card
-                            Color(0xE61A233A)
+                            Color(0xFF2C2219), // Alone caldo sulla sola scheda selezionata
+                            CscPanelBlue
                         )
                     } else {
                         listOf(
-                            Color(0xCC1A233A), // Glassmorphism frosted dark blue
-                            Color(0xE6121927)
+                            CscPanelBlue,
+                            CscPanelBlueVariant
                         )
                     }
                 )
@@ -330,7 +337,7 @@ fun CyberDashboardCard(
                         if (isSelected) {
                             Color(0x33FF6A00) // Neon orange glow background
                         } else {
-                            Color(0x80232F4A) // Dark glass icon container
+                            CscPanelBlueVariant // Contenitore icona
                         }
                     )
                     .then(

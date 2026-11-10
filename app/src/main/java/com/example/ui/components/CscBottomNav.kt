@@ -41,12 +41,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.Screen
 import com.example.ui.theme.CscGlassBorder
 import com.example.ui.theme.CscNeonGlowSubtle
 import com.example.ui.theme.CscOrange
+import com.example.ui.theme.CscPanelBlue
+import com.example.ui.theme.CscPanelBlueVariant
 import com.example.ui.theme.CscSubtitleGray
 
 data class NavItem(
@@ -90,8 +93,8 @@ fun CscBottomNav(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xE61A233A), // 90% opacity frosted dark blue-gray
-                            Color(0xF2121A2B)  // 95% opacity bottom gradient
+                            CscPanelBlue,
+                            CscPanelBlueVariant
                         )
                     )
                 )
@@ -105,11 +108,10 @@ fun CscBottomNav(
                     ),
                     shape = RoundedCornerShape(32.dp)
                 )
-                .padding(horizontal = 8.dp, vertical = 8.dp)
-        ) {
+                .padding(horizontal = 8.dp, vertical = 8.dp)            ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround,
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 items.forEach { item ->
@@ -123,20 +125,21 @@ fun CscBottomNav(
 
                     Column(
                         modifier = Modifier
+                            .weight(1f)
                             .testTag(item.testTag)
                             .clip(RoundedCornerShape(20.dp))
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = ripple(bounded = true, color = CscOrange.copy(alpha = 0.25f))
                             ) { onNavigate(item.screen) }
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                            .padding(horizontal = 2.dp, vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
                         // Icon Box with Neon Glow when selected
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(34.dp)
                                 .then(
                                     if (isSelected) {
                                         Modifier
@@ -157,15 +160,18 @@ fun CscBottomNav(
                                 imageVector = item.icon,
                                 contentDescription = item.title,
                                 tint = iconTint,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
 
                         Text(
                             text = item.title,
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = iconTint
+                            color = iconTint,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
                         )
 
                         Spacer(modifier = Modifier.height(2.dp))
