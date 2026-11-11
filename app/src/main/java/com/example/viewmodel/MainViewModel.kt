@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.RectF
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.StatFs
@@ -11,6 +12,7 @@ import android.text.format.Formatter
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.AudioCaptureManager
+import com.example.auth.GoogleAccount
 import com.example.audio.AudioPlaybackManager
 import com.example.audio.TwoWayAudioClient
 import com.example.engine.ClientStreamStats
@@ -23,6 +25,8 @@ import com.example.engine.RemoteControlListener
 import com.example.engine.ServerStats
 import com.example.engine.StreamingHub
 import com.example.data.AppDatabase
+import com.example.data.AuthRepository
+import com.example.data.AuthResult
 import com.example.data.DeviceRepository
 import com.example.data.RecordingRepository
 import com.example.data.SettingsRepository
@@ -39,6 +43,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import com.example.model.AppSettings
 import com.example.model.CameraDevice
+import com.example.model.Premium
+import com.example.model.UserProfile
 import com.example.model.DeviceType
 import com.example.model.RecordingItem
 import com.example.model.Screen
@@ -62,6 +68,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.io.File
 import java.util.UUID
 
 data class MainUiState(
@@ -111,7 +118,9 @@ data class MainUiState(
     val selectedDeviceProbeMessage: String? = null,
     val recordings: List<RecordingItem> = emptyList(),
     val settings: AppSettings = AppSettings(),
-    val userProfile: com.example.model.UserProfile = com.example.model.UserProfile(),
+    val userProfile: UserProfile = UserProfile(),
+    /** Paywall mostrato quando il piano Free raggiunge il limite di telecamere. */
+    val showPremiumUpsell: Boolean = false,
     val toastMessage: String? = null
 )
 
@@ -137,6 +146,11 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     private var deviceRepository: DeviceRepository? = null
     private var recordingRepository: RecordingRepository? = null
     private var settingsRepository: SettingsRepository? = null
+    private var authRepository: AuthRepository? = null
+    /** Tutte le telecamere salvate: si filtrano per account senza rileggere il database. */
+    private var allSavedDevices: List<CameraDevice> = emptyList()
+    private var sessionRestored = false
+    private var pendingSplashStart = false
     private var appContext: Context? = null
     private var statusPollJob: Job? = null
     private var clipCameraName: String = "Videocamera"
@@ -209,11 +223,13 @@ class MainViewModel : ViewModel(), RemoteControlListener {
             deviceRepository = repository
             viewModelScope.launch {
                 repository.devices.collect { saved ->
+                    allSavedDevices = saved
+                    val owned = ownedDevices(saved)
                     _uiState.update { current ->
                         val selectedStillPresent = current.selectedDeviceId != null &&
-                            saved.any { it.id == current.selectedDeviceId }
+                            owned.any { it.id == current.selectedDeviceId }
                         current.copy(
-                            devices = saved,
+                            devices = owned,
                             selectedDeviceId = if (selectedStillPresent) current.selectedDeviceId else null
                         )
                     }
@@ -257,6 +273,23 @@ class MainViewModel : ViewModel(), RemoteControlListener {
                     remoteAccessManager?.startRemoteAccess()
                 }
             }
+        }
+
+        // Account reali su Room: password con hash PBKDF2 e sessione che sopravvive alla chiusura.
+        if (authRepository == null) {
+            val auth = AuthRepository(
+                context = context.applicationContext,
+                dao = AppDatabase.getInstance(context).userDao()
+            )
+            authRepository = auth
+            viewModelScope.launch {
+                val restored = auth.restoreSession()
+                sessionRestored = true
+                if (restored != null) applyUser(restored, navigate = false)
+                if (pendingSplashStart) routeAfterSplash()
+            }
+        } else {
+            sessionRestored = true
         }
 
         if (batteryManager == null) {
@@ -544,49 +577,186 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         }
     }
 
+    /** Senza sessione salvata si passa dal login: l'app non finge più un accesso. */
+    fun startFromSplash() {
+        if (!sessionRestored) {
+            pendingSplashStart = true
+            return
+        }
+        routeAfterSplash()
+    }
+
+    private fun routeAfterSplash() {
+        _uiState.update {
+            it.copy(currentScreen = if (it.userProfile.isLoggedIn) Screen.HOME else Screen.LOGIN)
+        }
+    }
+
+    fun showMessage(message: String) {
+        _uiState.update { it.copy(toastMessage = message) }
+    }
+
     fun continueAsGuest() {
+        streamClient.disconnect()
+        multiStreamManager.clear()
         _uiState.update {
             it.copy(
-                userProfile = com.example.model.UserProfile(
-                    fullName = "Ospite",
-                    email = "ospite@csc.local",
-                    isGuest = true,
-                    isLoggedIn = false
-                ),
+                userProfile = UserProfile(fullName = "Ospite", email = "ospite@csc.local"),
+                selectedDeviceId = null,
                 currentScreen = Screen.HOME,
+                showPremiumUpsell = false,
                 toastMessage = "Accesso come Ospite effettuato"
             )
         }
+        refreshOwnedDevices()
     }
 
-    fun loginUser(email: String, rememberMe: Boolean) {
-        val displayName = email.substringBefore("@").replace(".", " ").replaceFirstChar { it.uppercase() }
+    fun loginUser(email: String, password: String, rememberMe: Boolean = true) {
+        val repository = authRepository
+        if (repository == null) {
+            showMessage("Archivio account non disponibile: riavvia l'app")
+            return
+        }
+        viewModelScope.launch {
+            when (val result = repository.login(email, password, rememberMe)) {
+                is AuthResult.Success -> applyUser(result.user, navigate = true)
+                is AuthResult.Failure -> _uiState.update { it.copy(toastMessage = result.message) }
+            }
+        }
+    }
+
+    fun registerUser(firstName: String, lastName: String, email: String, password: String) {
+        val repository = authRepository
+        if (repository == null) {
+            showMessage("Archivio account non disponibile: riavvia l'app")
+            return
+        }
+        val fullName = "$firstName $lastName".trim().ifBlank { "Nuovo Utente" }
+        viewModelScope.launch {
+            when (val result = repository.register(fullName, email, password)) {
+                is AuthResult.Success -> applyUser(
+                    result.user,
+                    navigate = true,
+                    welcome = "Account creato con successo! Benvenuto in CSC SecurityCam."
+                )
+                is AuthResult.Failure -> _uiState.update { it.copy(toastMessage = result.message) }
+            }
+        }
+    }
+
+    /** Accesso Google: identità da Credential Manager, account locale creato o riusato. */
+    fun signInWithGoogle(account: GoogleAccount) {
+        val repository = authRepository
+        if (repository == null) {
+            showMessage("Archivio account non disponibile: riavvia l'app")
+            return
+        }
+        viewModelScope.launch {
+            when (val result = repository.signInWithGoogle(account)) {
+                is AuthResult.Success -> applyUser(
+                    result.user,
+                    navigate = true,
+                    welcome = "Accesso con Google effettuato"
+                )
+                is AuthResult.Failure -> _uiState.update { it.copy(toastMessage = result.message) }
+            }
+        }
+    }
+
+    fun logout() {
+        authRepository?.signOut()
+        streamClient.disconnect()
+        multiStreamManager.clear()
+        twoWayAudioClient?.stopAmbientListening()
+        twoWayAudioClient?.stopPushToTalk()
         _uiState.update {
             it.copy(
-                userProfile = com.example.model.UserProfile(
-                    fullName = displayName,
-                    email = email,
-                    isGuest = false,
-                    isLoggedIn = true
-                ),
-                currentScreen = Screen.HOME,
-                toastMessage = "Bentornato, $displayName!"
+                userProfile = UserProfile(),
+                devices = emptyList(),
+                selectedDeviceId = null,
+                currentScreen = Screen.LOGIN,
+                previousScreen = Screen.HOME,
+                showPremiumUpsell = false,
+                toastMessage = "Disconnesso"
             )
         }
     }
 
-    fun registerUser(firstName: String, lastName: String, email: String) {
-        val fullName = "$firstName $lastName".trim().ifBlank { "Nuovo Utente" }
+    fun dismissPremiumUpsell() {
+        _uiState.update { it.copy(showPremiumUpsell = false) }
+    }
+
+    fun updateProfileName(fullName: String) {
+        val repository = authRepository ?: return
+        val user = _uiState.value.userProfile
+        if (!user.isLoggedIn) return
+        viewModelScope.launch {
+            val updated = repository.updateProfile(user.userId, fullName, user.photoPath)
+            if (updated != null) {
+                _uiState.update { it.copy(userProfile = updated, toastMessage = "Nome aggiornato") }
+            }
+        }
+    }
+
+    /** Copia la foto scelta nello spazio privato dell'app: l'URI del selettore non è stabile. */
+    fun updateProfilePhoto(uri: Uri) {
+        val context = appContext ?: return
+        val repository = authRepository ?: return
+        val user = _uiState.value.userProfile
+        if (!user.isLoggedIn) return
+        viewModelScope.launch {
+            val path = withContext(Dispatchers.IO) {
+                runCatching {
+                    val dir = File(context.filesDir, "avatars").apply { mkdirs() }
+                    val target = File(dir, "${user.userId}.jpg")
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        target.outputStream().use { output -> input.copyTo(output) }
+                    } ?: return@runCatching null
+                    target.absolutePath
+                }.getOrNull()
+            }
+            if (path == null) {
+                showMessage("Impossibile salvare la foto profilo")
+                return@launch
+            }
+            val updated = repository.updateProfile(user.userId, user.fullName, path)
+            if (updated != null) {
+                _uiState.update {
+                    it.copy(userProfile = updated, toastMessage = "Foto profilo aggiornata")
+                }
+            }
+        }
+    }
+
+    private fun applyUser(user: UserProfile, navigate: Boolean, welcome: String? = null) {
+        streamClient.disconnect()
+        multiStreamManager.clear()
+        val owned = allSavedDevices.filter { it.ownerId == user.userId }
         _uiState.update {
             it.copy(
-                userProfile = com.example.model.UserProfile(
-                    fullName = fullName,
-                    email = email,
-                    isGuest = false,
-                    isLoggedIn = true
-                ),
-                currentScreen = Screen.HOME,
-                toastMessage = "Account creato con successo! Benvenuto in CSC SecurityCam."
+                userProfile = user,
+                devices = owned,
+                selectedDeviceId = owned.firstOrNull { d -> d.id == it.selectedDeviceId }?.id,
+                currentScreen = if (navigate) Screen.HOME else it.currentScreen,
+                showPremiumUpsell = false,
+                toastMessage = welcome ?: "Bentornato, ${user.fullName}!"
+            )
+        }
+    }
+
+    private fun ownedDevices(devices: List<CameraDevice>): List<CameraDevice> {
+        val owner = _uiState.value.userProfile.userId
+        return devices.filter { it.ownerId == owner }
+    }
+
+    private fun refreshOwnedDevices() {
+        val owned = ownedDevices(allSavedDevices)
+        _uiState.update { current ->
+            val selectedStillPresent = current.selectedDeviceId != null &&
+                owned.any { it.id == current.selectedDeviceId }
+            current.copy(
+                devices = owned,
+                selectedDeviceId = if (selectedStillPresent) current.selectedDeviceId else null
             )
         }
     }
@@ -596,6 +766,7 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         _uiState.update {
             val target = when (it.currentScreen) {
                 Screen.LOGIN, Screen.REGISTER -> Screen.SPLASH
+                Screen.PROFILE -> Screen.SETTINGS
                 Screen.CAMERA, Screen.MONITOR, Screen.DEVICES, Screen.PLAYBACK, Screen.SETTINGS -> Screen.HOME
                 Screen.HOME -> Screen.SPLASH
                 Screen.SPLASH -> Screen.SPLASH
@@ -1030,13 +1201,26 @@ class MainViewModel : ViewModel(), RemoteControlListener {
             return false
         }
 
+        val profile = _uiState.value.userProfile
+        if (!Premium.canAddCamera(_uiState.value.devices.size, profile.isPremium())) {
+            _uiState.update {
+                it.copy(
+                    showPremiumUpsell = true,
+                    toastMessage = "Piano Free: ${Premium.FREE_CAMERA_LIMIT} telecamera. " +
+                        "Passa a Premium (${Premium.PREMIUM_PRICE_LABEL}) per aggiungerne altre"
+                )
+            }
+            return false
+        }
+
         val newDevice = CameraDevice(
             id = UUID.randomUUID().toString(),
             name = name.trim().ifBlank { "Videocamera" },
             location = location.trim().ifBlank { "Casa" },
             ipAddress = cleanIp,
             port = effectivePort,
-            type = type
+            type = type,
+            ownerId = profile.userId
         )
         _uiState.update {
             it.copy(
@@ -1105,16 +1289,19 @@ class MainViewModel : ViewModel(), RemoteControlListener {
                     it.copy(currentScreen = Screen.MONITOR, toastMessage = "Telecamera ${alreadySaved.name} collegata")
                 }
             } else {
-                addDevice(
+                val added = addDevice(
                     name = info.id?.takeIf { it.isNotBlank() } ?: "Videocamera ${info.ip}",
                     ip = info.ip,
                     location = "Casa",
                     type = DeviceType.SMARTPHONE,
                     port = info.port
                 )
-                _uiState.update { it.copy(currentScreen = Screen.MONITOR) }
+                // Se il piano Free blocca l'aggiunta, resta il paywall e non si apre il monitor.
+                if (added) _uiState.update { it.copy(currentScreen = Screen.MONITOR) }
             }
-            streamClient.connect(info.ip, info.port)
+            if (_uiState.value.devices.any { it.ipAddress == info.ip && it.port == info.port }) {
+                streamClient.connect(info.ip, info.port)
+            }
         }
     }
 

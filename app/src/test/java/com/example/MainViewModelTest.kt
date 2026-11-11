@@ -138,5 +138,33 @@ class MainViewModelTest {
         viewModel.updateSettings { it.copy(motionSensitivity = 0.85f) }
         assertEquals(0.85f, viewModel.uiState.value.settings.motionSensitivity, 0.001f)
     }
+
+    @Test
+    fun testFreePlanBlocksTheSecondCamera() {
+        val viewModel = MainViewModel()
+
+        assertTrue(viewModel.addDevice("Balcone", "192.168.0.88", "Esterno", DeviceType.SMARTPHONE))
+        assertEquals(1, viewModel.uiState.value.devices.size)
+
+        // Piano Free: la seconda telecamera apre il paywall invece di essere salvata.
+        assertFalse(viewModel.addDevice("Ingresso", "192.168.0.89", "Casa", DeviceType.SMARTPHONE))
+        assertEquals(1, viewModel.uiState.value.devices.size)
+        assertTrue(viewModel.uiState.value.showPremiumUpsell)
+
+        viewModel.dismissPremiumUpsell()
+        assertFalse(viewModel.uiState.value.showPremiumUpsell)
+    }
+
+    @Test
+    fun testLogoutClearsTheAccountAndReturnsToLogin() {
+        val viewModel = MainViewModel()
+        viewModel.continueAsGuest()
+        assertEquals(Screen.HOME, viewModel.uiState.value.currentScreen)
+
+        viewModel.logout()
+        assertEquals(Screen.LOGIN, viewModel.uiState.value.currentScreen)
+        assertFalse(viewModel.uiState.value.userProfile.isLoggedIn)
+        assertTrue(viewModel.uiState.value.devices.isEmpty())
+    }
 }
 

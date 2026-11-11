@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.VideoCameraBack
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VolumeUp
@@ -141,6 +142,62 @@ fun SettingsScreen(
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = CscIceWhite
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Area personale: foto, account e stato dell'abbonamento.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(CscGlassCard)
+                    .border(1.dp, CscGlassBorder, RoundedCornerShape(20.dp))
+                    .clickable { onNavigate(Screen.PROFILE) }
+                    .padding(16.dp)
+                    .testTag("setting_profile"),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(CscOrange.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = CscOrange,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = state.userProfile.fullName,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CscIceWhite
+                    )
+                    Text(
+                        text = if (state.userProfile.isLoggedIn) state.userProfile.email else "Accedi o crea un account",
+                        fontSize = 11.sp,
+                        color = CscSubtitleGray
+                    )
+                }
+                Text(
+                    text = com.example.model.Premium.planLabel(state.userProfile),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = CscOrange
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                    contentDescription = null,
+                    tint = CscSubtitleGray,
+                    modifier = Modifier.size(14.dp)
                 )
             }
 

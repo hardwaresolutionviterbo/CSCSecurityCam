@@ -17,22 +17,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.auth.GoogleSignIn
+import com.example.auth.GoogleSignInResult
 import com.example.model.Screen
+import com.example.ui.components.PremiumUpsellDialog
 import com.example.ui.screens.CameraScreen
 import com.example.ui.screens.DevicesScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.MonitorScreen
 import com.example.ui.screens.PlaybackScreen
+import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.RegisterScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SplashScreen
 import com.example.ui.theme.CscDeepBackground
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -100,15 +106,26 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
             when (targetScreen) {
                 Screen.SPLASH -> {
                     SplashScreen(
-                        onStart = { viewModel.navigateTo(Screen.HOME) },
+                        onStart = { viewModel.startFromSplash() },
                         onOpenSettings = { viewModel.navigateTo(Screen.SETTINGS) }
                     )
                 }
 
                 Screen.LOGIN -> {
+                    val scope = rememberCoroutineScope()
                     LoginScreen(
                         onBack = { viewModel.navigateBack() },
-                        onLoginSuccess = { email, rememberMe -> viewModel.loginUser(email, rememberMe) },
+                        onLoginSuccess = { email, password, rememberMe ->
+                            viewModel.loginUser(email, password, rememberMe)
+                        },
+                        onGoogleSignIn = {
+                            scope.launch {
+                                when (val result = GoogleSignIn.signIn(context)) {
+                                    is GoogleSignInResult.Success -> viewModel.signInWithGoogle(result.account)
+                                    is GoogleSignInResult.Failure -> viewModel.showMessage(result.message)
+                                }
+                            }
+                        },
                         onNavigateToRegister = { viewModel.navigateTo(Screen.REGISTER) },
                         onContinueAsGuest = { viewModel.continueAsGuest() }
                     )
@@ -117,7 +134,9 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
                 Screen.REGISTER -> {
                     RegisterScreen(
                         onBack = { viewModel.navigateBack() },
-                        onRegisterSuccess = { first, last, email -> viewModel.registerUser(first, last, email) },
+                        onRegisterSuccess = { first, last, email, password ->
+                            viewModel.registerUser(first, last, email, password)
+                        },
                         onNavigateToLogin = { viewModel.navigateTo(Screen.LOGIN) }
                     )
                 }
@@ -192,6 +211,16 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
                     )
                 }
 
+                Screen.PROFILE -> {
+                    ProfileScreen(
+                        state = state,
+                        onBack = { viewModel.navigateBack() },
+                        onPickPhoto = { uri -> viewModel.updateProfilePhoto(uri) },
+                        onUpdateName = { name -> viewModel.updateProfileName(name) },
+                        onLogout = { viewModel.logout() }
+                    )
+                }
+
                 Screen.SETTINGS -> {
                     SettingsScreen(
                         state = state,
@@ -207,6 +236,10 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
                     )
                 }
             }
+        }
+
+        if (state.showPremiumUpsell) {
+            PremiumUpsellDialog(onDismiss = { viewModel.dismissPremiumUpsell() })
         }
     }
 }

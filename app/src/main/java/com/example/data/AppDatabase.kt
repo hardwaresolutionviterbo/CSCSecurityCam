@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [DeviceEntity::class, RecordingEntity::class, SettingsEntity::class],
-    version = 2,
+    entities = [DeviceEntity::class, RecordingEntity::class, SettingsEntity::class, UserEntity::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -17,6 +17,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun deviceDao(): DeviceDao
     abstract fun recordingDao(): RecordingDao
     abstract fun settingsDao(): SettingsDao
+    abstract fun userDao(): UserDao
 
     companion object {
         private const val DATABASE_NAME = "csc-securitycam.db"
@@ -65,6 +66,36 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Aggiunge account e proprietario delle telecamere ai database già installati. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `devices` ADD COLUMN `ownerId` TEXT NOT NULL DEFAULT ''"
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `users` (
+                        `id` TEXT NOT NULL,
+                        `fullName` TEXT NOT NULL,
+                        `email` TEXT NOT NULL,
+                        `passwordHash` TEXT NOT NULL,
+                        `passwordSalt` TEXT NOT NULL,
+                        `passwordIterations` INTEGER NOT NULL,
+                        `provider` TEXT NOT NULL,
+                        `photoPath` TEXT NOT NULL,
+                        `plan` TEXT NOT NULL,
+                        `planExpiresAtMillis` INTEGER NOT NULL,
+                        `createdAtMillis` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_users_email` ON `users` (`email`)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -72,7 +103,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { instance = it }
             }

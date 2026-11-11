@@ -79,7 +79,7 @@ import com.example.ui.theme.MontserratFontFamily
 @Composable
 fun RegisterScreen(
     onBack: () -> Unit,
-    onRegisterSuccess: (firstName: String, lastName: String, email: String) -> Unit,
+    onRegisterSuccess: (firstName: String, lastName: String, email: String, password: String) -> Unit,
     onNavigateToLogin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -149,7 +149,7 @@ fun RegisterScreen(
         }
 
         if (valid) {
-            onRegisterSuccess(firstName.trim(), lastName.trim(), trimmedEmail)
+            onRegisterSuccess(firstName.trim(), lastName.trim(), trimmedEmail, password)
         }
     }
 

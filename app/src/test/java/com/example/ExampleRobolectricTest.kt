@@ -46,19 +46,13 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `login and register update user profile and navigate to home`() {
+  fun `login without an account store does not fake a signed in profile`() {
     val vm = com.example.viewmodel.MainViewModel()
-    
-    vm.loginUser("mario.rossi@example.com", rememberMe = true)
-    assertEquals(com.example.model.Screen.HOME, vm.uiState.value.currentScreen)
-    org.junit.Assert.assertFalse(vm.uiState.value.userProfile.isGuest)
-    assertEquals("mario.rossi@example.com", vm.uiState.value.userProfile.email)
 
-    vm.navigateTo(com.example.model.Screen.REGISTER)
-    assertEquals(com.example.model.Screen.REGISTER, vm.uiState.value.currentScreen)
-    vm.registerUser("Luigi", "Verdi", "luigi.verdi@example.com")
-    assertEquals(com.example.model.Screen.HOME, vm.uiState.value.currentScreen)
-    assertEquals("Luigi Verdi", vm.uiState.value.userProfile.fullName)
+    // Nessun archivio account (ViewModel senza Context): non si entra in HOME con un finto utente.
+    vm.loginUser("mario.rossi@example.com", "Segreta123", rememberMe = true)
+    assertEquals(com.example.model.Screen.SPLASH, vm.uiState.value.currentScreen)
+    org.junit.Assert.assertFalse(vm.uiState.value.userProfile.isLoggedIn)
   }
 
   @Test

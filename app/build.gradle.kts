@@ -15,6 +15,13 @@ val hasReleaseSigning = !releaseKeystorePath.isNullOrBlank() &&
   !releaseStorePassword.isNullOrBlank() &&
   !releaseKeyPassword.isNullOrBlank()
 
+// Client ID OAuth web per l'accesso Google (Credential Manager). Si passa con
+// -PGOOGLE_WEB_CLIENT_ID=... oppure con la variabile d'ambiente omonima; senza client ID la build
+// compila e il pulsante Google spiega che manca la configurazione.
+val googleWebClientId = (project.findProperty("GOOGLE_WEB_CLIENT_ID") as String?)
+  ?: System.getenv("GOOGLE_WEB_CLIENT_ID")
+  ?: ""
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
@@ -27,6 +34,8 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
   }
 
   signingConfigs {
@@ -115,11 +124,10 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
 
-  // Uncomment ALL FOUR of the following dependencies together to use Auth and Google
-  // Sign-In via Credential Manager:
-  // implementation(libs.androidx.credentials)
-  // implementation(libs.androidx.credentials.play.services)
-  // implementation(libs.googleid)
+  // Auth e Google Sign-In via Credential Manager.
+  implementation(libs.androidx.credentials)
+  implementation(libs.androidx.credentials.play.services)
+  implementation(libs.googleid)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)

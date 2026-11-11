@@ -67,3 +67,24 @@ interrompere gli altri.
 In griglia il client aggiunge `?fps=12` a `/live.mjpg`: il server limita i frame inviati a quel
 client (12 fps) per non saturare il Wi-Fi con quattro flussi. Il flusso singolo resta a piena
 frequenza.
+
+## Account, area personale e piano Premium
+
+- **Registrazione e accesso reali**: nome, email e password vengono salvati in Room. La password
+  non è mai in chiaro: `PasswordHasher` usa PBKDF2-HMAC-SHA256 con salt casuale per utente
+  (120 000 iterazioni) e confronto a tempo costante. Login con password errata, email sconosciuta
+  o email già registrata restituiscono un errore esplicito.
+- **Sessione**: "ricordami" salva l'utente attivo; alla riapertura l'app ripristina l'account e le
+  sue telecamere senza richiedere di nuovo la password. "Esci" cancella solo la sessione.
+- **Google**: pulsante su schermo di login tramite Credential Manager. Serve il client ID OAuth web
+  del progetto: `./gradlew assembleDebug -PGOOGLE_WEB_CLIENT_ID=...` (o variabile d'ambiente
+  omonima). Senza client ID il pulsante resta visibile ma spiega che la build non è configurata.
+- **Telecamere per account**: ogni telecamera salvata ha un `ownerId`; accedendo con un altro
+  account non si vedono le telecamere altrui, e chi esce e rientra ritrova le proprie.
+- **Area personale** (Impostazioni → riga account): foto profilo scelta dalla galleria e copiata
+  nello spazio privato dell'app, nome modificabile, piano e giorni residui dell'abbonamento.
+- **Premium**: il piano Free salva 1 telecamera; dalla seconda compare il paywall a
+  **3,99 €/mese**. Piano e scadenza sono persistiti per utente (`plan`, `planExpiresAtMillis`) e
+  l'area personale mostra ad esempio "Mancano 25 giorni". L'addebito vero richiede il prodotto in
+  abbonamento su Google Play Console e l'integrazione Play Billing: il pulsante apre oggi la
+  scheda Play Store dell'app.

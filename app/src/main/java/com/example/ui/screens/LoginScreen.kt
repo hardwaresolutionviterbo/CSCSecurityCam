@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +41,7 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -81,7 +83,8 @@ import com.example.ui.theme.MontserratFontFamily
 @Composable
 fun LoginScreen(
     onBack: () -> Unit,
-    onLoginSuccess: (email: String, rememberMe: Boolean) -> Unit,
+    onLoginSuccess: (email: String, password: String, rememberMe: Boolean) -> Unit,
+    onGoogleSignIn: () -> Unit,
     onNavigateToRegister: () -> Unit,
     onContinueAsGuest: () -> Unit,
     modifier: Modifier = Modifier
@@ -124,7 +127,7 @@ fun LoginScreen(
         }
 
         if (valid) {
-            onLoginSuccess(trimmedEmail, rememberMe)
+            onLoginSuccess(trimmedEmail, password, rememberMe)
         }
     }
 
@@ -426,6 +429,26 @@ fun LoginScreen(
                         color = Color.White
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = { onGoogleSignIn() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .testTag("login_google_btn"),
+                shape = RoundedCornerShape(50.dp),
+                border = BorderStroke(1.dp, CscGlassBorder)
+            ) {
+                Text(
+                    text = "Continua con Google",
+                    fontSize = 15.sp,
+                    fontFamily = MontserratFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
             }
 
             Spacer(modifier = Modifier.height(18.dp))

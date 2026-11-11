@@ -9,15 +9,9 @@ enum class Screen {
     MONITOR,
     DEVICES,
     PLAYBACK,
-    SETTINGS
+    SETTINGS,
+    PROFILE
 }
-
-data class UserProfile(
-    val email: String = "",
-    val fullName: String = "Ospite",
-    val isGuest: Boolean = true,
-    val isLoggedIn: Boolean = false
-)
 
 data class CameraDevice(
     val id: String,
@@ -29,7 +23,9 @@ data class CameraDevice(
     val batteryPercent: Int = 85,
     val isLocalPhone: Boolean = false,
     val resolution: String = "1080p (Full HD)",
-    val type: DeviceType = DeviceType.SMARTPHONE
+    val type: DeviceType = DeviceType.SMARTPHONE,
+    /** Account che ha accoppiato la telecamera: "" per la modalità ospite. */
+    val ownerId: String = ""
 )
 
 enum class DeviceType {

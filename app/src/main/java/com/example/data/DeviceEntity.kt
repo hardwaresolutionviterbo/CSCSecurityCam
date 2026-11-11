@@ -14,7 +14,9 @@ data class DeviceEntity(
     val port: Int,
     val type: String,
     val isLocalPhone: Boolean = false,
-    val resolution: String = "1080p (Full HD)"
+    val resolution: String = "1080p (Full HD)",
+    /** Account proprietario: le telecamere non si mescolano tra utenti diversi. */
+    val ownerId: String = ""
 )
 
 fun DeviceEntity.toCameraDevice(): CameraDevice = CameraDevice(
@@ -27,7 +29,8 @@ fun DeviceEntity.toCameraDevice(): CameraDevice = CameraDevice(
     batteryPercent = 0,
     isLocalPhone = isLocalPhone,
     resolution = resolution,
-    type = runCatching { DeviceType.valueOf(type) }.getOrDefault(DeviceType.SMARTPHONE)
+    type = runCatching { DeviceType.valueOf(type) }.getOrDefault(DeviceType.SMARTPHONE),
+    ownerId = ownerId
 )
 
 fun CameraDevice.toEntity(): DeviceEntity = DeviceEntity(
@@ -38,5 +41,6 @@ fun CameraDevice.toEntity(): DeviceEntity = DeviceEntity(
     port = port,
     type = type.name,
     isLocalPhone = isLocalPhone,
-    resolution = resolution
+    resolution = resolution,
+    ownerId = ownerId
 )
