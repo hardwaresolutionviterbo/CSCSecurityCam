@@ -144,7 +144,14 @@ class LanStreamingServer(
 
                     // Register client for live frame broadcast. Frames are written by the client's
                     // own coroutine, so a monitor that cannot keep up never blocks this thread.
-                    val sink = ClientSink(out)
+                    // ?fps=N limita i frame inviati a questo client (la griglia chiede 12 fps).
+                    val liveQuery = if (path.contains("?")) path.substringAfter("?") else ""
+                    val requestedFps = liveQuery.split("&")
+                        .firstOrNull { it.startsWith("fps=") }
+                        ?.substringAfter("fps=")
+                        ?.toIntOrNull()
+                        ?: 0
+                    val sink = ClientSink(out, fpsLimit = requestedFps)
                     clientStreams[clientId] = sink
                     _stats.value = _stats.value.copy(connectedClients = clientStreams.size)
 
@@ -346,7 +353,9 @@ class LanStreamingServer(
         // Never write to a client socket from here: this runs on the camera analyzer thread. A
         // monitor that stops reading would fill its TCP buffer and block that thread, freezing the
         // video and making the client hit its read timeout (Online -> Offline -> Riconnessione).
+        val now = System.currentTimeMillis()
         for ((clientId, sink) in clientStreams) {
+            if (!sink.shouldSend(now)) continue
             enqueueFrame(clientId, sink, jpegBytes)
         }
     }
@@ -381,9 +390,24 @@ class LanStreamingServer(
      * Write buffer of a single monitor: only the newest frame is kept. If the monitor is slower
      * than the camera its older frames are dropped instead of queueing up or blocking the sender.
      */
-    private class ClientSink(val out: OutputStream) {
+    private class ClientSink(val out: OutputStream, fpsLimit: Int = 0) {
         private val pending = AtomicReference<ByteArray?>(null)
         private val draining = AtomicBoolean(false)
+
+        // 0 = nessun limite: il flusso singolo resta a piena frequenza.
+        private val minIntervalMs = if (fpsLimit > 0) {
+            1000L / fpsLimit.coerceIn(1, 60)
+        } else {
+            0L
+        }
+        private var lastSentAt = 0L
+
+        fun shouldSend(now: Long): Boolean {
+            if (minIntervalMs <= 0L) return true
+            if (now - lastSentAt < minIntervalMs) return false
+            lastSentAt = now
+            return true
+        }
 
         /** Stores [frame] as the latest one to send; returns true if the caller must start a drain. */
         fun offer(frame: ByteArray): Boolean {

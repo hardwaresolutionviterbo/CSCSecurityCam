@@ -55,3 +55,15 @@ signaling raggiungibile da internet e, per NAT simmetrici e reti mobili, un TURN
 
 I fotogrammi non passano dal relay: viaggiano cifrati DTLS/SRTP tra i due telefoni. Il data channel
 WebRTC trasporta anche i comandi di torcia, registrazione e qualità.
+
+## Griglia multi-telecamera
+
+Il Centro di controllo ha un selettore 1 / 2 / 4 riquadri. Ogni riquadro ha il proprio flusso
+MJPEG (massimo quattro), ridotto a 640 px di lato massimo per non tenere in RAM frame 1080p; i
+bitmap sostituiti vengono riciclati poco dopo. Doppio tocco su un riquadro = schermo intero con
+audio e comandi legati a quella telecamera; un riquadro offline mostra "Riconnetti" senza
+interrompere gli altri.
+
+In griglia il client aggiunge `?fps=12` a `/live.mjpg`: il server limita i frame inviati a quel
+client (12 fps) per non saturare il Wi-Fi con quattro flussi. Il flusso singolo resta a piena
+frequenza.

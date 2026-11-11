@@ -36,7 +36,11 @@ data class ClientStreamStats(
 )
 
 class LanStreamClient(
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    /** >0 riduce il frame prima di pubblicarlo: la griglia non tiene in RAM frame 1080p. */
+    private val maxDimension: Int = 0,
+    /** >0 chiede al server un tetto di fps (modalità mosaico). */
+    private val requestFps: Int = 0
 ) {
     private val tag = "LanStreamClient"
 
@@ -67,7 +71,8 @@ class LanStreamClient(
                 )
 
                 try {
-                    val url = URL("http://$targetIp:$targetPort/live.mjpg")
+                    val fpsQuery = if (requestFps > 0) "?fps=$requestFps" else ""
+                    val url = URL("http://$targetIp:$targetPort/live.mjpg$fpsQuery")
                     val connection = (url.openConnection() as HttpURLConnection).apply {
                         connectTimeout = 4000
                         readTimeout = 8000
@@ -142,7 +147,7 @@ class LanStreamClient(
                         }
 
                         if (bytesRead == contentLength) {
-                            val bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
+                            val bitmap = decodeFrame(jpegBytes)
                             if (bitmap != null) {
                                 _latestFrame.value = bitmap
                                 frameCounter++
@@ -158,6 +163,34 @@ class LanStreamClient(
         } finally {
             fpsJob.cancel()
         }
+    }
+
+    /** Decodifica ridotta: si evita di allocare un bitmap 1920×1080 per ogni riquadro. */
+    private fun decodeFrame(bytes: ByteArray): Bitmap? {
+        if (maxDimension <= 0) return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val sample = GridSizing.sampleSize(bounds.outWidth, bounds.outHeight, maxDimension)
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return null
+
+        val (targetWidth, targetHeight) = GridSizing.scaledSize(
+            decoded.width,
+            decoded.height,
+            maxDimension
+        )
+        if (targetWidth == decoded.width && targetHeight == decoded.height) return decoded
+
+        val scaled = Bitmap.createScaledBitmap(decoded, targetWidth, targetHeight, true)
+        if (scaled !== decoded) decoded.recycle()
+        return scaled
+    }
+
+    /** Riconnessione esplicita richiesta dal riquadro in errore. */
+    fun reconnect() {
+        if (targetIp.isEmpty()) return
+        connect(targetIp, targetPort)
     }
 
     private fun readLine(input: InputStream): String? {

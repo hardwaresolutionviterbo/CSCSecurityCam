@@ -83,8 +83,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.engine.ClientStreamStats
 import com.example.engine.ConnectionStatus
 import com.example.media.StreamQuality
+import com.example.model.CameraDevice
 import com.example.model.DeviceType
 import com.example.model.Screen
 import com.example.ui.components.PairCameraDialog
@@ -108,6 +110,11 @@ import com.example.viewmodel.MainUiState
 fun MonitorScreen(
     state: MainUiState,
     liveBitmap: Bitmap?,
+    gridFrames: Map<String, Bitmap?>,
+    gridStats: Map<String, ClientStreamStats>,
+    onSelectLayout: (Int) -> Unit,
+    onSelectDevice: (String) -> Unit,
+    onReconnectTile: (String) -> Unit,
     onBack: () -> Unit,
     onNavigate: (Screen) -> Unit,
     onReconnect: () -> Unit,
@@ -227,8 +234,30 @@ fun MonitorScreen(
                 )
             }
 
-            // Live Viewport Container
-            Box(
+            // Selettore riquadri: 1, 2 o 4 telecamere insieme.
+            MonitorLayoutSelector(
+                selected = state.monitorLayout,
+                onSelect = onSelectLayout
+            )
+
+            if (state.monitorLayout > 1) {
+                MultiCameraGrid(
+                    devices = state.devices,
+                    layout = state.monitorLayout,
+                    frames = gridFrames,
+                    stats = gridStats,
+                    nightVision = state.nightVisionActive,
+                    onOpenCamera = { id ->
+                        onSelectDevice(id)
+                        onSelectLayout(1)
+                    },
+                    onReconnectTile = onReconnectTile,
+                    onPair = { showPairDialog = true }
+                )
+            }
+
+            // Live Viewport Container (singola telecamera)
+            if (state.monitorLayout == 1) Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9.5f)
@@ -813,6 +842,237 @@ fun MonitorScreen(
             }
         )
     }
+}
+
+/** Selettore del numero di riquadri visibili. */
+@Composable
+private fun MonitorLayoutSelector(selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(CscGlassCard)
+            .border(1.dp, CscGlassBorder, RoundedCornerShape(12.dp))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        listOf(1, 2, 4).forEach { count ->
+            val active = selected == count
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(if (active) CscOrange else Color.Transparent)
+                    .clickable { onSelect(count) }
+                    .padding(vertical = 8.dp)
+                    .testTag("monitor_layout_$count"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (count == 1) "1" else "$count",
+                    fontSize = 12.sp,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                    color = if (active) Color.White else CscIceWhite
+                )
+            }
+        }
+    }
+}
+
+/** Griglia 2×2 (o riga singola a due riquadri) con nome e stato sotto ogni telecamera. */
+@Composable
+private fun MultiCameraGrid(
+    devices: List<CameraDevice>,
+    layout: Int,
+    frames: Map<String, Bitmap?>,
+    stats: Map<String, ClientStreamStats>,
+    nightVision: Boolean,
+    onOpenCamera: (String) -> Unit,
+    onReconnectTile: (String) -> Unit,
+    onPair: () -> Unit
+) {
+    // Una riga per 2 telecamere, due righe per 4: la disposizione resta 2×2.
+    val rows = (0 until layout).chunked(2)
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        rows.forEach { rowIndexes ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                rowIndexes.forEach { index ->
+                    val device = devices.getOrNull(index)
+                    MonitorTile(
+                        device = device,
+                        bitmap = device?.let { frames[it.id] },
+                        stats = device?.let { stats[it.id] },
+                        nightVision = nightVision,
+                        onOpen = { device?.let { onOpenCamera(it.id) } },
+                        onReconnect = { device?.let { onReconnectTile(it.id) } },
+                        onPair = onPair,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonitorTile(
+    device: CameraDevice?,
+    bitmap: Bitmap?,
+    stats: ClientStreamStats?,
+    nightVision: Boolean,
+    onOpen: () -> Unit,
+    onReconnect: () -> Unit,
+    onPair: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val status = stats?.status ?: ConnectionStatus.DISCONNECTED
+    val connected = status == ConnectionStatus.CONNECTED
+
+    Column(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 10f)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF0B111E))
+                .border(1.dp, CscSteel, RoundedCornerShape(16.dp))
+                .pointerInput(device?.id) {
+                    if (device != null) {
+                        detectTapGestures(onDoubleTap = { onOpen() })
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                device == null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Slot libero", color = CscTextMuted, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Accoppia",
+                        color = CscOrange,
+                        fontSize = 11.sp,
+                        modifier = Modifier.clickable(onClick = onPair)
+                    )
+                }
+
+                bitmap != null -> Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = device.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    colorFilter = if (nightVision) {
+                        ColorFilter.lighting(Color(0xFF88FF88), Color(0xFF003300))
+                    } else null
+                )
+
+                status == ConnectionStatus.ERROR -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = CscLiveRed,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text("Offline", color = CscIceWhite, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(CscPanelBlue)
+                            .clickable(onClick = onReconnect)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = CscOrange,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Riconnetti", color = CscIceWhite, fontSize = 10.sp)
+                    }
+                }
+
+                else -> CircularProgressIndicator(color = CscOrange, modifier = Modifier.size(22.dp))
+            }
+
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(if (connected) CscLiveRed else CscSteel)
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = if (connected) "LIVE" else "OFF",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = device?.name ?: "Nessuna telecamera",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (device == null) CscTextMuted else CscIceWhite,
+                maxLines = 1,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (device != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when (status) {
+                                    ConnectionStatus.CONNECTED -> CscOnlineGreen
+                                    ConnectionStatus.CONNECTING,
+                                    ConnectionStatus.RECONNECTING -> CscOrange
+                                    ConnectionStatus.ERROR -> CscLiveRed
+                                    ConnectionStatus.DISCONNECTED -> CscTextMuted
+                                }
+                            )
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = monitorStatusLabel(status),
+                        fontSize = 10.sp,
+                        color = CscTextMuted
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun monitorStatusLabel(status: ConnectionStatus): String = when (status) {
+    ConnectionStatus.CONNECTED -> "Online"
+    ConnectionStatus.CONNECTING -> "Connessione..."
+    ConnectionStatus.RECONNECTING -> "Riconnessione..."
+    ConnectionStatus.ERROR -> "Offline"
+    ConnectionStatus.DISCONNECTED -> "In attesa"
 }
 
 /** Pulsante arrotondato della riga finale del Centro di controllo. */

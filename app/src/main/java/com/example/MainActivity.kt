@@ -68,6 +68,8 @@ class MainActivity : ComponentActivity() {
 fun CscSecurityCamApp(viewModel: MainViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val liveBitmap by viewModel.clientLiveBitmap.collectAsStateWithLifecycle()
+    val gridFrames by viewModel.gridFrames.collectAsStateWithLifecycle()
+    val gridStats by viewModel.gridStats.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -141,6 +143,11 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
                     MonitorScreen(
                         state = state,
                         liveBitmap = liveBitmap,
+                        gridFrames = gridFrames,
+                        gridStats = gridStats,
+                        onSelectLayout = { viewModel.setMonitorLayout(it) },
+                        onSelectDevice = { viewModel.selectDevice(it) },
+                        onReconnectTile = { viewModel.reconnectGridStream(it) },
                         onBack = { viewModel.navigateBack() },
                         onNavigate = { viewModel.navigateTo(it) },
                         onReconnect = { viewModel.reconnectSelected() },

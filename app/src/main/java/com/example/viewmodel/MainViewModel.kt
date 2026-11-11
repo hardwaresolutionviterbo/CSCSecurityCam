@@ -15,8 +15,10 @@ import com.example.audio.AudioPlaybackManager
 import com.example.audio.TwoWayAudioClient
 import com.example.engine.ClientStreamStats
 import com.example.engine.ConnectionStatus
+import com.example.engine.GridTarget
 import com.example.engine.LanStreamClient
 import com.example.engine.LanStreamingServer
+import com.example.engine.MultiStreamManager
 import com.example.engine.RemoteControlListener
 import com.example.engine.ServerStats
 import com.example.engine.StreamingHub
@@ -83,6 +85,8 @@ data class MainUiState(
     val isWifiConnected: Boolean = true,
     val serverStats: ServerStats = ServerStats(),
     val clientStats: ClientStreamStats = ClientStreamStats(),
+    /** Riquadri del centro di controllo: 1, 2 o 4 telecamere insieme. */
+    val monitorLayout: Int = 1,
     val remoteTunnelStats: RemoteTunnelStats = RemoteTunnelStats(),
     val isAudioListening: Boolean = false,
     val isCameraSpeakerActive: Boolean = false,
@@ -120,6 +124,11 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     val streamingServer = StreamingHub.server
     val streamClient = LanStreamClient(scope = viewModelScope)
     val motionDetector = MotionDetector(sensitivity = 0.65f)
+
+    /** Un client per riquadro: LanStreamClient apre una sola connessione alla volta. */
+    val multiStreamManager = MultiStreamManager(viewModelScope)
+    val gridFrames: StateFlow<Map<String, Bitmap?>> = multiStreamManager.frames
+    val gridStats: StateFlow<Map<String, ClientStreamStats>> = multiStreamManager.stats
 
     val clientLiveBitmap: StateFlow<Bitmap?> = streamClient.latestFrame
 
@@ -207,6 +216,10 @@ class MainViewModel : ViewModel(), RemoteControlListener {
                             devices = saved,
                             selectedDeviceId = if (selectedStillPresent) current.selectedDeviceId else null
                         )
+                    }
+                    if (_uiState.value.currentScreen == Screen.MONITOR) {
+                        // Aggiungere o rimuovere una telecamera cambia i riquadri della griglia.
+                        syncMonitorStreams()
                     }
                 }
             }
@@ -521,14 +534,9 @@ class MainViewModel : ViewModel(), RemoteControlListener {
 
         if (screen == Screen.MONITOR) {
             refreshSelectedStatus()
-            val dev = getSelectedDevice()
-            if (dev != null) {
-                streamClient.connect(dev.ipAddress, dev.port)
-                if (_uiState.value.isAudioListening) {
-                    twoWayAudioClient?.startAmbientListening(dev.ipAddress, dev.port)
-                }
-            }
+            syncMonitorStreams()
         } else if (_uiState.value.previousScreen == Screen.MONITOR && screen != Screen.MONITOR) {
+            multiStreamManager.clear()
             streamClient.disconnect()
             twoWayAudioClient?.stopAmbientListening()
             twoWayAudioClient?.stopPushToTalk()
@@ -596,6 +604,7 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         }
 
         if (prev == Screen.MONITOR) {
+            multiStreamManager.clear()
             streamClient.disconnect()
             twoWayAudioClient?.stopAmbientListening()
             twoWayAudioClient?.stopPushToTalk()
@@ -934,11 +943,60 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         val dev = getSelectedDevice() ?: return
         refreshSelectedStatus()
         if (_uiState.value.currentScreen == Screen.MONITOR) {
-            streamClient.connect(dev.ipAddress, dev.port)
-            if (_uiState.value.isAudioListening) {
-                twoWayAudioClient?.startAmbientListening(dev.ipAddress, dev.port)
+            if (_uiState.value.monitorLayout <= 1) {
+                streamClient.connect(dev.ipAddress, dev.port)
+                if (_uiState.value.isAudioListening) {
+                    twoWayAudioClient?.startAmbientListening(dev.ipAddress, dev.port)
+                }
+            } else {
+                // La griglia resta sui suoi flussi: la selezione serve al doppio tocco.
+                multiStreamManager.clear()
             }
         }
+    }
+
+    /** Cambia il numero di riquadri: la griglia collega solo quelli visibili. */
+    fun setMonitorLayout(count: Int) {
+        val safe = if (count == 1 || count == 2 || count == 4) count else 1
+        _uiState.update { it.copy(monitorLayout = safe) }
+        if (_uiState.value.currentScreen == Screen.MONITOR) syncMonitorStreams()
+    }
+
+    fun reconnectGridStream(deviceId: String) {
+        multiStreamManager.reconnect(deviceId)
+    }
+
+    /**
+     * Modalità singola: un solo flusso, con audio e comandi legati alla telecamera scelta.
+     * Modalità griglia: fino a quattro flussi da 12 fps e 640 px, uno per riquadro visibile.
+     */
+    private fun syncMonitorStreams() {
+        val state = _uiState.value
+        if (state.currentScreen != Screen.MONITOR) {
+            multiStreamManager.clear()
+            return
+        }
+
+        if (state.monitorLayout <= 1) {
+            multiStreamManager.clear()
+            val device = getSelectedDevice()
+            if (device != null) {
+                streamClient.connect(device.ipAddress, device.port)
+                if (state.isAudioListening) {
+                    twoWayAudioClient?.startAmbientListening(device.ipAddress, device.port)
+                }
+            } else {
+                streamClient.disconnect()
+            }
+            return
+        }
+
+        // Una telecamera non deve essere aperta due volte: in griglia niente flusso singolo.
+        streamClient.disconnect()
+        val targets = state.devices
+            .take(state.monitorLayout)
+            .map { GridTarget(id = it.id, ip = it.ipAddress, port = it.port) }
+        multiStreamManager.setStreams(targets)
     }
 
     fun getLocalDevice(): CameraDevice {
