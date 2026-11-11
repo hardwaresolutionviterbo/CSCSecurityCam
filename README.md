@@ -39,3 +39,19 @@ Non inserire chiavi, keystore o credenziali nel repository: in CI usare i secret
 
 Il vecchio prototipo 0.2 (streaming LAN MJPEG) è conservato nel branch `archivio/0.2` e non fa parte
 del ramo principale.
+
+## Controllo remoto fuori casa (WebRTC)
+
+Il flusso LAN resta invariato. Per guardare la telecamera da un'altra rete servono un relay di
+signaling raggiungibile da internet e, per NAT simmetrici e reti mobili, un TURN.
+
+1. Avvia il relay: `cd signaling && npm install && npm start` (porta 8787). Mettilo dietro TLS
+   (Caddy/Nginx) e usa `wss://...` nell'app: `ws://` è accettato solo per localhost.
+2. Su entrambi i telefoni: Impostazioni → Accesso remoto → inserisci l'URL `wss://` e il codice
+   stanza (quello mostrato sulla telecamera come "Codice Associazione P2P") → Salva.
+3. Sulla telecamera attiva "Accesso remoto": pubblica appena lo streaming è attivo.
+4. Sul centro di controllo: Impostazioni → Accesso remoto → "Guarda" apre il video remoto.
+5. Per NAT simmetrici configura un TURN (es. coturn) con URL, utente e password.
+
+I fotogrammi non passano dal relay: viaggiano cifrati DTLS/SRTP tra i due telefoni. Il data channel
+WebRTC trasporta anche i comandi di torcia, registrazione e qualità.

@@ -26,8 +26,10 @@ class RemoteAccessTest {
         assertEquals(RemoteConnectionStatus.DISABLED, stats.status)
         assertEquals(RemoteRouteType.LOCAL_LAN, stats.activeRoute)
         assertTrue(stats.isEncrypted)
-        assertTrue(stats.pairingCode.startsWith("CSC-"))
         assertTrue(stats.encryptionProtocol.contains("DTLS"))
+        // Nessun codice o server TURN inventato: arrivano dalla configurazione reale.
+        assertTrue(stats.pairingCode.isEmpty())
+        assertEquals("Non configurato", stats.turnServer)
     }
 
     @Test
@@ -47,6 +49,8 @@ class RemoteAccessTest {
         val viewModel = MainViewModel()
         val stats = viewModel.uiState.value.remoteTunnelStats
         assertNotNull(stats)
-        assertTrue(stats.pairingCode.isNotEmpty())
+        // Prima dell'inizializzazione il codice stanza resta vuoto finché non viene letto dal disco.
+        assertEquals(RemoteConnectionStatus.DISABLED, stats.status)
+        assertTrue(stats.pairingCode.isEmpty())
     }
 }

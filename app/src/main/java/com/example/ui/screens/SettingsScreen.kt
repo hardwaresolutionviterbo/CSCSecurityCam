@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
@@ -51,12 +52,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.Screen
+import com.example.remote.RemoteConfigStore
 import com.example.ui.components.CscBottomNav
+import com.example.ui.components.RemoteViewerDialog
 import com.example.ui.theme.CscBackground
 import com.example.ui.theme.CscGlassBorder
 import com.example.ui.theme.CscGlassCard
@@ -94,6 +98,7 @@ fun SettingsScreen(
     var showSensitivityDialog by remember { mutableStateOf(false) }
     var showInfoDialog by remember { mutableStateOf(false) }
     var showRemoteDialog by remember { mutableStateOf(false) }
+    var showRemoteViewer by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -423,6 +428,9 @@ fun SettingsScreen(
     // WebRTC Remote Access Configuration Dialog
     if (showRemoteDialog) {
         val stats = state.remoteTunnelStats
+        val settingsContext = LocalContext.current
+        val remoteStore = remember { RemoteConfigStore(settingsContext) }
+        var remoteConfig by remember { mutableStateOf(remoteStore.load()) }
         AlertDialog(
             onDismissRequest = { showRemoteDialog = false },
             containerColor = CscPanelBlue,
@@ -447,6 +455,44 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
 
+                    OutlinedTextField(
+                        value = remoteConfig.signalingUrl,
+                        onValueChange = { remoteConfig = remoteConfig.copy(signalingUrl = it) },
+                        label = { Text("Server di signaling (wss://...)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = remoteConfig.roomCode,
+                        onValueChange = { remoteConfig = remoteConfig.copy(roomCode = it) },
+                        label = { Text("Codice stanza") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = remoteConfig.turnUrl,
+                        onValueChange = { remoteConfig = remoteConfig.copy(turnUrl = it) },
+                        label = { Text("TURN (turn:host:3478)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = remoteConfig.turnUsername,
+                            onValueChange = { remoteConfig = remoteConfig.copy(turnUsername = it) },
+                            label = { Text("Utente TURN") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = remoteConfig.turnPassword,
+                            onValueChange = { remoteConfig = remoteConfig.copy(turnPassword = it) },
+                            label = { Text("Password TURN") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
                     RemoteInfoRow(label = "Stato Servizio", value = if (state.settings.remoteAccessWebRtc) "Attivo (Online)" else "Disattivato")
                     RemoteInfoRow(label = "Attraversamento NAT", value = stats.natType)
                     RemoteInfoRow(label = "IP Pubblico Rilevato", value = stats.publicIp ?: "In attesa STUN...")
@@ -458,11 +504,28 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showRemoteDialog = false }) {
-                    Text("Chiudi", color = CscOrange)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
+                        remoteConfig = remoteStore.save(remoteConfig)
+                        showRemoteViewer = true
+                    }) {
+                        Text("Guarda", color = CscOrange)
+                    }
+                    TextButton(onClick = {
+                        remoteConfig = remoteStore.save(remoteConfig)
+                    }) {
+                        Text("Salva", color = CscOrange)
+                    }
+                    TextButton(onClick = { showRemoteDialog = false }) {
+                        Text("Chiudi", color = CscOrange)
+                    }
                 }
             }
         )
+    }
+
+    if (showRemoteViewer) {
+        RemoteViewerDialog(onDismiss = { showRemoteViewer = false })
     }
 }
 

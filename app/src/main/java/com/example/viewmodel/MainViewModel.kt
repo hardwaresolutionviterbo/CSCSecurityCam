@@ -180,6 +180,16 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         CameraStreamingService.clipSink = { clip -> handleClipFinalized(clip) }
         appContext = context.applicationContext
 
+        // Comandi che arrivano fuori casa sul data channel WebRTC: stessa logica del LAN.
+        com.example.remote.RemotePublishHub.controlSink = { command, value ->
+            when (command) {
+                "torch" -> onTorchCommand(value == "1" || value == "true")
+                "record" -> onRecordCommand(value == "start")
+                "quality" -> setStreamQuality(value)
+                "lens" -> onSwitchLensCommand()
+            }
+        }
+
         // Il server risponde a /status anche prima di avviare lo streaming: senza questo il QR
         // della telecamera non era interrogabile e l'accoppiamento falliva sempre.
         StreamingHub.server.start()

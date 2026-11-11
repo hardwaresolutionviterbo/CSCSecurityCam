@@ -1,0 +1,16 @@
+{
+  "name": "csc-securitycam-signaling",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Relay di signaling WebSocket per CSCSecurityCam",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -290,6 +290,15 @@ class CameraStreamingService : Service(), LifecycleOwner {
                 imageAnalysis.setAnalyzer(
                     analysisExecutor,
                     CameraStreamAnalyzer(
+                        onYuvFrame = { yuv, width, height, rotation ->
+                            // Stessi fotogrammi per LAN e WebRTC: nessun doppio accesso alla camera.
+                            com.example.remote.RemotePublishHub.pushFrame(
+                                yuv,
+                                width,
+                                height,
+                                rotation
+                            )
+                        },
                         onFrameEncoded = { bytes ->
                             latestFrame = bytes
                             frameSink?.invoke(bytes)

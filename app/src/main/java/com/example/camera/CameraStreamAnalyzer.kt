@@ -13,7 +13,9 @@ class CameraStreamAnalyzer(
     private val onFrameEncoded: (ByteArray) -> Unit,
     private val motionDetector: MotionDetector? = null,
     private val onMotionResult: ((MotionResult) -> Unit)? = null,
-    private val jpegQuality: Int = 75
+    private val jpegQuality: Int = 75,
+    /** Fotogramma NV21 per WebRTC: evita di decodificare il JPEG appena prodotto. */
+    private val onYuvFrame: ((ByteArray, Int, Int, Int) -> Unit)? = null
 ) : ImageAnalysis.Analyzer {
 
     private var lastAnalysisTimestamp = 0L
@@ -41,6 +43,12 @@ class CameraStreamAnalyzer(
             }
 
             val nv21 = yuv420ToNv21(image)
+            onYuvFrame?.invoke(
+                nv21,
+                image.width,
+                image.height,
+                image.imageInfo.rotationDegrees
+            )
             val yuvImage = YuvImage(
                 nv21,
                 ImageFormat.NV21,
