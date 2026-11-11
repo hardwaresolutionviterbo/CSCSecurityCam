@@ -259,14 +259,48 @@ fun PlaybackScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
+                        .weight(1f)
+                        .padding(vertical = 18.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(CscGlassCard.copy(alpha = 0.42f))
+                        .border(1.dp, CscGlassBorder.copy(alpha = 0.85f), RoundedCornerShape(24.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Nessuna registrazione in questa categoria",
-                        color = CscTextMuted,
-                        fontSize = 14.sp
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(76.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x22FF6A00))
+                                .border(1.dp, CscOrange.copy(alpha = 0.45f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayCircle,
+                                contentDescription = null,
+                                tint = CscOrange,
+                                modifier = Modifier.size(38.dp)
+                            )
+                        }
+                        Text(
+                            text = "Nessuna registrazione in questa categoria",
+                            color = CscTitleWhite,
+                            fontSize = 14.sp,
+                            fontFamily = MontserratFontFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "Le registrazioni salvate appariranno qui",
+                            color = CscTextMuted,
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
