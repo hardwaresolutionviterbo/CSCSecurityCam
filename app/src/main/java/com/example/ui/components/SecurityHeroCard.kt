@@ -163,17 +163,5 @@ fun SecurityHeroCard(
                 overflow = TextOverflow.Ellipsis
             )
         }
- {
-            Box(Modifier.size(5.dp).clip(CircleShape).background(Color(0xFF36D982)))
-            Spacer(Modifier.size(6.dp))
-            Text(
-                "IMMAGINE PROMOZIONALE",
-                color = Color.White,
-                fontSize = 6.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.35.sp,
-                maxLines = 1
-            )
-        }
     }
 }
