@@ -38,6 +38,9 @@ interface RemoteControlListener {
 
     /** Il centro di controllo chiede una qualità di flusso; solo la telecamera la applica. */
     fun onQualityCommand(quality: String) {}
+
+    /** Il centro di controllo chiede di avviare o fermare una clip sulla telecamera. */
+    fun onRecordCommand(start: Boolean) {}
 }
 
 class LanStreamingServer(
@@ -312,6 +315,10 @@ class LanStreamingServer(
             }
             "quality" -> {
                 remoteControlListener?.onQualityCommand(params["val"] ?: "Auto")
+            }
+            "record" -> {
+                val value = params["val"]?.lowercase()
+                remoteControlListener?.onRecordCommand(value != "0" && value != "stop")
             }
         }
     }

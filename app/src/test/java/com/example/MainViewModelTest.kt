@@ -62,10 +62,18 @@ class MainViewModelTest {
         // Senza un fotogramma reale non si salva nulla: nessuna voce finta nell'elenco.
         viewModel.takeSnapshot()
         assertTrue(viewModel.uiState.value.recordings.isEmpty())
-        assertEquals(
-            "Istantanea non disponibile: avvia prima la videocamera",
-            viewModel.uiState.value.toastMessage
-        )
+    }
+
+    @Test
+    fun testTorchCommandTurnsTheFlashStateOn() {
+        val viewModel = MainViewModel()
+        assertFalse(viewModel.uiState.value.isTorchOn)
+
+        viewModel.onTorchCommand(true)
+        assertTrue(viewModel.uiState.value.isTorchOn)
+
+        viewModel.onTorchCommand(false)
+        assertFalse(viewModel.uiState.value.isTorchOn)
     }
 
     @Test

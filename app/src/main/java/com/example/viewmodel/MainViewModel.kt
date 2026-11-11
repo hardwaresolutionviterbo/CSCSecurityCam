@@ -29,6 +29,7 @@ import com.example.media.MediaStoreStorage
 import com.example.media.StreamQuality
 import com.example.service.ClipResult
 import com.example.pairing.CameraProbe
+import com.example.pairing.LocalAddress
 import com.example.pairing.PairingPayload
 import com.example.pairing.ProbeResult
 import kotlinx.coroutines.async
@@ -179,6 +180,10 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         CameraStreamingService.clipSink = { clip -> handleClipFinalized(clip) }
         appContext = context.applicationContext
 
+        // Il server risponde a /status anche prima di avviare lo streaming: senza questo il QR
+        // della telecamera non era interrogabile e l'accoppiamento falliva sempre.
+        StreamingHub.server.start()
+
         // I dispositivi esistono solo se sono stati accoppiati e salvati su Room.
         if (deviceRepository == null) {
             val repository = DeviceRepository(AppDatabase.getInstance(context).deviceDao())
@@ -319,20 +324,34 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         }
     }
 
+    /** Comando ricevuto dalla telecamera: il flash va acceso davvero, non solo nello stato. */
     override fun onTorchCommand(enabled: Boolean) {
-        _uiState.update { it.copy(isTorchOn = enabled) }
+        _uiState.update { it.copy(isTorchOn = enabled && it.isBackCamera) }
+        CameraStreamingService.applyTorch(enabled)
     }
 
     override fun onSwitchLensCommand() {
-        toggleLens()
+        val useBack = !_uiState.value.isBackCamera
+        _uiState.update { it.copy(isBackCamera = useBack, isTorchOn = false) }
+        CameraStreamingService.applyLens(useBack)
+        CameraStreamingService.applyTorch(false)
     }
 
     override fun onZoomCommand(ratio: Float) {
         setZoom(ratio)
+        CameraStreamingService.applyZoom(ratio)
     }
 
     override fun onTriggerSnapshotCommand() {
         takeSnapshot()
+    }
+
+    override fun onRecordCommand(start: Boolean) {
+        if (start) {
+            startRealRecording(isMotionTriggered = false)
+        } else {
+            stopMotionRecording(isMotionTriggered = false)
+        }
     }
 
     fun handleMotionResult(context: Context, result: MotionResult) {
@@ -423,13 +442,7 @@ class MainViewModel : ViewModel(), RemoteControlListener {
             )
         }
 
-        recordingTimerJob?.cancel()
-        recordingTimerJob = viewModelScope.launch {
-            while (true) {
-                delay(1000)
-                _uiState.update { it.copy(recordingDurationSeconds = it.recordingDurationSeconds + 1) }
-            }
-        }
+        startRecordingTimer()
         return true
     }
 
@@ -485,6 +498,11 @@ class MainViewModel : ViewModel(), RemoteControlListener {
                 previousScreen = it.currentScreen,
                 currentScreen = screen
             )
+        }
+
+        if (screen == Screen.CAMERA) {
+            // L'IP può essere cambiato: il QR deve mostrare quello attuale.
+            appContext?.let { initLocalIp(it) }
         }
 
         if (screen == Screen.PLAYBACK) {
@@ -578,20 +596,16 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     fun initLocalIp(context: Context) {
         try {
             CscNotificationHelper.createChannels(context)
-            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            val ipInt = wifiManager?.connectionInfo?.ipAddress ?: 0
-            if (ipInt != 0) {
-                @Suppress("DEPRECATION")
-                val ipStr = Formatter.formatIpAddress(ipInt)
-                if (ipStr.isNotEmpty() && ipStr != "0.0.0.0") {
-                    _uiState.update {
-                        it.copy(
-                            localIpAddress = ipStr,
-                            devices = it.devices.map { d ->
-                                if (d.isLocalPhone) d.copy(ipAddress = ipStr) else d
-                            }
-                        )
-                    }
+            // WifiManager deprecato restituiva 0 e il QR usciva con ip vuoto.
+            val ipStr = LocalAddress.resolve(context)
+            if (!ipStr.isNullOrBlank()) {
+                _uiState.update {
+                    it.copy(
+                        localIpAddress = ipStr,
+                        devices = it.devices.map { d ->
+                            if (d.isLocalPhone) d.copy(ipAddress = ipStr) else d
+                        }
+                    )
                 }
             }
         } catch (e: Exception) {
@@ -644,6 +658,9 @@ class MainViewModel : ViewModel(), RemoteControlListener {
         cameraCaptureManager?.stop()
         cameraCaptureManager = null
         cameraPlaybackManager.stop()
+        // Resta in ascolto per /status: l'accoppiamento e il monitor funzionano anche a
+        // streaming fermo, senza trasmettere alcun fotogramma.
+        StreamingHub.server.start()
     }
 
     fun toggleStealthPowerSaving() {
@@ -655,9 +672,15 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     }
 
     fun toggleTorch() {
-        if (_uiState.value.isBackCamera) {
-            _uiState.update { it.copy(isTorchOn = !it.isTorchOn) }
+        if (!_uiState.value.isBackCamera) {
+            _uiState.update {
+                it.copy(toastMessage = "Il flash è disponibile solo con la fotocamera posteriore")
+            }
+            return
         }
+        val enabled = !_uiState.value.isTorchOn
+        _uiState.update { it.copy(isTorchOn = enabled) }
+        CameraStreamingService.applyTorch(enabled)
     }
 
     fun setZoom(zoom: Float) {
@@ -704,25 +727,82 @@ class MainViewModel : ViewModel(), RemoteControlListener {
     }
 
     fun toggleRecording() {
-        if (!_uiState.value.isRecording) {
-            startRealRecording(isMotionTriggered = false)
+        val state = _uiState.value
+        if (!state.isRecording) {
+            if (state.isStreamingActive) {
+                startRealRecording(isMotionTriggered = false)
+            } else if (getSelectedDevice() != null) {
+                if (state.clientStats.status != ConnectionStatus.CONNECTED) {
+                    _uiState.update {
+                        it.copy(toastMessage = "Telecamera non collegata: riconnetti prima di registrare")
+                    }
+                    return
+                }
+                // Il monitor non ha la fotocamera: la clip la registra la telecamera.
+                streamClient.sendRemoteCommand("record", "start")
+                _uiState.update {
+                    it.copy(
+                        isRecording = true,
+                        isAutoRecordingFromMotion = false,
+                        recordingDurationSeconds = 0,
+                        toastMessage = "Registrazione avviata sulla telecamera"
+                    )
+                }
+                startRecordingTimer()
+            } else {
+                _uiState.update {
+                    it.copy(toastMessage = "Avvia la videocamera prima di registrare")
+                }
+            }
+        } else if (state.isStreamingActive) {
+            stopMotionRecording(isMotionTriggered = state.isAutoRecordingFromMotion)
         } else {
-            stopMotionRecording(isMotionTriggered = _uiState.value.isAutoRecordingFromMotion)
+            streamClient.sendRemoteCommand("record", "stop")
+            recordingTimerJob?.cancel()
+            _uiState.update {
+                it.copy(
+                    isRecording = false,
+                    isAutoRecordingFromMotion = false,
+                    recordingDurationSeconds = 0,
+                    toastMessage = "Registrazione fermata: la clip è salvata sulla telecamera"
+                )
+            }
+        }
+    }
+
+    private fun startRecordingTimer() {
+        recordingTimerJob?.cancel()
+        recordingTimerJob = viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                _uiState.update { it.copy(recordingDurationSeconds = it.recordingDurationSeconds + 1) }
+            }
         }
     }
 
     fun takeSnapshot() {
-        val context = appContext
-        val jpeg = CameraStreamingService.latestFrame
-        if (context == null || jpeg == null) {
+        val context = appContext ?: return
+        val cameraJpeg = CameraStreamingService.latestFrame
+        val received = clientLiveBitmap.value
+        if (cameraJpeg == null && received == null) {
             _uiState.update {
-                it.copy(toastMessage = "Istantanea non disponibile: avvia prima la videocamera")
+                it.copy(toastMessage = "Istantanea non disponibile: avvia la videocamera o apri il monitor")
             }
             return
         }
 
-        // Il JPEG corrente viene scritto davvero su disco, poi la riga va in Room.
+        // Si salva il JPEG del servizio o, sul telefono del monitor, il fotogramma ricevuto.
         viewModelScope.launch {
+            val jpeg = cameraJpeg ?: withContext(Dispatchers.Default) {
+                java.io.ByteArrayOutputStream().use { out ->
+                    received?.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                    out.toByteArray()
+                }
+            }
+            if (jpeg.isEmpty()) {
+                _uiState.update { it.copy(toastMessage = "Istantanea non disponibile") }
+                return@launch
+            }
             val now = System.currentTimeMillis()
             val saved = MediaStoreStorage.saveSnapshot(
                 context,

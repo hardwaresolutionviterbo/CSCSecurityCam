@@ -514,6 +514,8 @@ class CameraStreamingService : Service(), LifecycleOwner {
             return
         }
         isRunning = false
+        // Senza streaming non esiste un fotogramma corrente: evita istantanee vecchie.
+        latestFrame = null
 
         serviceLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         serviceLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)

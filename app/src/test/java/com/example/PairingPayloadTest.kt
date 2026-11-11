@@ -50,6 +50,22 @@ class PairingPayloadTest {
     }
 
     @Test
+    fun `parses the qr even when extra params contain spaces and parentheses`() {
+        val link = "csc://cam?ip=192.168.1.31&port=8765&id=192.168.1.31" +
+            "&remote=1&p2p=CSC-1234-P2P&nat=Symmetric%20NAT%20(Fallback%20TURN%20Relay)"
+        val info = PairingPayload.parse(link)
+        assertEquals("192.168.1.31", info?.ip)
+        assertEquals(8765, info?.port)
+        assertEquals("192.168.1.31", info?.id)
+    }
+
+    @Test
+    fun `rejects a qr without a usable ip`() {
+        assertNull(PairingPayload.parse("csc://cam?ip=&port=8765"))
+        assertNull(PairingPayload.parse("csc://cam?port=8765"))
+    }
+
+    @Test
     fun `validates ipv4 octets`() {
         assertTrue(PairingPayload.isValidIp("192.168.0.1"))
         assertTrue(PairingPayload.isValidIp("10.0.0.255"))

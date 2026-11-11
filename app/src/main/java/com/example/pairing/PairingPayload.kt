@@ -1,6 +1,5 @@
 package com.example.pairing
 
-import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -39,42 +38,48 @@ object PairingPayload {
         }
     }
 
+    /**
+     * Lettura manuale della query, senza URI: i link generati dalla telecamera contengono anche
+     * `p2p` e `nat` con spazi e parentesi (es. "Symmetric NAT (Fallback TURN Relay)") che facevano
+     * fallire la parsers basata su java.net.URI, quindi il QR non accoppiava mai.
+     */
     fun parse(raw: String): PairingInfo? {
         val text = raw.trim()
         if (text.isEmpty()) return null
-        if (text.startsWith("csc://", ignoreCase = true)) {
-            return parseUri(text) ?: parseHostAndPort(text.substringAfter("://").substringAfter("cam"))
+        if (!text.startsWith("csc://", ignoreCase = true)) {
+            return parseHostAndPort(text)
         }
-        return parseHostAndPort(text)
+
+        val withoutScheme = text.substring("csc://".length)
+        val host = withoutScheme.substringBefore('?').substringBefore('/').trim()
+        if (!host.equals("cam", ignoreCase = true)) return null
+
+        val query = withoutScheme.substringAfter('?', "")
+        if (query.isBlank()) return null
+
+        val params = query
+            .split("&")
+            .mapNotNull { entry ->
+                val separator = entry.indexOf('=')
+                if (separator <= 0) {
+                    null
+                } else {
+                    decode(entry.substring(0, separator)) to decode(entry.substring(separator + 1))
+                }
+            }
+            .toMap()
+
+        val ip = params["ip"]?.trim() ?: return null
+        if (!isValidIp(ip)) return null
+        val port = params["port"]?.trim()?.toIntOrNull() ?: DEFAULT_PORT
+        if (!isValidPort(port)) return null
+        return PairingInfo(ip = ip, port = port, id = params["id"]?.trim()?.takeIf { it.isNotEmpty() })
     }
 
-    private fun parseUri(text: String): PairingInfo? {
-        return try {
-            val uri = URI(text)
-            if (!uri.scheme.equals("csc", ignoreCase = true)) return null
-            if (!uri.host.equals("cam", ignoreCase = true)) return null
-
-            val params = (uri.rawQuery ?: "")
-                .split("&")
-                .mapNotNull { entry ->
-                    val separator = entry.indexOf('=')
-                    if (separator <= 0) {
-                        null
-                    } else {
-                        URLDecoder.decode(entry.substring(0, separator), "UTF-8") to
-                            URLDecoder.decode(entry.substring(separator + 1), "UTF-8")
-                    }
-                }
-                .toMap()
-
-            val ip = params["ip"]?.trim() ?: return null
-            if (!isValidIp(ip)) return null
-            val port = params["port"]?.toIntOrNull() ?: DEFAULT_PORT
-            if (!isValidPort(port)) return null
-            PairingInfo(ip = ip, port = port, id = params["id"]?.trim()?.takeIf { it.isNotEmpty() })
-        } catch (e: Exception) {
-            null
-        }
+    private fun decode(value: String): String = try {
+        URLDecoder.decode(value, "UTF-8")
+    } catch (e: Exception) {
+        value
     }
 
     private fun parseHostAndPort(text: String): PairingInfo? {

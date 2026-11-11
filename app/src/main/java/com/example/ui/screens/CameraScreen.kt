@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.camera.CameraXPreview
+import com.example.pairing.PairingPayload
 import com.example.ui.components.QrCodeView
 import com.example.ui.theme.CscBackground
 import com.example.ui.theme.CscGlassBorder
@@ -87,6 +88,7 @@ import com.example.ui.theme.CscPanelBlue
 import com.example.ui.theme.CscSubtitleGray
 import com.example.ui.theme.CscTitleWhite
 import com.example.viewmodel.MainUiState
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -471,19 +473,55 @@ fun CameraScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     // L'id deriva dall'indirizzo del telefono videocamera: due telefoni diversi
-                    // restano dispositivi distinti quando vengono accoppiati.
-                    val qrData = if (state.settings.remoteAccessWebRtc) {
-                        "csc://cam?ip=${state.localIpAddress}&port=${state.streamingPort}&id=${state.localIpAddress}&remote=1&p2p=${state.remoteTunnelStats.pairingCode}&nat=${state.remoteTunnelStats.natType}"
+                    // restano dispositivi distinti quando vengono accoppiati. I parametri extra
+                    // sono codificati, altrimenti spazi e parentesi rendevano il QR illeggibile.
+                    val qrData = if (state.localIpAddress.isBlank()) {
+                        null
                     } else {
-                        "csc://cam?ip=${state.localIpAddress}&port=${state.streamingPort}&id=${state.localIpAddress}"
+                        buildString {
+                            append(
+                                PairingPayload.build(
+                                    state.localIpAddress,
+                                    state.streamingPort,
+                                    state.localIpAddress
+                                )
+                            )
+                            if (state.settings.remoteAccessWebRtc) {
+                                append("&remote=1&p2p=")
+                                append(URLEncoder.encode(state.remoteTunnelStats.pairingCode, "UTF-8"))
+                                append("&nat=")
+                                append(URLEncoder.encode(state.remoteTunnelStats.natType, "UTF-8"))
+                            }
+                        }
                     }
-                    QrCodeView(
-                        data = qrData,
-                        modifier = Modifier.fillMaxSize(),
-                        backgroundColor = Color.White,
-                        codeColor = Color(0xFF0A0F1C),
-                        cornerColor = Color.Transparent
-                    )
+                    if (qrData == null) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "IP non rilevato",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CscTitleWhite
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Collega il telefono al Wi-Fi, poi riapri questa schermata per generare il QR.",
+                                fontSize = 11.sp,
+                                color = CscSubtitleGray,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        QrCodeView(
+                            data = qrData,
+                            modifier = Modifier.fillMaxSize(),
+                            backgroundColor = Color.White,
+                            codeColor = Color(0xFF0A0F1C),
+                            cornerColor = Color.Transparent
+                        )
+                    }
 
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val stroke = 3.dp.toPx()

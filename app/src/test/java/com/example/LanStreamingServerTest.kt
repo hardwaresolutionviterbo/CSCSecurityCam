@@ -20,6 +20,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
+import java.net.ServerSocket
 import java.net.Socket
 import java.net.URL
 
@@ -34,11 +35,13 @@ class LanStreamingServerTest {
 
     private lateinit var scope: CoroutineScope
     private lateinit var server: LanStreamingServer
+    private var port: Int = 0
 
     @Before
     fun setUp() {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        server = LanStreamingServer(port = PORT, scope = scope)
+        port = freeTcpPort()
+        server = LanStreamingServer(port = port, scope = scope)
         server.start()
         val deadline = System.currentTimeMillis() + 5_000
         while (!server.stats.value.isRunning && System.currentTimeMillis() < deadline) {
@@ -99,6 +102,26 @@ class LanStreamingServerTest {
     }
 
     @Test
+    fun `record command starts and stops a clip on the camera`() {
+        var lastStart: Boolean? = null
+        server.remoteControlListener = object : RemoteControlListener {
+            override fun onTorchCommand(enabled: Boolean) = Unit
+            override fun onSwitchLensCommand() = Unit
+            override fun onZoomCommand(ratio: Float) = Unit
+            override fun onTriggerSnapshotCommand() = Unit
+            override fun onRecordCommand(start: Boolean) {
+                lastStart = start
+            }
+        }
+
+        httpGet("/control?action=record&val=start")
+        assertEquals(true, lastStart)
+
+        httpGet("/control?action=record&val=stop")
+        assertEquals(false, lastStart)
+    }
+
+    @Test
     fun `live mjpg streams multipart frames`() {
         val jpeg = testJpegFrame()
         // Come sull'app: i fotogrammi continuano ad arrivare mentre il monitor legge il flusso.
@@ -112,7 +135,7 @@ class LanStreamingServerTest {
         streaming.isDaemon = true
         streaming.start()
 
-        val connection = (URL("http://127.0.0.1:$PORT/live.mjpg").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("http://127.0.0.1:$port/live.mjpg").openConnection() as HttpURLConnection).apply {
             connectTimeout = 3_000
             readTimeout = 5_000
             requestMethod = "GET"
@@ -155,7 +178,7 @@ class LanStreamingServerTest {
     fun `monitor client connects to the server and receives frames`() {
         val client = LanStreamClient(scope)
         try {
-            client.connect("127.0.0.1", PORT)
+            client.connect("127.0.0.1", port)
             val deadline = System.currentTimeMillis() + 8_000
             while (System.currentTimeMillis() < deadline && client.streamStats.value.status != ConnectionStatus.CONNECTED) {
                 Thread.sleep(50)
@@ -202,7 +225,7 @@ class LanStreamingServerTest {
         val stalled = openStalledLiveClient()
         val client = LanStreamClient(scope)
         try {
-            client.connect("127.0.0.1", PORT)
+            client.connect("127.0.0.1", port)
             val deadline = System.currentTimeMillis() + 8_000
             while (System.currentTimeMillis() < deadline && client.streamStats.value.status != ConnectionStatus.CONNECTED) {
                 Thread.sleep(50)
@@ -224,7 +247,7 @@ class LanStreamingServerTest {
 
     /** Apre /live.mjpg senza leggere la risposta: il suo buffer si riempie e non drena piu. */
     private fun openStalledLiveClient(): Socket {
-        val socket = Socket("127.0.0.1", PORT)
+        val socket = Socket("127.0.0.1", port)
         socket.receiveBufferSize = 1_024
         socket.getOutputStream().write("GET /live.mjpg HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".toByteArray())
         socket.getOutputStream().flush()
@@ -257,7 +280,7 @@ class LanStreamingServerTest {
     }
 
     private fun httpGetBytes(path: String): Pair<Int, ByteArray> {
-        val connection = (URL("http://127.0.0.1:$PORT$path").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("http://127.0.0.1:$port$path").openConnection() as HttpURLConnection).apply {
             connectTimeout = 3_000
             readTimeout = 5_000
             requestMethod = "GET"
@@ -272,7 +295,6 @@ class LanStreamingServerTest {
         }
     }
 
-    private companion object {
-        const val PORT = 8765
-    }
+    /** Porta libera: la suite non deve scontrarsi con il server globale dell'app. */
+    private fun freeTcpPort(): Int = ServerSocket(0).use { it.localPort }
 }
