@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,6 +67,8 @@ import com.example.ui.theme.CscTextMuted
 import com.example.ui.theme.CscTitleWhite
 import com.example.ui.theme.MontserratFontFamily
 import com.example.viewmodel.MainUiState
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 
 @Composable
 fun DevicesScreen(
@@ -78,6 +81,14 @@ fun DevicesScreen(
 ) {
     BackHandler { onBack() }
     var showPairDialog by remember { mutableStateOf(false) }
+    var selectedFilter by remember { mutableStateOf("Tutti") }
+    val onlineCount = state.devices.count { it.isOnline }
+    val offlineCount = state.devices.size - onlineCount
+    val filteredDevices = when (selectedFilter) {
+        "Online" -> state.devices.filter { it.isOnline }
+        "Offline" -> state.devices.filterNot { it.isOnline }
+        else -> state.devices
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -132,7 +143,11 @@ fun DevicesScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = "VIDEOCAMERE COLLEGATE (${state.devices.size})",
@@ -144,6 +159,34 @@ fun DevicesScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(listOf("Tutti", "Online", "Offline")) { filter ->
+                    val count = when (filter) {
+                        "Online" -> onlineCount
+                        "Offline" -> offlineCount
+                        else -> state.devices.size
+                    }
+                    val selected = selectedFilter == filter
+                    Row(
+                        modifier = Modifier.clip(RoundedCornerShape(22.dp))
+                            .background(if (selected) CscOrange else CscGlassCard)
+                            .border(1.dp, if (selected) CscOrange else CscGlassBorder, RoundedCornerShape(22.dp))
+                            .clickable { selectedFilter = filter }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(filter, color = if (selected) Color.White else CscIceWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(6.dp))
+                        Text(count.toString(), color = if (selected) Color.White else CscSubtitleGray, fontSize = 10.sp)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -152,15 +195,28 @@ fun DevicesScreen(
                     item(key = "empty_devices") {
                         EmptyDevicesCard(onPair = { showPairDialog = true })
                     }
+                } else if (filteredDevices.isEmpty()) {
+                    item(key = "empty_filter") {
+                        Text(
+                            "Nessuna telecamera " + selectedFilter.lowercase(),
+                            color = CscSubtitleGray,
+                            fontSize = 13.sp,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 30.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
-                items(state.devices, key = { it.id }) { device ->
+                items(filteredDevices, key = { it.id }) { device ->
                     DeviceCard(
                         device = device,
                         isSelected = state.selectedDeviceId == device.id,
                         onClick = {
                             onSelectDevice(device.id)
                             onNavigate(Screen.MONITOR)
-                        }
+                        },
+                        thumbnailUri = state.recordings
+                            .filter { it.isSnapshot && it.uri.isNotBlank() && it.cameraName.equals(device.name, ignoreCase = true) }
+                            .maxByOrNull { it.createdAtMillis }?.uri
                     )
                 }
             }
@@ -227,7 +283,8 @@ private fun EmptyDevicesCard(onPair: () -> Unit) {
 fun DeviceCard(
     device: CameraDevice,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    thumbnailUri: String? = null
 ) {
     Row(
         modifier = Modifier
@@ -260,12 +317,21 @@ fun DeviceCard(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = if (device.type == DeviceType.SMARTPHONE) Icons.Default.Smartphone else Icons.Default.Videocam,
-                    contentDescription = null,
-                    tint = if (isSelected) CscOrange else CscIceWhite,
-                    modifier = Modifier.size(26.dp)
-                )
+                if (!thumbnailUri.isNullOrBlank()) {
+                    AsyncImage(
+                        model = thumbnailUri,
+                        contentDescription = "Ultima istantanea di ${device.name}",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        imageVector = if (device.type == DeviceType.SMARTPHONE) Icons.Default.Smartphone else Icons.Default.Videocam,
+                        contentDescription = null,
+                        tint = if (isSelected) CscOrange else CscIceWhite,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(14.dp))

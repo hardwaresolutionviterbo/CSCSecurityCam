@@ -145,7 +145,11 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Area personale: foto, account e stato dell'abbonamento.
             Row(

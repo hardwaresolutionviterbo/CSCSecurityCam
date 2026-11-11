@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,14 +54,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.R
 import com.example.media.MediaFormat
 import com.example.model.RecordingItem
 import com.example.model.Screen
@@ -155,7 +154,11 @@ fun PlaybackScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Storage Overview Card - Glassmorphism
             Box(
@@ -257,14 +260,48 @@ fun PlaybackScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
+                        .weight(1f)
+                        .padding(vertical = 18.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(CscGlassCard.copy(alpha = 0.42f))
+                        .border(1.dp, CscGlassBorder.copy(alpha = 0.85f), RoundedCornerShape(24.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Nessuna registrazione in questa categoria",
-                        color = CscTextMuted,
-                        fontSize = 14.sp
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(76.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x22FF6A00))
+                                .border(1.dp, CscOrange.copy(alpha = 0.45f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayCircle,
+                                contentDescription = null,
+                                tint = CscOrange,
+                                modifier = Modifier.size(38.dp)
+                            )
+                        }
+                        Text(
+                            text = "Nessuna registrazione in questa categoria",
+                            color = CscTitleWhite,
+                            fontSize = 14.sp,
+                            fontFamily = MontserratFontFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "Le registrazioni salvate appariranno qui",
+                            color = CscTextMuted,
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
@@ -316,12 +353,16 @@ fun PlaybackScreen(
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_csc_logo),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
+                            Column(
                                 modifier = Modifier.fillMaxSize()
-                            )
+                                    .background(Brush.linearGradient(listOf(Color(0xFF182A43), Color(0xFF0B1424)))),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(Icons.Default.Videocam, contentDescription = null, tint = CscSubtitleGray, modifier = Modifier.size(34.dp))
+                                Spacer(Modifier.height(6.dp))
+                                Text("ANTEPRIMA VIDEO", color = CscSubtitleGray, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            }
                         }
                         Box(
                             modifier = Modifier
@@ -400,12 +441,15 @@ fun RecordingCard(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_csc_logo),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                Column(
                     modifier = Modifier.fillMaxSize()
-                )
+                        .background(Brush.linearGradient(listOf(Color(0xFF182A43), Color(0xFF0B1424)))),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.Videocam, contentDescription = null, tint = CscSubtitleGray, modifier = Modifier.size(24.dp))
+                    Text("VIDEO", color = CscSubtitleGray, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                }
             }
             Box(
                 modifier = Modifier

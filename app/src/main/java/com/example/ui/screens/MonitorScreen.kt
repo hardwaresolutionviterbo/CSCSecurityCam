@@ -69,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
@@ -76,13 +77,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
 import com.example.engine.ClientStreamStats
 import com.example.engine.ConnectionStatus
 import com.example.media.StreamQuality
@@ -103,6 +102,7 @@ import com.example.ui.theme.CscOrange
 import com.example.ui.theme.CscOrangeGlow
 import com.example.ui.theme.CscPanelBlue
 import com.example.ui.theme.CscSteel
+import com.example.ui.theme.CscSubtitleGray
 import com.example.ui.theme.CscTextMuted
 import com.example.viewmodel.MainUiState
 
@@ -386,38 +386,76 @@ fun MonitorScreen(
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center,
-                                    modifier = Modifier.padding(16.dp)
+                                    modifier = Modifier.padding(18.dp)
                                 ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(62.dp)
+                                            .clip(CircleShape)
+                                            .background(Brush.radialGradient(listOf(CscOrange.copy(alpha = 0.24f), CscPanelBlue)))
+                                            .border(1.dp, CscOrange.copy(alpha = 0.5f), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Videocam,
+                                            contentDescription = null,
+                                            tint = CscOrange,
+                                            modifier = Modifier.size(30.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
                                     Text(
                                         text = "Nessuna telecamera",
                                         color = CscIceWhite,
-                                        fontSize = 14.sp,
+                                        fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
                                     Text(
                                         text = "Accoppia una telecamera scansionando il suo QR o inserendo IP e porta.",
                                         color = CscTextMuted,
                                         fontSize = 11.sp,
                                         textAlign = TextAlign.Center
                                     )
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Spacer(modifier = Modifier.height(14.dp))
                                     Button(
                                         onClick = { showPairDialog = true },
-                                        colors = ButtonDefaults.buttonColors(containerColor = CscOrange),
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.testTag("monitor_pair_camera_btn")
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CscOrange,
+                                            contentColor = Color.White
+                                        ),
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier
+                                            .shadow(10.dp, RoundedCornerShape(14.dp), spotColor = CscOrange.copy(alpha = 0.4f))
+                                            .testTag("monitor_pair_camera_btn")
                                     ) {
-                                        Text("Accoppia telecamera", color = Color.White, fontSize = 12.sp)
+                                        Text("Accoppia telecamera", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             } else {
-                                Image(
-                                    painter = painterResource(id = R.drawable.ic_csc_logo),
-                                    contentDescription = "Live Security Stream Feed",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Videocam,
+                                        contentDescription = null,
+                                        tint = CscSubtitleGray,
+                                        modifier = Modifier.size(34.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Anteprima non disponibile",
+                                        color = CscIceWhite,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Avvia lo streaming sulla telecamera",
+                                        color = CscTextMuted,
+                                        fontSize = 10.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -997,7 +1035,24 @@ private fun MonitorTile(
                     }
                 }
 
-                else -> CircularProgressIndicator(color = CscOrange, modifier = Modifier.size(22.dp))
+                status == ConnectionStatus.CONNECTING || status == ConnectionStatus.RECONNECTING -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(color = CscOrange, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Connessione...", color = CscTextMuted, fontSize = 10.sp)
+                }
+
+                else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.Videocam,
+                        contentDescription = null,
+                        tint = CscSubtitleGray,
+                        modifier = Modifier.size(23.dp)
+                    )
+                    Spacer(modifier = Modifier.height(5.dp))
+                    Text("Nessun flusso video", color = CscTextMuted, fontSize = 10.sp)
+                }
             }
 
             Row(

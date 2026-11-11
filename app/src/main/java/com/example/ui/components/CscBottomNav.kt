@@ -1,11 +1,14 @@
 package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -108,7 +112,8 @@ fun CscBottomNav(
                     ),
                     shape = RoundedCornerShape(32.dp)
                 )
-                .padding(horizontal = 8.dp, vertical = 8.dp)            ) {
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+            ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
@@ -116,6 +121,13 @@ fun CscBottomNav(
             ) {
                 items.forEach { item ->
                     val isSelected = currentScreen == item.screen
+                    val itemInteraction = remember(item.screen) { MutableInteractionSource() }
+                    val isPressed by itemInteraction.collectIsPressedAsState()
+                    val pressScale by animateFloatAsState(
+                        targetValue = if (isPressed) 0.88f else 1f,
+                        animationSpec = spring(dampingRatio = 0.52f, stiffness = 650f),
+                        label = "navPress"
+                    )
 
                     val iconTint by animateColorAsState(
                         targetValue = if (isSelected) CscOrange else CscSubtitleGray,
@@ -127,9 +139,12 @@ fun CscBottomNav(
                         modifier = Modifier
                             .weight(1f)
                             .testTag(item.testTag)
+                            .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
                             .clip(RoundedCornerShape(20.dp))
+                            .background(if (isSelected) Color(0x24FF6A00) else Color.Transparent, RoundedCornerShape(20.dp))
+                            .border(if (isSelected) 1.dp else 0.dp, if (isSelected) CscOrange.copy(alpha = 0.28f) else Color.Transparent, RoundedCornerShape(20.dp))
                             .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
+                                interactionSource = itemInteraction,
                                 indication = ripple(bounded = true, color = CscOrange.copy(alpha = 0.25f))
                             ) { onNavigate(item.screen) }
                             .padding(horizontal = 2.dp, vertical = 4.dp),
@@ -139,7 +154,7 @@ fun CscBottomNav(
                         // Icon Box with Neon Glow when selected
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(36.dp)
                                 .then(
                                     if (isSelected) {
                                         Modifier
@@ -160,7 +175,7 @@ fun CscBottomNav(
                                 imageVector = item.icon,
                                 contentDescription = item.title,
                                 tint = iconTint,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(if (isSelected) 24.dp else 22.dp)
                             )
                         }
 

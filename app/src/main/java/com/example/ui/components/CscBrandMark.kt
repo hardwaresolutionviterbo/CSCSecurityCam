@@ -78,7 +78,7 @@ fun CscBrandMark(
                     )
                 )
                 .border(width = 2.dp, color = CscOrange, shape = shape)
-                .padding(size * 0.07f),
+                .padding(size * 0.035f),
             contentAlignment = Alignment.Center
         ) {
             Image(
