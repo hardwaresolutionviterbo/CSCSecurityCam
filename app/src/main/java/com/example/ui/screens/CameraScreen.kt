@@ -348,7 +348,7 @@ fun CameraScreen(
                             .align(Alignment.TopStart)
                             .padding(12.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(CscLiveRed)
+                            .background(if (state.isStreamingActive) CscLiveRed else CscSteel)
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -361,7 +361,7 @@ fun CameraScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "LIVE",
+                            text = if (state.isStreamingActive) "LIVE" else "ANTEPRIMA",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
