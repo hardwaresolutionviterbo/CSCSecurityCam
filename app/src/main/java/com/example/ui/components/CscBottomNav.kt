@@ -72,9 +72,9 @@ fun CscBottomNav(
     val items = listOf(
         NavItem(Screen.HOME, "Home", Icons.Default.Home, "nav_home"),
         NavItem(Screen.CAMERA, "Camera", Icons.Default.Videocam, "nav_camera"),
-        NavItem(Screen.MONITOR, "Monitor", Icons.Default.Tv, "nav_monitor"),
-        NavItem(Screen.PLAYBACK, "Playback", Icons.Default.PlayCircle, "nav_playback"),
-        NavItem(Screen.SETTINGS, "Setup", Icons.Default.Settings, "nav_setup")
+        NavItem(Screen.MONITOR, "Live", Icons.Default.Tv, "nav_monitor"),
+        NavItem(Screen.PLAYBACK, "Archivio", Icons.Default.PlayCircle, "nav_playback"),
+        NavItem(Screen.SETTINGS, "Impost.", Icons.Default.Settings, "nav_setup")
     )
 
     // Floating Glassmorphism Pill Container
@@ -112,7 +112,8 @@ fun CscBottomNav(
                     ),
                     shape = RoundedCornerShape(32.dp)
                 )
-                .padding(horizontal = 8.dp, vertical = 8.dp)            ) {
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+            ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
