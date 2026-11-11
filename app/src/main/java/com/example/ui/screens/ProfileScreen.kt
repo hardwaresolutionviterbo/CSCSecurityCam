@@ -32,6 +32,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -269,6 +272,39 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(CscGlassCard)
+                    .border(1.dp, CscGlassBorder, RoundedCornerShape(18.dp))
+            ) {
+                ProfileNavigationRow(
+                    title = "I miei dispositivi",
+                    subtitle = "Gestisci le telecamere collegate",
+                    icon = Icons.Default.GridView,
+                    onClick = { onNavigate(Screen.DEVICES) }
+                )
+                Box(Modifier.fillMaxWidth().padding(start = 54.dp, end = 14.dp).height(1.dp).background(CscGlassBorder.copy(alpha = 0.55f)))
+                ProfileNavigationRow(
+                    title = "Preferenze e tema",
+                    subtitle = "Impostazioni di sicurezza e notifiche",
+                    icon = Icons.Default.Settings,
+                    onClick = { onNavigate(Screen.SETTINGS) }
+                )
+                Box(Modifier.fillMaxWidth().padding(start = 54.dp, end = 14.dp).height(1.dp).background(CscGlassBorder.copy(alpha = 0.55f)))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Language, contentDescription = null, tint = CscOrange, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Lingua", color = CscIceWhite, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text("Italiano", color = CscSecondaryText, fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             if (profile.isLoggedIn) {
                 Row(
                     modifier = Modifier
@@ -385,5 +421,29 @@ private fun Avatar(profile: UserProfile, onClick: () -> Unit) {
                 modifier = Modifier.size(14.dp)
             )
         }
+    }
+}
+
+
+@Composable
+private fun ProfileNavigationRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 15.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = CscOrange, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = CscIceWhite, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = CscSecondaryText, fontSize = 10.sp)
+        }
+        Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = CscSecondaryText, modifier = Modifier.size(13.dp))
     }
 }
