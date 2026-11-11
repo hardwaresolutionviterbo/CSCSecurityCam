@@ -67,6 +67,8 @@ import com.example.ui.theme.CscTextMuted
 import com.example.ui.theme.CscTitleWhite
 import com.example.ui.theme.MontserratFontFamily
 import com.example.viewmodel.MainUiState
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 
 @Composable
 fun DevicesScreen(
@@ -211,7 +213,10 @@ fun DevicesScreen(
                         onClick = {
                             onSelectDevice(device.id)
                             onNavigate(Screen.MONITOR)
-                        }
+                        },
+                        thumbnailUri = state.recordings
+                            .filter { it.isSnapshot && it.uri.isNotBlank() && it.cameraName.equals(device.name, ignoreCase = true) }
+                            .maxByOrNull { it.createdAtMillis }?.uri
                     )
                 }
             }
@@ -278,7 +283,8 @@ private fun EmptyDevicesCard(onPair: () -> Unit) {
 fun DeviceCard(
     device: CameraDevice,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    thumbnailUri: String? = null
 ) {
     Row(
         modifier = Modifier
@@ -311,12 +317,21 @@ fun DeviceCard(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = if (device.type == DeviceType.SMARTPHONE) Icons.Default.Smartphone else Icons.Default.Videocam,
-                    contentDescription = null,
-                    tint = if (isSelected) CscOrange else CscIceWhite,
-                    modifier = Modifier.size(26.dp)
-                )
+                if (!thumbnailUri.isNullOrBlank()) {
+                    AsyncImage(
+                        model = thumbnailUri,
+                        contentDescription = "Ultima istantanea di ${device.name}",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        imageVector = if (device.type == DeviceType.SMARTPHONE) Icons.Default.Smartphone else Icons.Default.Videocam,
+                        contentDescription = null,
+                        tint = if (isSelected) CscOrange else CscIceWhite,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(14.dp))
