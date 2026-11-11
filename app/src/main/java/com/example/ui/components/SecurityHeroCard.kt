@@ -117,10 +117,10 @@ fun SecurityHeroCard(
                 }
                 Spacer(Modifier.size(8.dp))
                 Text(
-                    "CSC SMART SECURITY",
+                    "CSC SMART SECURITY  •  IMMAGINE PROMOZIONALE",
                     color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 8.sp,
-                    letterSpacing = 1.1.sp,
+                    fontSize = 6.5.sp,
+                    letterSpacing = 0.65.sp,
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
@@ -148,14 +148,7 @@ fun SecurityHeroCard(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Row(
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = 18.dp, bottom = 9.dp)
-                .clip(CircleShape)
-                .background(Color(0xCC0B1727))
-                .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+ {
             Box(Modifier.size(5.dp).clip(CircleShape).background(Color(0xFF36D982)))
             Spacer(Modifier.size(6.dp))
             Text(
