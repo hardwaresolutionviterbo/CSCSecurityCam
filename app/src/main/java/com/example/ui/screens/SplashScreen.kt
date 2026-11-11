@@ -171,18 +171,18 @@ fun SplashScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             Box(modifier = Modifier.scale(glowScale)) {
-                CscBrandMark(size = 136.dp)
+                CscBrandMark(size = 108.dp)
             }
 
-            Spacer(modifier = Modifier.height(26.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "CSC",
-                    fontSize = 32.sp,
+                    fontSize = 28.sp,
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.Bold,
                     color = CscTitleWhite,
@@ -200,7 +200,7 @@ fun SplashScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
                 text = "VIDEOSORVEGLIANZA SMART",
@@ -208,12 +208,12 @@ fun SplashScreen(
                 fontFamily = MontserratFontFamily,
                 fontWeight = FontWeight.SemiBold,
                 color = CscSubtitleGray,
-                letterSpacing = 3.sp,
+                letterSpacing = 2.5.sp,
                 textAlign = TextAlign.Center,
                 maxLines = 1
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             com.example.ui.components.SecurityHeroCard(
                 title = "La tua casa, sempre sotto controllo",
@@ -227,7 +227,7 @@ fun SplashScreen(
             Spacer(modifier = Modifier.height(14.dp))
             SplashSecondaryButton(onClick = onOpenSettings)
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(18.dp))
         }
     }
 }
@@ -240,7 +240,7 @@ private fun SplashPrimaryButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(60.dp)
             .shadow(
                 elevation = 16.dp,
                 shape = RoundedCornerShape(50.dp),
