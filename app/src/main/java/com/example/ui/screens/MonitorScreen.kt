@@ -412,12 +412,29 @@ fun MonitorScreen(
                                     }
                                 }
                             } else {
-                                Image(
-                                    painter = painterResource(id = R.drawable.ic_csc_logo),
-                                    contentDescription = "Live Security Stream Feed",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Videocam,
+                                        contentDescription = null,
+                                        tint = CscSubtitleGray,
+                                        modifier = Modifier.size(34.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Anteprima non disponibile",
+                                        color = CscIceWhite,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Avvia lo streaming sulla telecamera",
+                                        color = CscTextMuted,
+                                        fontSize = 10.sp
+                                    )
+                                }
                             }
                         }
                     }
