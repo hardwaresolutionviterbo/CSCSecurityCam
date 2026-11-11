@@ -118,7 +118,7 @@ fun SecurityHeroCard(
         Column(
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .fillMaxWidth(0.70f)
+                .fillMaxWidth(0.64f)
                 .padding(start = 18.dp, end = 4.dp),
             verticalArrangement = Arrangement.Center
         ) {
