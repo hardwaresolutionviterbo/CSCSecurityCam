@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -78,6 +79,14 @@ fun DevicesScreen(
 ) {
     BackHandler { onBack() }
     var showPairDialog by remember { mutableStateOf(false) }
+    var selectedFilter by remember { mutableStateOf("Tutti") }
+    val onlineCount = state.devices.count { it.isOnline }
+    val offlineCount = state.devices.size - onlineCount
+    val filteredDevices = when (selectedFilter) {
+        "Online" -> state.devices.filter { it.isOnline }
+        "Offline" -> state.devices.filterNot { it.isOnline }
+        else -> state.devices
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -148,6 +157,34 @@ fun DevicesScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(listOf("Tutti", "Online", "Offline")) { filter ->
+                    val count = when (filter) {
+                        "Online" -> onlineCount
+                        "Offline" -> offlineCount
+                        else -> state.devices.size
+                    }
+                    val selected = selectedFilter == filter
+                    Row(
+                        modifier = Modifier.clip(RoundedCornerShape(22.dp))
+                            .background(if (selected) CscOrange else CscGlassCard)
+                            .border(1.dp, if (selected) CscOrange else CscGlassBorder, RoundedCornerShape(22.dp))
+                            .clickable { selectedFilter = filter }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(filter, color = if (selected) Color.White else CscIceWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(6.dp))
+                        Text(count.toString(), color = if (selected) Color.White else CscSubtitleGray, fontSize = 10.sp)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -156,8 +193,18 @@ fun DevicesScreen(
                     item(key = "empty_devices") {
                         EmptyDevicesCard(onPair = { showPairDialog = true })
                     }
+                } else if (filteredDevices.isEmpty()) {
+                    item(key = "empty_filter") {
+                        Text(
+                            "Nessuna telecamera " + selectedFilter.lowercase(),
+                            color = CscSubtitleGray,
+                            fontSize = 13.sp,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 30.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
-                items(state.devices, key = { it.id }) { device ->
+                items(filteredDevices, key = { it.id }) { device ->
                     DeviceCard(
                         device = device,
                         isSelected = state.selectedDeviceId == device.id,
