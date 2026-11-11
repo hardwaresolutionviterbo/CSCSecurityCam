@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,7 +43,7 @@ import com.example.ui.theme.CscSteel
 import com.example.ui.theme.CscTitleWhite
 import com.example.ui.theme.MontserratFontFamily
 
-/** Decorative photography only: this card is never represented as a live camera stream. */
+/** Promotional photography only; never presented as a live camera feed. */
 @Composable
 fun SecurityHeroCard(
     title: String,
@@ -52,59 +53,119 @@ fun SecurityHeroCard(
 ) {
     val transition = rememberInfiniteTransition(label = "heroAmbient")
     val glow by transition.animateFloat(
-        initialValue = 0.14f, targetValue = 0.30f,
-        animationSpec = infiniteRepeatable(tween(2800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        initialValue = 0.12f,
+        targetValue = 0.26f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
         label = "heroGlow"
     )
+    val cardHeight = if (compact) 142.dp else 164.dp
     Box(
         modifier = modifier
-            .height(if (compact) 148.dp else 184.dp)
+            .height(cardHeight)
             .shadow(18.dp, RoundedCornerShape(26.dp), spotColor = CscOrange.copy(alpha = glow))
             .clip(RoundedCornerShape(26.dp))
-            .background(Color(0xFF111C30))
-            .border(1.dp, Brush.linearGradient(listOf(Color(0xFF71839D), CscOrange.copy(alpha = 0.65f), CscSteel)), RoundedCornerShape(26.dp))
+            .background(Color(0xFF101B2E))
+            .border(
+                1.dp,
+                Brush.linearGradient(listOf(Color(0xFF8291A8), CscOrange.copy(alpha = 0.75f), CscSteel)),
+                RoundedCornerShape(26.dp)
+            )
     ) {
         AsyncImage(
             model = "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&auto=format&fit=crop&q=85",
-            contentDescription = "Abitazione moderna illuminata al tramonto",
+            contentDescription = "Abitazione moderna protetta da un sistema di sicurezza",
             modifier = Modifier.fillMaxSize(),
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            contentScale = ContentScale.Crop
         )
-        Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(Color(0xE607101F), Color(0xAA17243A), Color(0x3310182A)))))
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.horizontalGradient(
+                    0f to Color(0xF0081224),
+                    0.52f to Color(0xC5101D31),
+                    1f to Color(0x3310182A)
+                )
+            )
+        )
         AsyncImage(
             model = "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=480&auto=format&fit=crop&q=80",
-            contentDescription = "Telecamera di sicurezza",
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = if (compact) 14.dp else 18.dp)
-                .size(if (compact) 82.dp else 108.dp).clip(RoundedCornerShape(22.dp))
-                .border(1.5.dp, CscOrange.copy(alpha = 0.9f), RoundedCornerShape(22.dp)),
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            contentDescription = "Telecamera di sicurezza professionale",
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = if (compact) 12.dp else 16.dp)
+                .size(if (compact) 78.dp else 94.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .border(1.5.dp, CscOrange, RoundedCornerShape(20.dp)),
+            contentScale = ContentScale.Crop
         )
         Column(
-            modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth(0.70f)
-                .padding(start = 18.dp, top = 14.dp, bottom = 14.dp),
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .fillMaxWidth(0.70f)
+                .padding(start = 18.dp, end = 4.dp),
             verticalArrangement = Arrangement.Center
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(27.dp).clip(CircleShape).background(CscOrange.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = CscOrange, modifier = Modifier.size(16.dp))
+                Box(
+                    Modifier.size(25.dp).clip(CircleShape)
+                        .background(CscOrange.copy(alpha = 0.22f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Security, contentDescription = null, tint = CscOrange, modifier = Modifier.size(15.dp))
                 }
                 Spacer(Modifier.size(8.dp))
-                Text("CSC SMART SECURITY", color = Color.White.copy(alpha = 0.88f), fontSize = 8.sp, letterSpacing = 1.2.sp, fontFamily = MontserratFontFamily, fontWeight = FontWeight.Bold)
+                Text(
+                    "CSC SMART SECURITY",
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 8.sp,
+                    letterSpacing = 1.1.sp,
+                    fontFamily = MontserratFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
             }
             Spacer(Modifier.height(9.dp))
-            Text(title, color = CscTitleWhite, fontSize = if (compact) 15.sp else 18.sp, lineHeight = if (compact) 19.sp else 23.sp, fontFamily = MontserratFontFamily, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(5.dp))
-            Text(subtitle, color = Color(0xFFD0D9E8), fontSize = if (compact) 9.sp else 10.sp, lineHeight = 13.sp, fontFamily = MontserratFontFamily, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                title,
+                color = CscTitleWhite,
+                fontSize = if (compact) 14.sp else 17.sp,
+                lineHeight = if (compact) 18.sp else 21.sp,
+                fontFamily = MontserratFontFamily,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                subtitle,
+                color = Color(0xFFD0D9E8),
+                fontSize = if (compact) 9.sp else 10.sp,
+                lineHeight = 13.sp,
+                fontFamily = MontserratFontFamily,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         Row(
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = 18.dp, bottom = 10.dp)
-                .clip(CircleShape).background(Color(0xCC0B1727)).border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
-                .padding(horizontal = 9.dp, vertical = 5.dp),
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 18.dp, bottom = 9.dp)
+                .clip(CircleShape)
+                .background(Color(0xCC0B1727))
+                .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF36D982)))
+            Box(Modifier.size(5.dp).clip(CircleShape).background(Color(0xFF36D982)))
             Spacer(Modifier.size(6.dp))
-            Text("IMMAGINE PROMOZIONALE", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+            Text(
+                "IMMAGINE PROMOZIONALE",
+                color = Color.White,
+                fontSize = 6.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.35.sp,
+                maxLines = 1
+            )
         }
     }
 }
