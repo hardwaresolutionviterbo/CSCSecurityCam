@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -210,7 +213,15 @@ fun SplashScreen(
                 maxLines = 1
             )
 
-            Spacer(modifier = Modifier.height(56.dp))
+            Spacer(modifier = Modifier.height(28.dp))
+
+            com.example.ui.components.SecurityHeroCard(
+                title = "La tua casa, sempre sotto controllo",
+                subtitle = "Videosorveglianza smart • Sicurezza in tempo reale",
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
 
             SplashPrimaryButton(onClick = onStart)
             Spacer(modifier = Modifier.height(14.dp))
@@ -223,6 +234,9 @@ fun SplashScreen(
 
 @Composable
 private fun SplashPrimaryButton(onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(if (pressed) 0.965f else 1f, label = "primaryPress")
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -234,13 +248,14 @@ private fun SplashPrimaryButton(onClick: () -> Unit) {
                 ambientColor = CscOrange.copy(alpha = 0.5f)
             )
             .clip(RoundedCornerShape(50.dp))
+            .graphicsLayer { scaleX = pressScale; scaleY = pressScale; translationY = if (pressed) 2.dp.toPx() else 0f }
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(Color(0xFFFF8A1F), CscOrange, Color(0xFFE65700))
                 )
             )
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interaction,
                 indication = ripple(color = Color.White.copy(alpha = 0.25f))
             ) { onClick() }
             .testTag("btn_start_app"),
@@ -271,6 +286,9 @@ private fun SplashPrimaryButton(onClick: () -> Unit) {
 
 @Composable
 private fun SplashSecondaryButton(onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(if (pressed) 0.975f else 1f, label = "secondaryPress")
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -278,8 +296,9 @@ private fun SplashSecondaryButton(onClick: () -> Unit) {
             .clip(RoundedCornerShape(50.dp))
             .background(CscPanelBlue.copy(alpha = 0.55f))
             .border(1.5.dp, CscOrange, RoundedCornerShape(50.dp))
+            .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interaction,
                 indication = ripple(color = CscOrange.copy(alpha = 0.25f))
             ) { onClick() }
             .testTag("btn_open_settings"),
