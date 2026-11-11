@@ -218,7 +218,8 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
                         onBack = { viewModel.navigateBack() },
                         onPickPhoto = { uri -> viewModel.updateProfilePhoto(uri) },
                         onUpdateName = { name -> viewModel.updateProfileName(name) },
-                        onLogout = { viewModel.logout() }
+                        onLogout = { viewModel.logout() },
+                        onNavigate = { viewModel.navigateTo(it) }
                     )
                 }
 
