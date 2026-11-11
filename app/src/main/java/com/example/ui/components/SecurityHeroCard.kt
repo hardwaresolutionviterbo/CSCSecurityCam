@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -89,17 +90,31 @@ fun SecurityHeroCard(
                 )
             )
         )
-        AsyncImage(
-            model = "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=480&auto=format&fit=crop&q=80",
-            contentDescription = "Telecamera di sicurezza professionale",
+        Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .padding(end = if (compact) 12.dp else 16.dp)
                 .size(if (compact) 78.dp else 94.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .border(1.5.dp, CscOrange, RoundedCornerShape(20.dp)),
-            contentScale = ContentScale.Crop
-        )
+                .shadow(12.dp, RoundedCornerShape(22.dp), spotColor = CscOrange.copy(alpha = 0.35f))
+                .clip(RoundedCornerShape(22.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFFFF8A1F), CscOrange, Color(0xFFB94700))))
+                .border(1.5.dp, Color.White.copy(alpha = 0.72f), RoundedCornerShape(22.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                Modifier.fillMaxSize().padding(7.dp)
+                    .clip(RoundedCornerShape(17.dp))
+                    .background(Color(0xFF101B2E)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Videocam,
+                    contentDescription = "Videocamera di sicurezza",
+                    tint = Color.White,
+                    modifier = Modifier.size(if (compact) 42.dp else 52.dp)
+                )
+            }
+        }
         Column(
             modifier = Modifier
                 .align(Alignment.CenterStart)
