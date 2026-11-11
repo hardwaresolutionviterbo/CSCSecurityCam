@@ -1014,7 +1014,24 @@ private fun MonitorTile(
                     }
                 }
 
-                else -> CircularProgressIndicator(color = CscOrange, modifier = Modifier.size(22.dp))
+                status == ConnectionStatus.CONNECTING || status == ConnectionStatus.RECONNECTING -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(color = CscOrange, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Connessione...", color = CscTextMuted, fontSize = 10.sp)
+                }
+
+                else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.Videocam,
+                        contentDescription = null,
+                        tint = CscSubtitleGray,
+                        modifier = Modifier.size(23.dp)
+                    )
+                    Spacer(modifier = Modifier.height(5.dp))
+                    Text("Nessun flusso video", color = CscTextMuted, fontSize = 10.sp)
+                }
             }
 
             Row(
