@@ -141,6 +141,8 @@ fun CscBottomNav(
                             .testTag(item.testTag)
                             .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
                             .clip(RoundedCornerShape(20.dp))
+                            .background(if (isSelected) Color(0x24FF6A00) else Color.Transparent, RoundedCornerShape(20.dp))
+                            .border(if (isSelected) 1.dp else 0.dp, if (isSelected) CscOrange.copy(alpha = 0.28f) else Color.Transparent, RoundedCornerShape(20.dp))
                             .clickable(
                                 interactionSource = itemInteraction,
                                 indication = ripple(bounded = true, color = CscOrange.copy(alpha = 0.25f))
@@ -152,7 +154,7 @@ fun CscBottomNav(
                         // Icon Box with Neon Glow when selected
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(36.dp)
                                 .then(
                                     if (isSelected) {
                                         Modifier
@@ -173,7 +175,7 @@ fun CscBottomNav(
                                 imageVector = item.icon,
                                 contentDescription = item.title,
                                 tint = iconTint,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(if (isSelected) 24.dp else 22.dp)
                             )
                         }
 
