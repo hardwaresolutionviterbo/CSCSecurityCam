@@ -1,0 +1,78 @@
+# Nexus Social — build nel cloud con Codemagic (nessun PC richiesto).
+# Documentazione: https://docs.codemagic.io/yaml/building-a-flutter-app/
+#
+# Come si usa:
+# 1. Collega il repository GitHub a Codemagic e seleziona il file codemagic.yaml.
+# 2. Nelle variabili d'ambiente del progetto (Codemagic → Environment variables) aggiungi
+#    SUPABASE_URL, SUPABASE_ANON_KEY e, quando Firebase sarà configurato, FIREBASE_ENABLED=true.
+#    I valori non vanno mai scritti in questo file né nel repository.
+# 3. Ogni push su main genera un APK di prova scaricabile dal telefono (QR code nella build).
+
+workflows:
+  android-debug:
+    name: Nexus Social · APK di prova (Android)
+    instance_type: linux_x2
+    max_build_duration: 60
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    environment:
+      flutter: stable
+      java: 17
+      vars:
+        # Sovrascritte dalle variabili d'ambiente del progetto su Codemagic.
+        SUPABASE_URL: ""
+        SUPABASE_ANON_KEY: ""
+        FIREBASE_ENABLED: "false"
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+    scripts:
+      - name: Dipendenze
+        script: flutter pub get
+      - name: Analisi statica
+        script: flutter analyze
+      - name: Test unitari e widget
+        script: flutter test
+      - name: Build APK debug
+        script: |
+          flutter build apk --debug \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=FIREBASE_ENABLED="$FIREBASE_ENABLED"
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/logs/*.log
+
+  ios-debug:
+    name: Nexus Social · build iOS senza firma (iPhone)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    # Avvio manuale: consuma minuti macOS e la firma per TestFlight si aggiunge in Fase 9.
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        SUPABASE_URL: ""
+        SUPABASE_ANON_KEY: ""
+        FIREBASE_ENABLED: "false"
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/Library/Caches/CocoaPods
+    scripts:
+      - name: Dipendenze
+        script: flutter pub get
+      - name: Build iOS (senza firma)
+        script: |
+          flutter build ios --debug --no-codesign \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=FIREBASE_ENABLED="$FIREBASE_ENABLED"
+    artifacts:
+      - build/ios/iphoneos/Runner.app

@@ -1,90 +1,130 @@
-# CSCSecurityCam
+# Nexus Social
 
-App Android per usare uno smartphone come videocamera di sicurezza, con funzioni di monitor,
-controllo PTZ, rilevamento movimento e accesso remoto.
+App **Flutter** per Android e iPhone: mappa sociale 3D con annunci e richieste vicino a te,
+chat e chiamate cifrate end-to-end, sezioni **Scambia** e **Vendita**, profili **Privato** e
+**Azienda**, promozioni locali e gestionale di amministrazione dentro l'app.
 
-## Requisiti di build
+Sviluppo a fasi: alla fine di ogni fase c'è qualcosa da installare e provare sul telefono.
 
-- JDK 21
-- Android SDK con `platforms;android-36.1` e `build-tools;36.1.0` (compileSdk 36.1, targetSdk 36,
-  minSdk 24)
-- Gradle tramite wrapper incluso (`./gradlew`)
+## Stato del lavoro
 
-Configura il percorso dell'SDK in `local.properties` (file non versionato):
+| Fase | Contenuto | Stato |
+| --- | --- | --- |
+| 0 | Account, chiavi, grafica, costi, regole | Documentata in [`docs/FASE_0_CHECKLIST.md`](docs/FASE_0_CHECKLIST.md) |
+| 1 | Fondamenta tecniche: app installabile, servizi collegati, tema, navigazione | **Completata** in questo repository |
+| 2 | Account e profili (SMS, profilo, 2FA, blocchi) | Da iniziare |
+| 3 | Mappa Sociale 3D, annunci, raggio fino a 30 km | Da iniziare |
+| 4 | Chat cifrata, gruppi, chiamate, notifiche | Da iniziare |
+| 5 | Scambia, Vendita, feedback | Da iniziare |
+| 6 | Aziende, promozioni, abbonamento 9,99 €/mese | Da iniziare |
+| 7 | Gestionale Admin dentro l'app | Da iniziare |
+| 8 | Traduzione, gamification, ricerca avanzata | Da iniziare |
+| 9 | Test, sicurezza, GDPR, beta chiusa | Da iniziare |
+| 10 | Pubblicazione e lancio | Da iniziare |
+
+Il dettaglio delle fasi è nel piano di lavoro originale (`Nexus_Social_Piano_di_Lavoro.pdf`).
+
+## Cosa c'è nella Fase 1
+
+- Progetto Flutter unico per Android e iPhone (`android/`, `ios/`).
+- Barra di navigazione in basso con **Mappa, Chat, Scambia, Vendita, Profilo** e campanella
+  delle notifiche in alto.
+- Tema grafico Material 3 con **modalità scura** (e chiara), colori e tipografia del brand.
+- Schermate svuotate con l'anteprima di cosa arriverà in ogni fase.
+- Collegamento pronto a **Supabase** (annunci, ricerca per distanza, foto, segnalazioni) e
+  **Firebase** (login SMS, chat, chiamate, notifiche), attivo solo quando le chiavi ci sono.
+- Schema Supabase con **RLS** e posizione approssimata; regole **Firestore** per chat cifrate.
+- Build cloud **Codemagic**: APK di prova a ogni push su `main`, build iOS senza firma.
+
+## Struttura del repository
 
 ```
-sdk.dir=/percorso/Android/Sdk
+lib/
+  main.dart                  avvio e inizializzazione dei servizi
+  app.dart                   MaterialApp, tema, localizzazione
+  core/
+    config/                  configurazione (dart-define) e costanti app
+    services/                bootstrap Firebase/Supabase
+    theme/                   colori, tipografia, tema chiaro/scuro
+    widgets/                 componenti condivisi (logo, campanella, anteprime)
+  features/
+    shell/                   barra di navigazione e impalcatura dell'app
+    map/                     Mappa Sociale (Fase 3)
+    chat/                    chat e chiamate (Fase 4)
+    listings/                Scambia (Fase 5)
+    sale/                    Vendita (Fase 5)
+    profile/                 account e profilo (Fase 2)
+    admin/                   gestionale (Fase 7)
+supabase/migrations/         schema e regole di sicurezza Supabase
+firebase/firestore.rules     regole di sicurezza Firestore
+codemagic.yaml               build nel cloud
+docs/                        checklist Fase 0 e architettura
 ```
 
-## Comandi
+## Installare l'app sul telefono (senza PC)
+
+**GitHub Actions (già configurato).** Ogni push su `main` esegue `.github/workflows/android.yml`:
+analisi, test e build. L'APK si scarica da **Actions → Android APK → ultima esecuzione →
+Artifacts → `nexus-social-apk-debug`**, poi si apre sul telefono consentendo l'installazione da
+origini sconosciute.
+
+**Codemagic (alternativa).** Collega il repository a [Codemagic](https://codemagic.io) e seleziona
+`codemagic.yaml`; la build iOS senza firma si avvia manualmente. Per installare su iPhone serve
+un account Apple (Fase 9/10).
+
+## Sviluppo locale
+
+Requisiti: Flutter 3.50 o successivo, JDK 17, Xcode per iOS.
 
 ```bash
-./gradlew assembleDebug   # APK in app/build/outputs/apk/debug/app-debug.apk
-./gradlew test            # test unitari JVM + Robolectric
-./gradlew assembleRelease # APK non firmato se le credenziali non sono impostate
+flutter pub get
+flutter analyze
+flutter test
+flutter run --dart-define-from-file=env.json
+flutter build apk --debug   # APK di prova installabile
 ```
 
-## Firma
+`env.json` non è versionato: copia `env.example.json` e compila i valori. Senza chiavi l'app
+si avvia normalmente e segnala nel Profilo quali servizi non sono configurati.
 
-- **Debug**: usa il keystore di debug generato automaticamente da Android Gradle Plugin
-  (`~/.android/debug.keystore`). Nessun keystore è versionato.
-- **Release**: la firma viene applicata solo se sono presenti tutte le variabili d'ambiente
-  `KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_PASSWORD` (e opzionalmente `KEY_ALIAS`, default `upload`).
-  Il keystore deve restare fuori dal repository; senza queste variabili la build release produce un
-  APK non firmato.
+## Verifiche eseguite (Fase 1)
 
-Non inserire chiavi, keystore o credenziali nel repository: in CI usare i secret del repository.
+- `flutter analyze`: nessun problema.
+- `flutter test`: 6 test superati (navigazione, campanella, profilo, configurazione).
+- Schema Supabase: 58 istruzioni con sintassi valida secondo il parser PostgreSQL; non è
+  ancora stato eseguito su un progetto Supabase reale.
+- `flutter build apk --debug`: APK generato e firmato con la chiave di debug, package
+  `com.nexussocial.app`, minSdk 24.
+- Workflow GitHub Actions: configurato per analisi, test e APK a ogni push su `main`.
+- Build Codemagic e build iOS: configurate ma non eseguite qui (servono gli account).
 
-## Versioni archiviate
+## Collegare i servizi
 
-Il vecchio prototipo 0.2 (streaming LAN MJPEG) è conservato nel branch `archivio/0.2` e non fa parte
-del ramo principale.
+- **Supabase** (annunci, distanza, foto, segnalazioni, admin): crea il progetto, esegui
+  `supabase/migrations/0001_init.sql` nel SQL Editor, poi valorizza `SUPABASE_URL` e
+  `SUPABASE_ANON_KEY`. Dettagli in [`supabase/README.md`](supabase/README.md).
+- **Firebase** (SMS, chat, chiamate, notifiche): crea il progetto, aggiungi le app Android/iOS,
+  scarica i file di configurazione e genera `lib/firebase_options.dart`, poi imposta
+  `FIREBASE_ENABLED=true`. Dettagli in [`firebase/README.md`](firebase/README.md).
+- Su Codemagic le stesse variabili vanno nelle **Environment variables** del progetto, mai nel
+  repository.
 
-## Controllo remoto fuori casa (WebRTC)
+## Privacy della posizione
 
-Il flusso LAN resta invariato. Per guardare la telecamera da un'altra rete servono un relay di
-signaling raggiungibile da internet e, per NAT simmetrici e reti mobili, un TURN.
+La posizione esatta non è mai visibile agli altri utenti: resta in una tabella leggibile solo
+dal proprietario e dagli amministratori, mentre la mappa usa una posizione approssimata a una
+griglia di circa 550 metri. La ricerca per distanza filtra sulla posizione reale ma restituisce
+distanze arrotondate a fasce di 250 metri, così non si può triangolare una persona. Il raggio è
+regolabile fino a 30 km e parte da 10 km.
 
-1. Avvia il relay: `cd signaling && npm install && npm start` (porta 8787). Mettilo dietro TLS
-   (Caddy/Nginx) e usa `wss://...` nell'app: `ws://` è accettato solo per localhost.
-2. Su entrambi i telefoni: Impostazioni → Accesso remoto → inserisci l'URL `wss://` e il codice
-   stanza (quello mostrato sulla telecamera come "Codice Associazione P2P") → Salva.
-3. Sulla telecamera attiva "Accesso remoto": pubblica appena lo streaming è attivo.
-4. Sul centro di controllo: Impostazioni → Accesso remoto → "Guarda" apre il video remoto.
-5. Per NAT simmetrici configura un TURN (es. coturn) con URL, utente e password.
+## Scelte tecniche
 
-I fotogrammi non passano dal relay: viaggiano cifrati DTLS/SRTP tra i due telefoni. Il data channel
-WebRTC trasporta anche i comandi di torcia, registrazione e qualità.
+Le motivazioni sono in [`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md): un solo codice Flutter,
+Firebase per identità/chat/chiamate, Supabase per dati geografici e gestionale, MapLibre per la
+mappa 3D (nessuna chiave a pagamento).
 
-## Griglia multi-telecamera
+## Progetto precedente
 
-Il Centro di controllo ha un selettore 1 / 2 / 4 riquadri. Ogni riquadro ha il proprio flusso
-MJPEG (massimo quattro), ridotto a 640 px di lato massimo per non tenere in RAM frame 1080p; i
-bitmap sostituiti vengono riciclati poco dopo. Doppio tocco su un riquadro = schermo intero con
-audio e comandi legati a quella telecamera; un riquadro offline mostra "Riconnetti" senza
-interrompere gli altri.
-
-In griglia il client aggiunge `?fps=12` a `/live.mjpg`: il server limita i frame inviati a quel
-client (12 fps) per non saturare il Wi-Fi con quattro flussi. Il flusso singolo resta a piena
-frequenza.
-
-## Account, area personale e piano Premium
-
-- **Registrazione e accesso reali**: nome, email e password vengono salvati in Room. La password
-  non è mai in chiaro: `PasswordHasher` usa PBKDF2-HMAC-SHA256 con salt casuale per utente
-  (120 000 iterazioni) e confronto a tempo costante. Login con password errata, email sconosciuta
-  o email già registrata restituiscono un errore esplicito.
-- **Sessione**: "ricordami" salva l'utente attivo; alla riapertura l'app ripristina l'account e le
-  sue telecamere senza richiedere di nuovo la password. "Esci" cancella solo la sessione.
-- **Google**: pulsante su schermo di login tramite Credential Manager. Serve il client ID OAuth web
-  del progetto: `./gradlew assembleDebug -PGOOGLE_WEB_CLIENT_ID=...` (o variabile d'ambiente
-  omonima). Senza client ID il pulsante resta visibile ma spiega che la build non è configurata.
-- **Telecamere per account**: ogni telecamera salvata ha un `ownerId`; accedendo con un altro
-  account non si vedono le telecamere altrui, e chi esce e rientra ritrova le proprie.
-- **Area personale** (Impostazioni → riga account): foto profilo scelta dalla galleria e copiata
-  nello spazio privato dell'app, nome modificabile, piano e giorni residui dell'abbonamento.
-- **Premium**: il piano Free salva 1 telecamera; dalla seconda compare il paywall a
-  **3,99 €/mese**. Piano e scadenza sono persistiti per utente (`plan`, `planExpiresAtMillis`) e
-  l'area personale mostra ad esempio "Mancano 25 giorni". L'addebito vero richiede il prodotto in
-  abbonamento su Google Play Console e l'integrazione Play Billing: il pulsante apre oggi la
-  scheda Play Store dell'app.
+Il vecchio prototipo **CSCSecurityCam** (app Android in Kotlin per la videosorveglianza) non fa
+più parte del ramo di lavoro: resta nella cronologia git (`main`, commit `f24339b`) e può essere
+recuperato da lì.
