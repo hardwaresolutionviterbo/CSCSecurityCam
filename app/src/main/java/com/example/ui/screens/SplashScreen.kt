@@ -254,6 +254,7 @@ private fun SplashPrimaryButton(onClick: () -> Unit) {
                     colors = listOf(Color(0xFFFF8A1F), CscOrange, Color(0xFFE65700))
                 )
             )
+            .border(1.dp, Color.White.copy(alpha = 0.28f), RoundedCornerShape(50.dp))
             .clickable(
                 interactionSource = interaction,
                 indication = ripple(color = Color.White.copy(alpha = 0.25f))
