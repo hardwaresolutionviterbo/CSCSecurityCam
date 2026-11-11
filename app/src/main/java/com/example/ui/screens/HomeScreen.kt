@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,11 +35,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -151,7 +155,16 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            com.example.ui.components.SecurityHeroCard(
+                title = "Protezione intelligente",
+                subtitle = "Tutti i tuoi ambienti, in un unico centro di controllo",
+                modifier = Modifier.fillMaxWidth(),
+                compact = true
+            )
+
+            Spacer(modifier = Modifier.height(22.dp))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -239,8 +252,12 @@ fun DashboardCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(if (pressed) 0.965f else 1f, animationSpec = spring(dampingRatio = 0.58f, stiffness = 520f), label = "dashboardCardPress")
     Box(
         modifier = modifier
+            .graphicsLayer { scaleX = pressScale; scaleY = pressScale; translationY = if (pressed) 3.dp.toPx() else 0f }
             .aspectRatio(0.88f)
             .shadow(
                 elevation = if (isSelected) 15.dp else 0.dp,
@@ -256,7 +273,7 @@ fun DashboardCard(
                 shape = RoundedCornerShape(18.dp)
             )
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interaction,
                 indication = ripple(color = CscOrange.copy(alpha = 0.22f))
             ) { onClick() }
             .padding(14.dp)
