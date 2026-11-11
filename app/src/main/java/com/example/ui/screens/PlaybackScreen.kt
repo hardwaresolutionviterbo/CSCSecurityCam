@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,14 +54,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.R
 import com.example.media.MediaFormat
 import com.example.model.RecordingItem
 import com.example.model.Screen
@@ -320,12 +318,16 @@ fun PlaybackScreen(
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_csc_logo),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
+                            Column(
                                 modifier = Modifier.fillMaxSize()
-                            )
+                                    .background(Brush.linearGradient(listOf(Color(0xFF182A43), Color(0xFF0B1424)))),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(Icons.Default.Videocam, contentDescription = null, tint = CscSubtitleGray, modifier = Modifier.size(34.dp))
+                                Spacer(Modifier.height(6.dp))
+                                Text("ANTEPRIMA VIDEO", color = CscSubtitleGray, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            }
                         }
                         Box(
                             modifier = Modifier
@@ -404,12 +406,15 @@ fun RecordingCard(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_csc_logo),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                Column(
                     modifier = Modifier.fillMaxSize()
-                )
+                        .background(Brush.linearGradient(listOf(Color(0xFF182A43), Color(0xFF0B1424)))),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.Videocam, contentDescription = null, tint = CscSubtitleGray, modifier = Modifier.size(24.dp))
+                    Text("VIDEO", color = CscSubtitleGray, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                }
             }
             Box(
                 modifier = Modifier
