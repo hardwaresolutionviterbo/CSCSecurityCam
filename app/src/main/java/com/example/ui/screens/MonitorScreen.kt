@@ -385,29 +385,50 @@ fun MonitorScreen(
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center,
-                                    modifier = Modifier.padding(16.dp)
+                                    modifier = Modifier.padding(18.dp)
                                 ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(62.dp)
+                                            .clip(CircleShape)
+                                            .background(Brush.radialGradient(listOf(CscOrange.copy(alpha = 0.24f), CscPanelBlue)))
+                                            .border(1.dp, CscOrange.copy(alpha = 0.5f), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Videocam,
+                                            contentDescription = null,
+                                            tint = CscOrange,
+                                            modifier = Modifier.size(30.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
                                     Text(
                                         text = "Nessuna telecamera",
                                         color = CscIceWhite,
-                                        fontSize = 14.sp,
+                                        fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
                                     Text(
                                         text = "Accoppia una telecamera scansionando il suo QR o inserendo IP e porta.",
                                         color = CscTextMuted,
                                         fontSize = 11.sp,
                                         textAlign = TextAlign.Center
                                     )
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Spacer(modifier = Modifier.height(14.dp))
                                     Button(
                                         onClick = { showPairDialog = true },
-                                        colors = ButtonDefaults.buttonColors(containerColor = CscOrange),
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.testTag("monitor_pair_camera_btn")
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CscOrange,
+                                            contentColor = Color.White
+                                        ),
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier
+                                            .shadow(10.dp, RoundedCornerShape(14.dp), spotColor = CscOrange.copy(alpha = 0.4f))
+                                            .testTag("monitor_pair_camera_btn")
                                     ) {
-                                        Text("Accoppia telecamera", color = Color.White, fontSize = 12.sp)
+                                        Text("Accoppia telecamera", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             } else {
