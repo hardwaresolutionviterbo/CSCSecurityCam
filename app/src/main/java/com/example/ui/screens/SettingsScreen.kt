@@ -145,7 +145,16 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            com.example.ui.components.SecurityHeroCard(
+                title = "Controllo totale",
+                subtitle = "Personalizza la sicurezza secondo le tue esigenze",
+                modifier = Modifier.fillMaxWidth(),
+                compact = true
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Area personale: foto, account e stato dell'abbonamento.
             Row(
