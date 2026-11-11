@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -116,6 +118,13 @@ fun CscBottomNav(
             ) {
                 items.forEach { item ->
                     val isSelected = currentScreen == item.screen
+                    val itemInteraction = remember(item.screen) { MutableInteractionSource() }
+                    val isPressed by itemInteraction.collectIsPressedAsState()
+                    val pressScale by animateFloatAsState(
+                        targetValue = if (isPressed) 0.88f else 1f,
+                        animationSpec = spring(dampingRatio = 0.52f, stiffness = 650f),
+                        label = "navPress"
+                    )
 
                     val iconTint by animateColorAsState(
                         targetValue = if (isSelected) CscOrange else CscSubtitleGray,
@@ -127,9 +136,10 @@ fun CscBottomNav(
                         modifier = Modifier
                             .weight(1f)
                             .testTag(item.testTag)
+                            .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
                             .clip(RoundedCornerShape(20.dp))
                             .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
+                                interactionSource = itemInteraction,
                                 indication = ripple(bounded = true, color = CscOrange.copy(alpha = 0.25f))
                             ) { onNavigate(item.screen) }
                             .padding(horizontal = 2.dp, vertical = 4.dp),
