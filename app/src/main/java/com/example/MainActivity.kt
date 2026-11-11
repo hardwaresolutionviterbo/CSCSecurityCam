@@ -143,6 +143,7 @@ fun CscSecurityCamApp(viewModel: MainViewModel) {
 
                 Screen.HOME -> {
                     HomeScreen(
+                        state = state,
                         onNavigate = { viewModel.navigateTo(it) }
                     )
                 }
