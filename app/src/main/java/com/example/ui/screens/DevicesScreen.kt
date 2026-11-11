@@ -132,7 +132,16 @@ fun DevicesScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            com.example.ui.components.SecurityHeroCard(
+                title = "I tuoi dispositivi, sempre connessi",
+                subtitle = "Gestisci lo stato e l accesso alle tue videocamere",
+                modifier = Modifier.fillMaxWidth(),
+                compact = true
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = "VIDEOCAMERE COLLEGATE (${state.devices.size})",
