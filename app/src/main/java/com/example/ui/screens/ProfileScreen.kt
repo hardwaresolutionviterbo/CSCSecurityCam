@@ -60,7 +60,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.model.Premium
+import com.example.model.Screen
 import com.example.model.UserProfile
+import com.example.ui.components.CscBottomNav
 import com.example.ui.theme.CscBackground
 import com.example.ui.theme.CscGlassBorder
 import com.example.ui.theme.CscGlassCard
@@ -80,6 +82,7 @@ fun ProfileScreen(
     onPickPhoto: (Uri) -> Unit,
     onUpdateName: (String) -> Unit,
     onLogout: () -> Unit,
+    onNavigate: (Screen) -> Unit,
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
@@ -101,7 +104,8 @@ fun ProfileScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = CscBackground
+        containerColor = CscBackground,
+        bottomBar = { CscBottomNav(currentScreen = Screen.SETTINGS, onNavigate = onNavigate) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
