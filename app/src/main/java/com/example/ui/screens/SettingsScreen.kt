@@ -147,12 +147,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            com.example.ui.components.SecurityHeroCard(
-                title = "Controllo totale",
-                subtitle = "Personalizza la sicurezza secondo le tue esigenze",
-                modifier = Modifier.fillMaxWidth(),
-                compact = true
-            )
+            
 
             Spacer(modifier = Modifier.height(16.dp))
 
