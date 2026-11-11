@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -265,6 +266,7 @@ fun DashboardCard(
             translationY = if (pressed) 3.dp.toPx() else 0f
         }
             .aspectRatio(0.90f)
+            .shadow(14.dp, RoundedCornerShape(20.dp), spotColor = gradient.first().copy(alpha = 0.55f), ambientColor = gradient.first().copy(alpha = 0.22f))
             .clip(RoundedCornerShape(20.dp))
             .background(Brush.linearGradient(gradient))
             .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(20.dp))
@@ -275,8 +277,9 @@ fun DashboardCard(
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Box(
                 Modifier.size(48.dp).clip(RoundedCornerShape(15.dp))
-                    .background(Color.White.copy(alpha = 0.16f))
-                    .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(15.dp)),
+                    .background(Brush.linearGradient(listOf(Color.White.copy(alpha = 0.24f), Color.White.copy(alpha = 0.08f))))
+                    .border(1.dp, Color.White.copy(alpha = 0.30f), RoundedCornerShape(15.dp))
+                    .shadow(8.dp, RoundedCornerShape(15.dp), spotColor = Color.White.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, contentDescription = title, tint = Color.White, modifier = Modifier.size(27.dp))
