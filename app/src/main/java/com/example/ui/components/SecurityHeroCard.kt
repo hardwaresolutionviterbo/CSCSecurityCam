@@ -14,8 +14,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -67,7 +67,7 @@ fun SecurityHeroCard(
         AsyncImage(
             model = "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&auto=format&fit=crop&q=85",
             contentDescription = "Abitazione moderna illuminata al tramonto",
-            modifier = Modifier.matchParentSize(),
+            modifier = Modifier.fillMaxSize(),
             contentScale = androidx.compose.ui.layout.ContentScale.Crop
         )
         Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(Color(0xE607101F), Color(0xAA17243A), Color(0x3310182A)))))
