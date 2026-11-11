@@ -77,7 +77,7 @@ fun SplashScreen(
 ) {
     val transition = rememberInfiniteTransition(label = "splash_glow")
     val glowScale by transition.animateFloat(
-        initialValue = 0.96f,
+        initialValue = 0.97f,
         targetValue = 1.04f,
         animationSpec = infiniteRepeatable(
             animation = tween(2600, easing = FastOutSlowInEasing),
@@ -86,8 +86,8 @@ fun SplashScreen(
         label = "glowScale"
     )
     val glowAlpha by transition.animateFloat(
-        initialValue = 0.75f,
-        targetValue = 1f,
+        initialValue = 0.45f,
+        targetValue = 0.9f,
         animationSpec = infiniteRepeatable(
             animation = tween(2600, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -96,138 +96,99 @@ fun SplashScreen(
     )
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(CscBackground)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
+        modifier = modifier.fillMaxSize().background(CscBackground)
     ) {
-        // Alone ambientale arancione e linea d'orizzonte, come nel riferimento.
+        coil.compose.AsyncImage(
+            model = "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1600&auto=format&fit=crop&q=90",
+            contentDescription = "Casa moderna protetta al tramonto",
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    0f to Color(0xB8081428),
+                    0.34f to Color(0x77101B30),
+                    0.66f to Color(0x9910182A),
+                    1f to Color(0xFF0B1425)
+                )
+            )
+        )
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val centerTop = Offset(size.width * 0.5f, size.height * 0.26f)
-            val topRadius = size.width * 0.78f
+            val glowCenter = Offset(size.width * 0.88f, size.height * 0.16f)
+            val radius = size.width * 0.72f
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(
-                        CscOrange.copy(alpha = 0.26f * glowAlpha),
-                        CscOrange.copy(alpha = 0.08f * glowAlpha),
-                        Color.Transparent
-                    ),
-                    center = centerTop,
-                    radius = topRadius
+                    listOf(CscOrange.copy(alpha = 0.25f * glowAlpha), Color.Transparent),
+                    center = glowCenter,
+                    radius = radius
                 ),
-                radius = topRadius,
-                center = centerTop
+                center = glowCenter,
+                radius = radius
             )
-
-            val sideCenter = Offset(size.width * 1.05f, size.height * 0.66f)
-            val sideRadius = size.width * 0.62f
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        CscOrange.copy(alpha = 0.14f * glowAlpha),
-                        Color.Transparent
-                    ),
-                    center = sideCenter,
-                    radius = sideRadius
-                ),
-                radius = sideRadius,
-                center = sideCenter
-            )
-
-            val horizonY = size.height * 0.88f
             drawLine(
                 brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        CscOrange.copy(alpha = 0.65f),
-                        CscOrange.copy(alpha = 0.9f),
-                        CscOrange.copy(alpha = 0.65f),
-                        Color.Transparent
-                    )
+                    listOf(Color.Transparent, CscOrange.copy(alpha = 0.72f * glowAlpha), Color.Transparent)
                 ),
-                start = Offset(0f, horizonY),
-                end = Offset(size.width, horizonY),
-                strokeWidth = 2.5f,
-                cap = StrokeCap.Round
+                start = Offset(0f, size.height * 0.83f),
+                end = Offset(size.width, size.height * 0.83f),
+                strokeWidth = 1.5f
             )
-
-            // Griglia prospettica appena percettibile sotto l'orizzonte.
-            for (i in 1..5) {
-                val y = horizonY + (size.height - horizonY) * (i / 6f)
-                drawLine(
-                    color = CscSteel.copy(alpha = 0.18f),
-                    start = Offset(0f, y),
-                    end = Offset(size.width, y),
-                    strokeWidth = 1f
-                )
-            }
         }
 
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(horizontal = 26.dp, vertical = 26.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(18.dp))
-
-            Box(modifier = Modifier.scale(glowScale)) {
-                CscBrandMark(size = 108.dp)
+            Spacer(Modifier.height(12.dp))
+            Box(
+                modifier = Modifier.scale(glowScale)
+                    .shadow(24.dp, RoundedCornerShape(26.dp), spotColor = CscOrange.copy(alpha = glowAlpha))
+            ) {
+                CscBrandMark(size = 76.dp)
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
+            Spacer(Modifier.height(13.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "CSC",
-                    fontSize = 28.sp,
-                    fontFamily = MontserratFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    color = CscTitleWhite,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Text(
-                    text = "SecurityCam",
-                    fontSize = 32.sp,
-                    fontFamily = MontserratFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    color = CscOrange,
-                    maxLines = 1,
-                    softWrap = false
-                )
+                Text("CSC", fontSize = 27.sp, fontFamily = MontserratFontFamily, fontWeight = FontWeight.Bold, color = CscTitleWhite, maxLines = 1)
+                Text("SecurityCam", fontSize = 29.sp, fontFamily = MontserratFontFamily, fontWeight = FontWeight.Bold, color = CscOrange, maxLines = 1)
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
+            Spacer(Modifier.height(7.dp))
             Text(
-                text = "VIDEOSORVEGLIANZA SMART",
-                fontSize = 11.sp,
+                "VIDEOSORVEGLIANZA SMART",
+                fontSize = 10.sp,
                 fontFamily = MontserratFontFamily,
                 fontWeight = FontWeight.SemiBold,
-                color = CscSubtitleGray,
-                letterSpacing = 2.5.sp,
-                textAlign = TextAlign.Center,
-                maxLines = 1
+                color = Color(0xFFD4DDEA),
+                letterSpacing = 2.3.sp,
+                textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(Modifier.weight(1f))
 
-            com.example.ui.components.SecurityHeroCard(
-                title = "La tua casa, sempre sotto controllo",
-                subtitle = "Videosorveglianza smart • Sicurezza in tempo reale",
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(28.dp))
-
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 22.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier.size(8.dp).clip(CircleShape).background(CscOrange)
+                        .shadow(8.dp, CircleShape, spotColor = CscOrange)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "PROTEZIONE INTELLIGENTE, OVUNQUE",
+                    color = Color.White.copy(alpha = 0.88f),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
             SplashPrimaryButton(onClick = onStart)
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
             SplashSecondaryButton(onClick = onOpenSettings)
-
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
