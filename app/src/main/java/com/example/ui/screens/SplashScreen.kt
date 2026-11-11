@@ -292,10 +292,24 @@ private fun SplashSecondaryButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(60.dp)
+            .shadow(
+                elevation = 10.dp,
+                shape = RoundedCornerShape(50.dp),
+                spotColor = CscOrange.copy(alpha = 0.55f),
+                ambientColor = CscOrange.copy(alpha = 0.22f)
+            )
             .clip(RoundedCornerShape(50.dp))
-            .background(CscPanelBlue.copy(alpha = 0.55f))
-            .border(1.5.dp, CscOrange, RoundedCornerShape(50.dp))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF24334B), CscPanelBlue, Color(0xFF111C30))
+                )
+            )
+            .border(
+                width = 1.5.dp,
+                brush = Brush.verticalGradient(listOf(Color(0xFFFFA34D), CscOrange, Color(0xFFB94B00))),
+                shape = RoundedCornerShape(50.dp)
+            )
             .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
             .clickable(
                 interactionSource = interaction,
