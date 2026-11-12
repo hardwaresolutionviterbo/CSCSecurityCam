@@ -175,22 +175,5 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: |
-            set -euo pipefail
-            adb install -r apk/app-debug.apk
-            adb shell am start -W -n com.nexussocial.app/.MainActivity
-            marker=""
-            services=""
-            for i in $(seq 1 18); do
-              sleep 5
-              marker=$(adb logcat -d -s flutter:I | grep -a "NEXUS_BOOTSTRAP" | tail -1 || true)
-              services=$(adb logcat -d -s flutter:I | grep -a "NEXUS_SERVICES" | tail -1 || true)
-              if [ -n "$marker" ] && [ -n "$services" ]; then break; fi
-            done
-            echo "Runtime: ${marker:-nessun marker}"
-            echo "Servizi: ${services:-nessun marker}"
-            test -n "$marker"
-            echo "$marker" | grep -q "firebase=connected"
-            echo "$services" | grep -q "auth=ready"
-            echo "$services" | grep -q "firestore=ready"
-            echo "Firebase Core, Auth e Firestore inizializzati nell'app."
+          # L'azione esegue ogni riga come comando separato: lo script deve stare in un file.
+          script: bash firebase/verify_android_runtime.sh
