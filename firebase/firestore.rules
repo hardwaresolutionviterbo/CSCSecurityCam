@@ -15,6 +15,27 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Un dispositivo push può essere scritto solo dal proprietario del profilo.
+    function validPushDevice(deviceId) {
+      return deviceId.size() >= 10
+        && deviceId.size() <= 128
+        && deviceId.matches('^[A-Za-z0-9_-]+$')
+        && request.resource.data.keys().hasOnly([
+          'platform', 'appVersion', 'enabled', 'createdAt', 'updatedAt', 'lastSeenAt'
+        ])
+        && request.resource.data.platform in ['android', 'ios']
+        && request.resource.data.appVersion is string
+        && request.resource.data.appVersion.size() <= 20
+        && request.resource.data.enabled == true
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.lastSeenAt is timestamp;
+    }
+
     function chatMembers(chatId) {
       return get(/databases/$(database)/documents/chats/$(chatId)).data.members;
     }
@@ -26,9 +47,19 @@ service cloud.firestore {
     // Copia pubblica e minima del profilo, usata da chat e notifiche.
     match /profiles/{uid} {
       allow read: if signedIn();
-      allow create, update: if signedIn() && request.auth.uid == uid
+      allow create, update: if isOwner(uid)
         && request.resource.data.keys().hasOnly(['username', 'publicName', 'avatarUrl', 'updatedAt']);
       allow delete: if false;
+
+      // Dispositivi push associati all'account. Il FID è la chiave del
+      // documento e non è mai esposto agli altri utenti.
+      match /devices/{deviceId} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && validPushDevice(deviceId);
+        allow update: if isOwner(uid)
+          && validPushDevice(deviceId)
+          && request.resource.data.createdAt == resource.data.createdAt;
+      }
     }
 
     match /chats/{chatId} {

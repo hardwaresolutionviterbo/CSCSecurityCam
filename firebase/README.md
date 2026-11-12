@@ -50,12 +50,28 @@ siano inizializzati. Per iOS serviranno `GoogleService-Info.plist` e `firebase_o
 - Su Android 13+ l'app chiede il permesso `POST_NOTIFICATIONS` a runtime tramite
   `FirebaseMessaging.requestPermission()`.
 - La registrazione usa la Firebase Installation ID
-  (`firebase_messaging_installation_id_enabled=true`). Il FID resta solo in memoria e non
-  viene scritto nei log; l'associazione a un utente richiederà un endpoint autenticato.
+  (`firebase_messaging_installation_id_enabled=true`). Il FID non viene scritto nei log.
 - In foreground FCM non mostra la notifica da solo: l'app la pubblica sul canale con
   `flutter_local_notifications`. In background la mostra Android usando il canale predefinito.
 - La schermata **Profilo → Diagnostica push (debug)** mostra FID, permesso, stato della
-  registrazione e canale. È compilata solo in debug e serve per il test manuale.
+  registrazione, associazione all'account e canale. È compilata solo in debug e serve per il
+  test manuale.
+
+### Associazione del dispositivo all'account
+
+Quando un utente accede con Firebase Auth, `PushDeviceRegistry` salva il FID in
+`profiles/{uid}/devices/{fid}` con piattaforma, versione dell'app e timestamp. Le regole
+Firestore consentono lettura, creazione, aggiornamento ed eliminazione **solo al proprietario
+del profilo**; nessun altro utente può leggere il FID. Durante la sessione, al cambio account o
+alla disconnessione il collegamento precedente viene eliminato prima di associarne uno nuovo.
+
+L'app non ha ancora la schermata di accesso (Fase 2): fino al primo login la diagnostica mostra
+«in attesa di accesso» e non viene scritto nulla. Dopo aver aggiunto le regole aggiornate,
+pubblica con:
+
+```bash
+firebase deploy --only firestore:rules
+```
 
 ### Test manuale con Firebase Console
 
@@ -76,6 +92,7 @@ Firebase Console: la ricezione di una notifica reale va confermata con il test m
 - Solo i membri delle chat leggono e scrivono i messaggi; le chat non si cancellano.
 - I destinatari possono aggiornare solo stato di consegna/lettura.
 - `/profiles/{uid}` è una copia minima e pubblica (nome abbreviato, @username, avatar).
+- `/profiles/{uid}/devices/{fid}` è leggibile e modificabile solo dal proprietario del profilo.
 - Tutto ciò che non è elencato è negato.
 
 ## Decisioni aperte (Fase 4)
