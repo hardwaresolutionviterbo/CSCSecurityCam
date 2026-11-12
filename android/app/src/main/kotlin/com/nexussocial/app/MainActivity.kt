@@ -1,4 +1,4 @@
-package com.nexussocial.nexus_social
+package com.nexussocial.app
 
 import io.flutter.embedding.android.FlutterActivity
 
