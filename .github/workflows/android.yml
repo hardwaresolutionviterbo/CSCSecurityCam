@@ -42,6 +42,43 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Configura Firebase (google-services.json)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import pathlib
+
+          raw = os.environ.get("GOOGLE_SERVICES_JSON", "").strip()
+          if not raw:
+              print("::warning::GOOGLE_SERVICES_JSON assente: la build procede senza Firebase.")
+              raise SystemExit(0)
+
+          try:
+              data = json.loads(raw) if raw.startswith("{") else json.loads(base64.b64decode(raw))
+          except Exception:
+              print("::error::GOOGLE_SERVICES_JSON non è JSON valido (né JSON né base64 di JSON).")
+              raise SystemExit(1)
+
+          package = "com.nexussocial.app"
+          packages = [
+              client.get("client_info", {}).get("android_client_info", {}).get("package_name")
+              for client in data.get("client", [])
+          ]
+          if package not in packages:
+              print(f"::error::google-services.json non contiene l'app Android {package}.")
+              raise SystemExit(1)
+
+          pathlib.Path("android/app/google-services.json").write_text(
+              json.dumps(data), encoding="utf-8"
+          )
+          print(f"google-services.json pronto per {package}.")
+          PY
+        # Il contenuto del secret non viene mai stampato: solo l'esito della validazione.
+
       - name: Verifica connessione Supabase
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -68,20 +105,30 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          if [ -f android/app/google-services.json ]; then
+            FIREBASE_ENABLED=true
+          else
+            FIREBASE_ENABLED=false
+          fi
           flutter build apk --debug \
             --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
             --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}" \
-            --dart-define=FIREBASE_ENABLED=false
+            --dart-define=FIREBASE_ENABLED="${FIREBASE_ENABLED}"
 
-      # SHA-1/SHA-256 del certificato debug usato da questo APK.
-      # È una firma di test generata dal runner; per build ripetibili servirà
-      # successivamente una chiave CI persistente o il certificato release.
-      - name: Impronte certificato Android (debug)
+      - name: Verifica Firebase nell'APK
         run: |
           set -euo pipefail
-          keytool -list -v -keystore "$HOME/.android/debug.keystore" \
-            -alias androiddebugkey -storepass android -keypass android \
-            | grep -E 'SHA1:|SHA256:'
+          if [ ! -f android/app/google-services.json ]; then
+            echo "Firebase non configurato: controllo saltato."
+            exit 0
+          fi
+          values=$(grep -rl "google_app_id" build/app/generated/res 2>/dev/null | head -1)
+          if [ -z "${values}" ]; then
+            echo "::error::Il plugin Google Services non ha generato le risorse Firebase."
+            exit 1
+          fi
+          grep -q "google_app_id" "${values}"
+          echo "Firebase configurato nell'APK (google_app_id presente)."
 
       - name: Carica APK
         uses: actions/upload-artifact@v7
@@ -90,3 +137,50 @@ jobs:
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+  firebase-runtime:
+    name: Nexus Social · verifica runtime Firebase
+    needs: build-apk
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Scarica APK
+        uses: actions/download-artifact@v4
+        with:
+          name: nexus-social-apk-debug
+          path: apk
+
+      - name: Abilita KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Avvia emulatore e verifica Firebase
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            adb install -r apk/app-debug.apk
+            adb shell am start -W -n com.nexussocial.app/.MainActivity
+            marker=""
+            services=""
+            for i in $(seq 1 18); do
+              sleep 5
+              marker=$(adb logcat -d -s flutter:I | grep -a "NEXUS_BOOTSTRAP" | tail -1 || true)
+              services=$(adb logcat -d -s flutter:I | grep -a "NEXUS_SERVICES" | tail -1 || true)
+              if [ -n "$marker" ] && [ -n "$services" ]; then break; fi
+            done
+            echo "Runtime: ${marker:-nessun marker}"
+            echo "Servizi: ${services:-nessun marker}"
+            test -n "$marker"
+            echo "$marker" | grep -q "firebase=connected"
+            echo "$services" | grep -q "auth=ready"
+            echo "$services" | grep -q "firestore=ready"
+            echo "Firebase Core, Auth e Firestore inizializzati nell'app."
