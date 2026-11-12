@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -136,7 +137,11 @@ abstract final class PushNotifications {
       debugPrint('NEXUS_FCM error=timeout');
     } catch (error) {
       registration.value = PushRegistrationState.failed;
-      debugPrint('NEXUS_FCM error=${error.runtimeType}');
+      // Solo il codice Firebase, mai FID o credenziali.
+      final String code = error is FirebaseException
+          ? error.code
+          : error.runtimeType.toString();
+      debugPrint('NEXUS_FCM error=$code');
     } finally {
       await subscription?.cancel();
     }
