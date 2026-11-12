@@ -126,12 +126,14 @@ abstract final class PushNotifications {
       });
 
       // La registrazione FIS può fallire in modo transitorio su rete o
-      // emulatore: riprova prima di dichiarare l'errore.
-      for (int attempt = 1; attempt <= 3; attempt++) {
+      // emulatore: riprova con un backoff più lungo prima di dichiarare
+      // l'errore. Il timeout resta entro l'attesa del job runtime.
+      const int maxAttempts = 5;
+      for (int attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           await messaging.register();
           final String fid = await registered.future.timeout(
-            const Duration(seconds: 30),
+            const Duration(seconds: 20),
           );
           installationId.value = fid;
           registration.value = PushRegistrationState.registered;
@@ -139,24 +141,34 @@ abstract final class PushNotifications {
           debugPrint('NEXUS_FCM registered=true');
           return;
         } on TimeoutException {
-          if (attempt == 3) {
+          if (attempt == maxAttempts) {
             registration.value = PushRegistrationState.failed;
             debugPrint('NEXUS_FCM error=timeout');
             return;
           }
         } catch (error) {
-          if (attempt == 3) {
+          if (attempt == maxAttempts) {
             registration.value = PushRegistrationState.failed;
             // Solo il codice Firebase, mai FID o credenziali.
             final String code = error is FirebaseException
                 ? error.code
                 : error.runtimeType.toString();
             debugPrint('NEXUS_FCM error=$code');
+            final String detail = _errorDetail(error);
+            if (detail.isNotEmpty) {
+              debugPrint('NEXUS_FCM detail=$detail');
+            }
             return;
           }
         }
 
-        await Future<void>.delayed(Duration(seconds: attempt * 2));
+        final int delaySeconds = switch (attempt) {
+          1 => 5,
+          2 => 10,
+          3 => 20,
+          _ => 30,
+        };
+        await Future<void>.delayed(Duration(seconds: delaySeconds));
       }
     } finally {
       await subscription?.cancel();
@@ -212,6 +224,17 @@ abstract final class PushNotifications {
       notificationDetails: _details,
     );
     debugPrint('NEXUS_PUSH local_test=shown');
+  }
+
+  /// Messaggio utile alla diagnosi, senza identificativi o token lunghi.
+  static String _errorDetail(Object error) {
+    if (error is! FirebaseException) return '';
+    final String text = (error.message ?? '').trim();
+    final String redacted = text.replaceAll(
+      RegExp(r'[A-Za-z0-9_-]{20,}'),
+      '<redacted>',
+    );
+    return redacted.length <= 120 ? redacted : '${redacted.substring(0, 120)}…';
   }
 
   static const NotificationDetails _details = NotificationDetails(
