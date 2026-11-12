@@ -33,6 +33,14 @@ jobs:
           flutter-version: '3.50.0'
           cache: true
 
+      # Android genera un keystore debug casuale al primo build. Riutilizzarlo
+      # tra le run mantiene stabile lo SHA-1 necessario a Firebase.
+      - name: Cache keystore debug
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: nexus-social-debug-keystore-v1
+
       - name: Dipendenze
         run: flutter pub get
 
@@ -115,9 +123,9 @@ jobs:
             --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}" \
             --dart-define=FIREBASE_ENABLED="${FIREBASE_ENABLED}"
 
-      # SHA-1/SHA-256 del certificato debug usato da questo APK.
-      # È una firma di test generata dal runner; per build ripetibili servirà
-      # successivamente una chiave CI persistente o il certificato release.
+      # SHA-1/SHA-256 del certificato debug usato da questo APK. Con la cache
+      # il keystore è riutilizzato tra le run; lo SHA-1 va comunque registrato
+      # nell'app Android Firebase se la API key è vincolata al certificato.
       - name: Impronte certificato Android (debug)
         run: |
           set -euo pipefail
