@@ -4,12 +4,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import 'push_device_registry.dart';
 import 'push_notifications.dart';
 
 /// Predispone Auth, Firestore e Messaging dopo l'inizializzazione di Firebase Core.
 ///
-/// In Fase 1 non scrive dati e non modifica le regole di sicurezza: verifica solo che i
-/// plugin siano registrati e che i servizi siano pronti per le fasi successive.
+/// Dopo la registrazione FCM collega il dispositivo all'utente autenticato; senza
+/// un account Firestore non viene scritto nulla.
 abstract final class FirebaseServices {
   /// Va registrato prima di `runApp`, come richiede FCM per i messaggi in background.
   static void registerBackgroundHandler() {
@@ -29,5 +30,6 @@ abstract final class FirebaseServices {
     }
 
     await PushNotifications.initialize();
+    await PushDeviceRegistry.start();
   }
 }

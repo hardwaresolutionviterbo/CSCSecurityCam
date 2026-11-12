@@ -11,7 +11,8 @@ enum PushRegistrationState { idle, registering, registered, failed }
 /// Gestisce FCM lato dispositivo: canale Android, permesso notifiche,
 /// registrazione tramite Firebase Installation ID e visualizzazione in foreground.
 ///
-/// L'FID resta solo in memoria e non viene mai scritto nei log.
+/// L'FID non viene mai scritto nei log; l'associazione all'account
+/// autenticato è gestita da `PushDeviceRegistry`.
 abstract final class PushNotifications {
   static const String channelId = 'nexus_social_default';
   static const String channelName = 'Notifiche Nexus Social';

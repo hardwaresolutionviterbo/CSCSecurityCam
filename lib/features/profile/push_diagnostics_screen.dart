@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/services/push_device_registry.dart';
 import '../../core/services/push_notifications.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/nexus_ui.dart';
@@ -74,8 +75,9 @@ class PushDiagnosticsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Il FID resta solo in memoria e non viene scritto nei log. '
-                  'Non incollarlo in chat o segnalazioni pubbliche.',
+                  'Dopo l’accesso il FID viene associato al profilo e resta '
+                  'leggibile solo dal proprietario. Non viene scritto nei log: '
+                  'non incollarlo in chat o segnalazioni pubbliche.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -111,6 +113,26 @@ class PushDiagnosticsScreen extends StatelessWidget {
                             PushRegistrationState.registering => 'in corso',
                             PushRegistrationState.registered => 'registrata',
                             PushRegistrationState.failed => 'errore',
+                          },
+                        );
+                      },
+                ),
+                const Divider(height: 20),
+                ValueListenableBuilder<PushDeviceLinkState>(
+                  valueListenable: PushDeviceRegistry.state,
+                  builder:
+                      (BuildContext context, PushDeviceLinkState value, _) {
+                        return _StatusRow(
+                          label: 'Associazione account',
+                          value: switch (value) {
+                            PushDeviceLinkState.idle => 'non attiva',
+                            PushDeviceLinkState.waitingForUser =>
+                              'in attesa di accesso',
+                            PushDeviceLinkState.waitingForFid =>
+                              'in attesa del FID',
+                            PushDeviceLinkState.linking => 'in corso',
+                            PushDeviceLinkState.linked => 'collegato',
+                            PushDeviceLinkState.failed => 'errore',
                           },
                         );
                       },
@@ -168,6 +190,11 @@ class PushDiagnosticsScreen extends StatelessWidget {
                       onPressed: PushNotifications.showLocalTest,
                       icon: const Icon(Icons.notifications_none_rounded),
                       label: const Text('Notifica locale'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: PushDeviceRegistry.retry,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Riprova associazione'),
                     ),
                   ],
                 ),
