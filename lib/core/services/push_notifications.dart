@@ -124,25 +124,40 @@ abstract final class PushNotifications {
       subscription = messaging.onRegistered.listen((String fid) {
         if (!registered.isCompleted) registered.complete(fid);
       });
-      await messaging.register();
 
-      final String fid = await registered.future.timeout(
-        const Duration(seconds: 30),
-      );
-      installationId.value = fid;
-      registration.value = PushRegistrationState.registered;
-      // Nessun identificativo nel log: solo lo stato.
-      debugPrint('NEXUS_FCM registered=true');
-    } on TimeoutException {
-      registration.value = PushRegistrationState.failed;
-      debugPrint('NEXUS_FCM error=timeout');
-    } catch (error) {
-      registration.value = PushRegistrationState.failed;
-      // Solo il codice Firebase, mai FID o credenziali.
-      final String code = error is FirebaseException
-          ? error.code
-          : error.runtimeType.toString();
-      debugPrint('NEXUS_FCM error=$code');
+      // La registrazione FIS può fallire in modo transitorio su rete o
+      // emulatore: riprova prima di dichiarare l'errore.
+      for (int attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await messaging.register();
+          final String fid = await registered.future.timeout(
+            const Duration(seconds: 30),
+          );
+          installationId.value = fid;
+          registration.value = PushRegistrationState.registered;
+          // Nessun identificativo nel log: solo lo stato.
+          debugPrint('NEXUS_FCM registered=true');
+          return;
+        } on TimeoutException {
+          if (attempt == 3) {
+            registration.value = PushRegistrationState.failed;
+            debugPrint('NEXUS_FCM error=timeout');
+            return;
+          }
+        } catch (error) {
+          if (attempt == 3) {
+            registration.value = PushRegistrationState.failed;
+            // Solo il codice Firebase, mai FID o credenziali.
+            final String code = error is FirebaseException
+                ? error.code
+                : error.runtimeType.toString();
+            debugPrint('NEXUS_FCM error=$code');
+            return;
+          }
+        }
+
+        await Future<void>.delayed(Duration(seconds: attempt * 2));
+      }
     } finally {
       await subscription?.cancel();
     }
