@@ -1,0 +1,213 @@
+import 'dart:async';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+/// Stato della registrazione FCM mostrato nella diagnostica di debug.
+enum PushRegistrationState { idle, registering, registered, failed }
+
+/// Gestisce FCM lato dispositivo: canale Android, permesso notifiche,
+/// registrazione tramite Firebase Installation ID e visualizzazione in foreground.
+///
+/// L'FID resta solo in memoria e non viene mai scritto nei log.
+abstract final class PushNotifications {
+  static const String channelId = 'nexus_social_default';
+  static const String channelName = 'Notifiche Nexus Social';
+  static const String channelDescription =
+      'Messaggi, chat e aggiornamenti di Nexus Social';
+
+  static final ValueNotifier<String?> installationId = ValueNotifier<String?>(
+    null,
+  );
+  static final ValueNotifier<String> permission = ValueNotifier<String>(
+    'sconosciuto',
+  );
+  static final ValueNotifier<PushRegistrationState> registration =
+      ValueNotifier<PushRegistrationState>(PushRegistrationState.idle);
+  static final ValueNotifier<int> foregroundMessages = ValueNotifier<int>(0);
+  static final ValueNotifier<String?> lastForegroundTitle =
+      ValueNotifier<String?>(null);
+
+  static final FlutterLocalNotificationsPlugin _local =
+      FlutterLocalNotificationsPlugin();
+  static StreamSubscription<RemoteMessage>? _foregroundSubscription;
+  static bool _initialized = false;
+  static bool _channelReady = false;
+
+  /// Va registrato prima di `runApp`, come richiede FCM per i messaggi in background.
+  static void registerBackgroundHandler() {
+    FirebaseMessaging.onBackgroundMessage(_onBackgroundMessage);
+  }
+
+  /// Crea il canale, chiede il permesso e registra il dispositivo.
+  static Future<void> initialize() async {
+    if (_initialized) return;
+    _initialized = true;
+
+    await _createChannel();
+    await requestPermission();
+
+    _foregroundSubscription ??= FirebaseMessaging.onMessage.listen(
+      _showForeground,
+    );
+
+    await _registerInstallation();
+  }
+
+  static Future<void> _createChannel() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+
+    try {
+      await _local.initialize(
+        settings: const InitializationSettings(
+          android: AndroidInitializationSettings('ic_stat_nexus'),
+        ),
+      );
+      final AndroidFlutterLocalNotificationsPlugin? android = _local
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      await android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          channelId,
+          channelName,
+          description: channelDescription,
+          importance: Importance.high,
+          playSound: true,
+        ),
+      );
+      _channelReady = true;
+    } catch (error) {
+      debugPrint('NEXUS_PUSH channel=failed (${error.runtimeType})');
+    }
+  }
+
+  /// Su Android 13+ questa chiamata mostra la richiesta di POST_NOTIFICATIONS.
+  static Future<String> requestPermission() async {
+    try {
+      final NotificationSettings settings = await FirebaseMessaging.instance
+          .requestPermission(alert: true, badge: true, sound: true);
+      final String status =
+          settings.authorizationStatus == AuthorizationStatus.authorized
+          ? 'granted'
+          : settings.authorizationStatus.name;
+      permission.value = status;
+      debugPrint(
+        'NEXUS_PUSH channel=${_channelReady ? 'ready' : 'failed'} '
+        'permission=$status',
+      );
+      return status;
+    } catch (error) {
+      permission.value = 'errore';
+      debugPrint(
+        'NEXUS_PUSH channel=${_channelReady ? 'ready' : 'failed'} '
+        'permission=failed (${error.runtimeType})',
+      );
+      return 'errore';
+    }
+  }
+
+  static Future<void> _registerInstallation() async {
+    final FirebaseMessaging messaging = FirebaseMessaging.instance;
+    final Completer<String> registered = Completer<String>();
+    StreamSubscription<String>? subscription;
+
+    registration.value = PushRegistrationState.registering;
+    try {
+      await messaging.setAutoInitEnabled(true);
+
+      // firebase_messaging 17 usa la Firebase Installation ID: register() avvia
+      // la registrazione e onRegistered restituisce il FID.
+      subscription = messaging.onRegistered.listen((String fid) {
+        if (!registered.isCompleted) registered.complete(fid);
+      });
+      await messaging.register();
+
+      final String fid = await registered.future.timeout(
+        const Duration(seconds: 30),
+      );
+      installationId.value = fid;
+      registration.value = PushRegistrationState.registered;
+      // Nessun identificativo nel log: solo lo stato.
+      debugPrint('NEXUS_FCM registered=true');
+    } on TimeoutException {
+      registration.value = PushRegistrationState.failed;
+      debugPrint('NEXUS_FCM error=timeout');
+    } catch (error) {
+      registration.value = PushRegistrationState.failed;
+      debugPrint('NEXUS_FCM error=${error.runtimeType}');
+    } finally {
+      await subscription?.cancel();
+    }
+  }
+
+  /// In foreground FCM non mostra la notifica da solo: la pubblichiamo noi
+  /// sullo stesso canale usato dai messaggi in background.
+  static Future<void> _showForeground(RemoteMessage message) async {
+    final RemoteNotification? notification = message.notification;
+    final String title = _clean(notification?.title) ?? 'Nexus Social';
+    final String body =
+        _clean(notification?.body) ?? 'Hai ricevuto un nuovo messaggio.';
+
+    foregroundMessages.value += 1;
+    lastForegroundTitle.value = title;
+    debugPrint('NEXUS_PUSH foreground=received');
+
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+
+    try {
+      await _local.show(
+        id: _notificationId(message),
+        title: title,
+        body: body,
+        notificationDetails: _details,
+      );
+    } catch (error) {
+      debugPrint('NEXUS_PUSH display=failed (${error.runtimeType})');
+    }
+  }
+
+  static String? _clean(String? value) {
+    final String? trimmed = value?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+
+  static int _notificationId(RemoteMessage message) {
+    final String? id = message.messageId;
+    if (id == null || id.isEmpty) {
+      return DateTime.now().millisecondsSinceEpoch.remainder(1 << 31);
+    }
+    return id.hashCode & 0x7fffffff;
+  }
+
+  /// Notifica locale usata solo dalla diagnostica per verificare canale e icona.
+  static Future<void> showLocalTest() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    await _local.show(
+      id: 9001,
+      title: 'Nexus Social',
+      body: 'Notifica locale di prova: canale e visualizzazione configurati.',
+      notificationDetails: _details,
+    );
+    debugPrint('NEXUS_PUSH local_test=shown');
+  }
+
+  static const NotificationDetails _details = NotificationDetails(
+    android: AndroidNotificationDetails(
+      channelId,
+      channelName,
+      channelDescription: channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: 'ic_stat_nexus',
+    ),
+  );
+}
+
+@pragma('vm:entry-point')
+Future<void> _onBackgroundMessage(RemoteMessage message) async {
+  // I messaggi con payload "notification" vengono mostrati dal sistema usando
+  // il canale predefinito configurato nel manifest. Qui resteranno disponibili
+  // i messaggi data-only per la Fase 4.
+}

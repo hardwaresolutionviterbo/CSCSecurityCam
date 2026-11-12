@@ -1,12 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Serve per Supabase, Firebase e per la mappa (Fase 3). -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Notifiche push (Android 13+ chiederà il consenso in Fase 4). -->
+    <!-- Notifiche push: su Android 13+ il consenso viene chiesto a runtime. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="Nexus Social"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Registrazione FCM tramite Firebase Installation ID. -->
+        <meta-data
+            android:name="firebase_messaging_installation_id_enabled"
+            android:value="true" />
+        <!-- Canale e icona usati dalle notifiche in background inviate da FCM. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="nexus_social_default" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_nexus" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -19,7 +30,7 @@
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues
-                 to determine the Window background behind the Flutter UI. -->
+                 to determine the background behind the Flutter UI. -->
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
