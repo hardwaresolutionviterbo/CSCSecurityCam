@@ -93,8 +93,8 @@ class ProfileScreen extends StatelessWidget {
               if (!backend.anyConnected) ...[
                 const SizedBox(height: 14),
                 Text(
-                  'Aggiungi le chiavi in env.json (o nelle variabili di Codemagic) '
-                  'per collegare i servizi.',
+                  'Aggiungi le chiavi in env.json (o nei segreti di GitHub Actions '
+                  'e Codemagic) per collegare i servizi.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -182,6 +182,46 @@ class _ServiceRow extends StatelessWidget {
   final String detail;
   final ServiceState state;
 
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                name,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            _StatusBadge(state: state),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          detail,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Etichetta compatta dello stato di un servizio.
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.state});
+
+  final ServiceState state;
+
   String get _label => switch (state) {
     ServiceState.connected => 'Collegato',
     ServiceState.failed => 'Errore',
@@ -189,7 +229,7 @@ class _ServiceRow extends StatelessWidget {
   };
 
   Color _color(ColorScheme scheme) => switch (state) {
-    ServiceState.connected => AppColors.brandMint,
+    ServiceState.connected => scheme.secondary,
     ServiceState.failed => scheme.error,
     ServiceState.notConfigured => scheme.onSurfaceVariant,
   };
@@ -197,43 +237,23 @@ class _ServiceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final ColorScheme scheme = theme.colorScheme;
+    final Color color = _color(theme.colorScheme);
 
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: _color(scheme),
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        _label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.1,
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(name, style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              )),
-              Text(
-                detail,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Text(
-          _label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: _color(scheme),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -270,9 +290,12 @@ class _AccountTypeRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              )),
+              Text(
+                title,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               Text(
                 detail,
                 style: theme.textTheme.bodySmall?.copyWith(

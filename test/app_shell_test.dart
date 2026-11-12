@@ -71,11 +71,44 @@ void main() {
     expect(find.text('Stato dei servizi'), findsOneWidget);
     expect(find.text('Non configurato'), findsNWidgets(2));
 
-    await tester.drag(
-      find.text('Stato dei servizi'),
-      const Offset(0, -400),
-    );
+    await tester.drag(find.text('Stato dei servizi'), const Offset(0, -400));
     await tester.pumpAndSettle();
     expect(find.text('Posizione approssimata'), findsOneWidget);
+  });
+
+  testWidgets('le icone di sistema seguono il tema chiaro e scuro', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const NexusApp());
+    await tester.pumpAndSettle();
+
+    final AppBar lightBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(
+      lightBar.systemOverlayStyle?.statusBarIconBrightness,
+      Brightness.dark,
+    );
+
+    tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+    await tester.pumpWidget(const NexusApp());
+    await tester.pumpAndSettle();
+
+    final BuildContext context = tester.element(find.byType(NavigationBar));
+    expect(Theme.of(context).brightness, Brightness.dark);
+    final AppBar darkBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(
+      darkBar.systemOverlayStyle?.statusBarIconBrightness,
+      Brightness.light,
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Profilo'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Non configurato'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
   });
 }
