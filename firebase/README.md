@@ -43,11 +43,37 @@ configurato». Il job **verifica runtime Firebase** (solo avvio manuale del work
 l'APK su un emulatore, apre l'app e controlla nei log che Firebase Core, Auth e Firestore
 siano inizializzati. Per iOS serviranno `GoogleService-Info.plist` e `firebase_options.dart`.
 
+## Notifiche push (FCM)
+
+- Il canale Android è `nexus_social_default` (importanza alta) ed è impostato come canale
+  predefinito nel manifest, così funzionano anche le notifiche ricevute in background.
+- Su Android 13+ l'app chiede il permesso `POST_NOTIFICATIONS` a runtime tramite
+  `FirebaseMessaging.requestPermission()`.
+- La registrazione usa la Firebase Installation ID
+  (`firebase_messaging_installation_id_enabled=true`). Il FID resta solo in memoria e non
+  viene scritto nei log; l'associazione a un utente richiederà un endpoint autenticato.
+- In foreground FCM non mostra la notifica da solo: l'app la pubblica sul canale con
+  `flutter_local_notifications`. In background la mostra Android usando il canale predefinito.
+- La schermata **Profilo → Diagnostica push (debug)** mostra FID, permesso, stato della
+  registrazione e canale. È compilata solo in debug e serve per il test manuale.
+
+### Test manuale con Firebase Console
+
+1. Installa l'APK debug e apri **Profilo → Diagnostica push (debug)**.
+2. Copia il **Firebase Installation ID** mostrato (non condividerlo pubblicamente).
+3. In Firebase Console → **Messaging** → **Invia messaggio di prova**, incolla il FID come
+   destinatario e invia una notifica con titolo e testo.
+4. Con l'app in foreground deve comparire la notifica locale; con l'app in background deve
+   comparire la notifica di sistema. Il contatore «Messaggi in foreground» conferma la ricezione.
+
+Il job emulatore verifica registrazione FCM, permesso e canale, ma non può inviare dalla
+Firebase Console: la ricezione di una notifica reale va confermata con il test manuale.
+
 ## Cosa fanno le regole Firestore
 
 - Le chat contengono **solo testo cifrato** (`ciphertext` + `iv`), scritto dal dispositivo.
   Le regole rifiutano campi in chiaro e payload oltre 64 KB.
-- Solo i membri della chat leggono e scrivono i messaggi; le chat non si cancellano.
+- Solo i membri delle chat leggono e scrivono i messaggi; le chat non si cancellano.
 - I destinatari possono aggiornare solo stato di consegna/lettura.
 - `/profiles/{uid}` è una copia minima e pubblica (nome abbreviato, @username, avatar).
 - Tutto ciò che non è elencato è negato.

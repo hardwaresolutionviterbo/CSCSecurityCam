@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/services/backend_bootstrap.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/nexus_ui.dart';
+import 'push_diagnostics_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({
@@ -112,6 +114,26 @@ class ProfileScreen extends StatelessWidget {
             ],
           ),
         ),
+        if (kDebugMode && AppConfig.hasFirebase) ...[
+          const SizedBox(height: AppSpacing.md),
+          SectionCard(
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.notifications_active_outlined,
+                color: scheme.primary,
+              ),
+              title: const Text('Diagnostica push (debug)'),
+              subtitle: const Text('FID, permessi e canale notifiche'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const PushDiagnosticsScreen(),
+                ),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpacing.md),
         SectionCard(
           child: Column(
