@@ -90,7 +90,7 @@ si avvia normalmente e segnala nel Profilo quali servizi non sono configurati.
 ## Verifiche eseguite (Fase 1)
 
 - `flutter analyze`: nessun problema.
-- `flutter test`: 6 test superati (navigazione, campanella, profilo, configurazione).
+- `flutter test`: 7 test superati (navigazione, campanella, profilo, configurazione, tema).
 - Schema Supabase: 58 istruzioni con sintassi valida secondo il parser PostgreSQL; non è
   ancora stato eseguito su un progetto Supabase reale.
 - `flutter build apk --debug`: APK generato e firmato con la chiave di debug, package
@@ -101,8 +101,10 @@ si avvia normalmente e segnala nel Profilo quali servizi non sono configurati.
 ## Collegare i servizi
 
 - **Supabase** (annunci, distanza, foto, segnalazioni, admin): crea il progetto, esegui
-  `supabase/migrations/0001_init.sql` nel SQL Editor, poi valorizza `SUPABASE_URL` e
-  `SUPABASE_ANON_KEY`. Dettagli in [`supabase/README.md`](supabase/README.md).
+  `supabase/migrations/0001_init.sql` nel SQL Editor, poi aggiungi `SUPABASE_URL` e
+  `SUPABASE_ANON_KEY` nei **Settings → Secrets and variables → Actions** di GitHub: il workflow
+  verifica la connessione e li passa alla build. L'integrazione GitHub del pannello Supabase
+  serve solo alle migrazioni. Dettagli in [`supabase/README.md`](supabase/README.md).
 - **Firebase** (SMS, chat, chiamate, notifiche): crea il progetto, aggiungi le app Android/iOS,
   scarica i file di configurazione e genera `lib/firebase_options.dart`, poi imposta
   `FIREBASE_ENABLED=true`. Dettagli in [`firebase/README.md`](firebase/README.md).

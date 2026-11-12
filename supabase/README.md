@@ -13,6 +13,19 @@ Chat, chiamate e notifiche restano su Firebase (vedi `../firebase/`).
 4. Verifica in **Table Editor** che esistano `profiles`, `listings`, `listing_locations`,
    `reports`, `user_moderation`, `admin_users`, e in **Storage** il bucket `listing-photos`.
 
+## Collegare l'app alla build GitHub
+
+L'integrazione GitHub del pannello Supabase distribuisce solo le migrazioni: **non passa URL e
+chiave all'app**. Per collegare davvero l'APK:
+
+1. Su GitHub apri **Settings → Secrets and variables → Actions** e crea due *repository secrets*:
+   `SUPABASE_URL` (Project URL) e `SUPABASE_ANON_KEY` (anon/publishable key). Non scriverli nel
+   repository né in chat.
+2. Fai ripartire **Android APK** (push su `main` oppure *Run workflow*): lo step «Verifica
+   connessione Supabase» interroga `profiles` e stampa solo il codice HTTP.
+3. Se lo step passa, nel Profilo dell'app i servizi risultano **Collegato**; senza i due segreti
+   il workflow compila comunque, ma l'app mostra «Supabase non configurato».
+
 ## Cosa è già protetto
 
 - **RLS attiva su tutte le tabelle**: senza policy esplicita non si legge e non si scrive nulla.
