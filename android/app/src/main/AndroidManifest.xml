@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Serve per Supabase, Firebase e per la mappa (Fase 3). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Notifiche push (Android 13+ chiederà il consenso in Fase 4). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="Nexus Social"
         android:name="${applicationName}"

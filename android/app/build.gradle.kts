@@ -4,6 +4,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// google-services.json non è versionato: in CI viene ricreato dal secret
+// GOOGLE_SERVICES_JSON. Il plugin si applica solo quando il file esiste, così
+// la build locale senza configurazione Firebase continua a funzionare.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.nexussocial.app"
     compileSdk = flutter.compileSdkVersion

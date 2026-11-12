@@ -32,6 +32,17 @@ esclusi da `.gitignore`.
 Senza questi passaggi l'app funziona lo stesso: mostra «Firebase non configurato» nella
 sezione Profilo e non tenta nessuna connessione.
 
+## Collegamento nella build GitHub Actions (Android)
+
+Il secret `GOOGLE_SERVICES_JSON` contiene il file scaricato da Firebase. Il workflow lo
+ricostruisce in `android/app/google-services.json` prima della build, senza stamparne il
+contenuto, e passa `FIREBASE_ENABLED=true`; il file resta escluso dal repository.
+
+Se il secret manca, la build continua senza Firebase e l'app mostra «Firebase non
+configurato». Il job **verifica runtime Firebase** (solo avvio manuale del workflow) installa
+l'APK su un emulatore, apre l'app e controlla nei log che Firebase Core, Auth e Firestore
+siano inizializzati. Per iOS serviranno `GoogleService-Info.plist` e `firebase_options.dart`.
+
 ## Cosa fanno le regole Firestore
 
 - Le chat contengono **solo testo cifrato** (`ciphertext` + `iv`), scritto dal dispositivo.
