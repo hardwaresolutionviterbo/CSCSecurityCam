@@ -42,8 +42,36 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Verifica connessione Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "::warning::Supabase non configurato: aggiungi SUPABASE_URL e SUPABASE_ANON_KEY in Settings → Secrets and variables → Actions."
+            exit 0
+          fi
+          base="${SUPABASE_URL%/}"
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            "${base}/rest/v1/profiles?select=id&limit=1")
+          echo "Supabase /rest/v1/profiles → HTTP ${code}"
+          if [ "${code}" != "200" ]; then
+            echo "::error::Supabase non raggiungibile o schema non applicato (HTTP ${code}). Controlla URL, chiave e migrazione 0001_init.sql."
+            exit 1
+          fi
+          echo "Supabase raggiungibile e schema presente."
+
       - name: Build APK (debug)
-        run: flutter build apk --debug
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          flutter build apk --debug \
+            --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
+            --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}" \
+            --dart-define=FIREBASE_ENABLED=false
 
       - name: Carica APK
         uses: actions/upload-artifact@v7

@@ -54,6 +54,13 @@ abstract final class BackendBootstrap {
           url: AppConfig.supabaseUrl,
           publishableKey: AppConfig.supabaseKey,
         );
+        // initialize() prepara solo il client locale: una lettura minima dimostra
+        // che URL, chiave e schema rispondono davvero.
+        await Supabase.instance.client
+            .from('profiles')
+            .select('id')
+            .limit(1)
+            .timeout(const Duration(seconds: 5));
         supabase = ServiceState.connected;
       } catch (error) {
         supabase = ServiceState.failed;
