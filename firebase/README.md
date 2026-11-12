@@ -62,8 +62,10 @@ siano inizializzati. Per iOS serviranno `GoogleService-Info.plist` e `firebase_o
 Quando un utente accede con Firebase Auth, `PushDeviceRegistry` salva il FID in
 `profiles/{uid}/devices/{fid}` con piattaforma, versione dell'app e timestamp. Le regole
 Firestore consentono lettura, creazione, aggiornamento ed eliminazione **solo al proprietario
-del profilo**; nessun altro utente può leggere il FID. Durante la sessione, al cambio account o
-alla disconnessione il collegamento precedente viene eliminato prima di associarne uno nuovo.
+del profilo**; nessun altro utente può leggere il FID. Prima di un logout o di un cambio
+account il flusso di autenticazione deve chiamare `PushDeviceRegistry.unlinkCurrentDevice()`
+(o `signOut()`): la cancellazione riesce solo finché l'utente proprietario è ancora
+autenticato. Un cambio account diretto non può cancellare il documento del vecchio utente.
 
 L'app non ha ancora la schermata di accesso (Fase 2): fino al primo login la diagnostica mostra
 «in attesa di accesso» e non viene scritto nulla. Dopo aver aggiunto le regole aggiornate,
@@ -98,7 +100,7 @@ Firebase Console: la ricezione di una notifica reale va confermata con il test m
 ## Decisioni aperte (Fase 4)
 
 - **Media delle chat** (foto, video, file): Firebase Storage non può verificare l'appartenenza
-  a una chat senza custom claim o Cloud Functions. Valutare Supabase Storage con RLS sulle
+  a una chat senza chat membership via Cloud Functions. Valutare Supabase Storage con RLS sulle
   membership, oppure URL firmati emessi da una Cloud Function.
 - **Chiamate**: WebRTC con signaling su Firestore; TURN (coturn) per NAT simmetrici.
 - **Chiavi E2E**: generate sul dispositivo, mai su Firebase; backup delle chiavi a carico

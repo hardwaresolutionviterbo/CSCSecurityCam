@@ -114,14 +114,18 @@ abstract final class PushDeviceRegistry {
     final User? user = _user;
     final String? fid = _fid;
 
-    // Se l'account è cambiato o è stato chiuso, rimuovi prima il vecchio
-    // collegamento: un dispositivo non deve continuare a ricevere notifiche
-    // dell'account precedente.
-    if (_linkedUid != null &&
-        _linkedFid != null &&
-        (_linkedUid != user?.uid || _linkedFid != fid)) {
+    // Un FID nuovo per lo stesso account può essere rimosso subito. Dopo un
+    // cambio account, invece, l'utente autenticato non è più il proprietario
+    // del vecchio documento: la pulizia deve avvenire prima del logout con
+    // `unlinkCurrentDevice()` o `signOut()`.
+    final bool sameUser = _linkedUid == user?.uid;
+    final bool sameFid = _linkedFid == fid;
+    if (_linkedUid != null && _linkedFid != null && sameUser && !sameFid) {
       final bool removed = await _unlink(_linkedUid!, _linkedFid!);
       if (!removed) return;
+      _linkedUid = null;
+      _linkedFid = null;
+    } else if (_linkedUid != null && !sameUser) {
       _linkedUid = null;
       _linkedFid = null;
     }
@@ -188,6 +192,29 @@ abstract final class PushDeviceRegistry {
       }
       transaction.set(document, data, SetOptions(merge: true));
     });
+  }
+
+  /// Scollega il dispositivo mentre l'utente è ancora autenticato.
+  ///
+  /// Va chiamato prima di `FirebaseAuth.signOut()` o di un cambio account:
+  /// dopo il cambio di autenticazione le regole owner-only impediscono di
+  /// eliminare il documento del vecchio utente.
+  static Future<void> unlinkCurrentDevice() async {
+    final User? user = FirebaseAuth.instance.currentUser;
+    final String? fid = _fid ?? PushNotifications.installationId.value;
+    if (user == null || fid == null || fid.isEmpty) return;
+    if (await _unlink(user.uid, fid) &&
+        _linkedUid == user.uid &&
+        _linkedFid == fid) {
+      _linkedUid = null;
+      _linkedFid = null;
+    }
+  }
+
+  /// Uscita sicura: prova a scollegare il dispositivo, poi chiude la sessione.
+  static Future<void> signOut() async {
+    await unlinkCurrentDevice();
+    await FirebaseAuth.instance.signOut();
   }
 
   static Future<bool> _unlink(String uid, String fid) async {
