@@ -100,7 +100,7 @@ Firebase Console: la ricezione di una notifica reale va confermata con il test m
 ## Decisioni aperte (Fase 4)
 
 - **Media delle chat** (foto, video, file): Firebase Storage non può verificare l'appartenenza
-  a una chat senza chat membership via Cloud Functions. Valutare Supabase Storage con RLS sulle
+  a una chat senza custom claim o Cloud Functions. Valutare Supabase Storage con RLS sulle
   membership, oppure URL firmati emessi da una Cloud Function.
 - **Chiamate**: WebRTC con signaling su Firestore; TURN (coturn) per NAT simmetrici.
 - **Chiavi E2E**: generate sul dispositivo, mai su Firebase; backup delle chiavi a carico
