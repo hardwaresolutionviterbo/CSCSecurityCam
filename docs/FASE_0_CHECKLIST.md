@@ -26,8 +26,8 @@ Legenda:
 | Account Codemagic | 🟡 deciso (F11) | Android resta su GitHub Actions; Codemagic per le build iPhone. **Account gratuito da creare o confermare.** |
 | Servizio mappa 3D (account e chiave gratuita) | ✅ deciso (F9) | [`fase0/DECISIONE_MAPPA.md`](fase0/DECISIONE_MAPPA.md): MapLibre + OpenFreeMap, senza account né chiave. «3D» = inclinazione ed edifici 3D. Prototipo di conferma all'inizio della Fase 3. |
 | Chiavi e password in un posto sicuro | ✅ confermato (F10) | Confermato dal titolare. Nessuna chiave nel repository. |
-| Logo, icona, colori, stile (moderno, avatar animati, modalità scura) | 🟡 | Monogramma «N» su gradiente viola-menta, icona dell'app, tema chiaro e scuro presenti. Lo stile degli **avatar animati** non è ancora definito; l'icona definitiva per gli store è prevista in Fase 9/10. |
-| Piano costi | 🟡 | Voci di costo sotto. Mancano le soglie gratuite attuali di Firebase, Supabase e SMS, da verificare prima della Fase 2 (SMS). |
+| Logo, icona, colori, stile (moderno, avatar animati, modalità scura) | ✅ concept, 🔷 6 scelte | Logo, icona e tema chiaro/scuro presenti. Concept di avatar e marker dal mockup del titolare: [`fase0/AVATAR_E_MARKER_CONCEPT.md`](fase0/AVATAR_E_MARKER_CONCEPT.md). Decisioni A1-A6 aperte. Icona definitiva per gli store in Fase 9/10. |
+| Piano costi | ✅ verificato, 🔷 5 scelte | [`fase0/LIMITI_GRATUITI.md`](fase0/LIMITI_GRATUITI.md). **Il login con SMS richiede il piano Blaze di Firebase** (circa 0,05 $ per SMS in Italia, primi 10 al giorno gratuiti). Decisioni L1-L5 aperte. |
 | Bozze di Termini d'uso, Privacy Policy, Regole della community | ✅ come **bozze non validate** | [`fase0/BOZZA_TERMINI_USO.md`](fase0/BOZZA_TERMINI_USO.md), [`fase0/BOZZA_PRIVACY_POLICY.md`](fase0/BOZZA_PRIVACY_POLICY.md), [`fase0/BOZZA_REGOLE_COMMUNITY.md`](fase0/BOZZA_REGOLE_COMMUNITY.md). Revisione professionale prevista in Fase 9. |
 | Impostazioni Privacy, Controllo privacy, separazione dati pubblici e privati | ✅ progettate e approvate | [`fase0/PRIVACY_IMPOSTAZIONI.md`](fase0/PRIVACY_IMPOSTAZIONI.md); decisioni P1-P15, D1-D4, M1-M7 in [`fase0/DECISIONI_PRIVACY_APPROVATE.md`](fase0/DECISIONI_PRIVACY_APPROVATE.md) |
 
@@ -114,10 +114,17 @@ Fatte:
 Ancora da fare:
 
 6. 🟡 Creare o confermare l'account gratuito Codemagic per le build iPhone (F11). Azione tua.
-7. ⏳ Definire lo stile degli avatar animati (bozza grafica).
-8. ⏳ Verificare le soglie gratuite attuali di Firebase (SMS), Supabase e servizio mappa.
+7. ✅ Concept di avatar e marker registrato. 🔷 Restano le decisioni A1-A6 (barra di navigazione,
+   stato online, stati sulla mappa, schede, tipo di avatar, pulsante 3D).
+8. ✅ Limiti gratuiti verificati. 🔷 Restano le decisioni L1-L5 (piano Blaze per gli SMS, budget,
+   Paesi SMS, Supabase, media delle chat).
 9. ⏳ Compilare i dati del titolare nelle bozze legali. La revisione del professionista è prevista
    in Fase 9 e deve coprire anche gli obblighi sui minorenni (Digital Services Act, art. 28).
 
-Per dichiarare conclusa la Fase 0 servono i punti 6-8. Il punto 9 può restare aperto fino alla
-Fase 9, perché il piano chiede in Fase 0 solo le bozze.
+Per dichiarare conclusa la Fase 0 servono:
+
+- il punto 6 (account Codemagic);
+- le decisioni A1, A5, L1, L2 e L3, che servono prima della Fase 2.
+
+A2-A4, A6, L4 e L5 si possono decidere prima delle fasi indicate nei rispettivi documenti. Il
+punto 9 può restare aperto fino alla Fase 9, perché il piano chiede in Fase 0 solo le bozze.
