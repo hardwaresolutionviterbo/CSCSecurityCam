@@ -53,7 +53,9 @@ l'indirizzo di una persona dalle coordinate o dalla distanza.
   è obbligatorio l'audit in sola lettura; messaggi solo cifrati,
   membership con ruoli in `chats/{chatId}/members` (valide per dare accesso, massimo 256 per
   chat), profili allineati ai vincoli di Supabase, default negato. Test con l'emulatore in
-  `firebase/tests/`; deploy solo dopo l'audit in sola lettura (vedi `firebase/README.md`).
+  `firebase/tests/`. Il merge non autorizza il deploy: servono audit in sola lettura, verifica
+  dei dati legacy, backup di Firestore, indici necessari e approvazione esplicita (vedi
+  `firebase/README.md`, «Pubblicazione delle regole»).
 - Le chiavi `anon` di Supabase sono pubbliche per definizione: la sicurezza sta nelle policy.
 
 ## Chat cifrata end-to-end (Fase 4)

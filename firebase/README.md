@@ -133,6 +133,10 @@ Le regole Firestore valgono **solo per le richieste dei client**. Admin SDK, Fir
 import ed eventuali Cloud Functions le ignorano completamente: i documenti scritti in questi modi
 non sono vincolati dalle regole e, se hanno `schemaVersion: 2`, compaiono nelle query.
 
+> **Il merge in `main` non autorizza il deploy.** Le regole su `main` sono pronte per essere
+> pubblicate, ma la pubblicazione richiede tutti i passaggi qui sotto e una **successiva
+> approvazione esplicita**.
+
 Il deploy è quindi subordinato a questa sequenza, da eseguire ogni volta:
 
 1. **Audit in sola lettura** dei dati in produzione su `profiles`, `chats` (con `members` e
@@ -141,8 +145,18 @@ Il deploy è quindi subordinato a questa sequenza, da eseguire ogni volta:
 2. **Esito richiesto**: nessun documento con `schemaVersion: 2` che non rispetta lo schema in
    [`tests/README.md`](tests/README.md#modello-dati-verificato). Se l'audit ne trova, il deploy
    si ferma: la bonifica è un intervento lato server separato, da approvare.
-3. **Test verdi** del workflow **Firestore Rules** sul commit da pubblicare.
-4. Solo allora: `firebase deploy --only firestore:rules`.
+3. **Verifica dei dati legacy**: chat create con il modello precedente (array `members` nel
+   documento chat, senza `memberCount` né `schemaVersion: 2`) e messaggi o richieste senza
+   `schemaVersion: 2` diventano illeggibili con queste regole. Se esistono, serve una decisione
+   (migrazione lato server o accettazione) prima del deploy.
+4. **Backup di Firestore** (export completo) prima della pubblicazione.
+5. **Indici necessari** alle query usate dall'app, creati in anticipo. Oggi l'app non esegue
+   query sulle chat; dalla Fase 4 servono quelli elencati in
+   [`tests/README.md`](tests/README.md#limiti-noti).
+6. **Test verdi** del workflow **Firestore Rules** sul commit da pubblicare.
+7. **Approvazione esplicita** del deploy.
+8. Solo allora: `firebase deploy --only firestore:rules`, senza modifiche ai dati; poi prova
+   manuale della registrazione dei dispositivi push nell'app.
 
 Lo script di audit non è ancora nel repository (escluso dalla Fase A.1): finché manca, le regole
 non vanno pubblicate su un progetto che contiene dati.
