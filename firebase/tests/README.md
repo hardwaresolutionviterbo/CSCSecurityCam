@@ -38,7 +38,7 @@ copertura delle regole (JSON e HTML), caricato come artifact dalla CI.
 
 | Percorso | Campi (obbligatori · *facoltativi*) | Lettura |
 | --- | --- | --- |
-| `profiles/{uid}` | `username` (A-Z a-z 0-9 . _, 3-24, come Supabase), `publicName` (1-80 caratteri, come `public_name` di Supabase, @ ammessa, niente numeri di telefono), `updatedAt` timestamp · *`avatarUrl`* (https, senza spazi né @) | `get` da utenti autenticati, rivalidato; nessuna `list` |
+| `profiles/{uid}` | `username` (A-Z a-z 0-9 . _, 3-24, come Supabase), `publicName` (1-80 caratteri, come `public_name` di Supabase, @ ammessa, niente numeri di telefono), `updatedAt` timestamp · *`avatarUrl`* (https, senza spazi né @) | `get` da utenti autenticati, rivalidato; nessuna `list`; **nessuna scrittura dai client** (copia scritta solo dal server, Fase 2) |
 | `profiles/{uid}/devices/{fid}` | invariato | solo il proprietario |
 | `chats/{chatId}` | `type` direct/group, `createdBy`, `createdAt`, `updatedAt`, `schemaVersion` 2, `memberCount` (1-256), `lastMemberChange` {`op` add/remove, `uid`} · *`title`* (≤ 80, senza email/telefono), *`avatarUrl`*, *`lastMessageAt`* | `get` dai membri, rivalidato; nessuna `list` |
 | `chats/{chatId}/members/{uid}` | `uid` = id documento, `role` owner/admin/member, `permissions` {`addMembers`, `removeMembers`} booleani, `joinedAt`, `addedBy`, `schemaVersion` 2 | `get` dai membri, rivalidato; `list` dai membri con `where('schemaVersion', '==', 2)`; collection group con `where('uid', '==', mio uid)` e `schemaVersion` 2 |
@@ -112,6 +112,9 @@ query, anche se la lettura singola resta negata.
 
 ## Limiti noti
 
+- **Profili senza sincronizzazione**: i client non scrivono più `profiles/{uid}`; finché la
+  sincronizzazione lato server della Fase 2 non esiste, la copia Firestore dei profili è vuota
+  e chat e notifiche non hanno nomi da mostrare.
 - **Documenti scritti fuori dalle regole**: vedi sopra. Il deploy è subordinato all'audit in
   sola lettura (vedi [`../README.md`](../README.md#pubblicazione-delle-regole-deploy)).
 - **public_name di sole cifre**: Supabase accetta un nome di una sola parola come

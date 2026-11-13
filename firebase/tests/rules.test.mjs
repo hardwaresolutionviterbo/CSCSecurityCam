@@ -357,31 +357,65 @@ describe('profiles: lettura', () => {
   });
 });
 
-describe('profiles: scrittura', () => {
+describe('profiles: nessuna scrittura dai client', () => {
   const write = (extra = {}) => ({ ...validProfile(), updatedAt: serverTimestamp(), ...extra });
 
-  test('il proprietario crea e aggiorna un profilo valido (controllo positivo)', async () => {
-    await assertSucceeds(setDoc(doc(db('carlo'), 'profiles/carlo'), write()));
-    await assertSucceeds(setDoc(doc(db('carlo'), 'profiles/carlo'), write({ publicName: 'Carlo Cr.' })));
-    await assertSucceeds(setDoc(doc(db('carlo'), 'profiles/carlo'),
-      write({ username: 'Carlo.C', publicName: 'carlo@studio.it R.' })));
-  });
-
-  test('scritture non valide negate', async () => {
+  test('il proprietario non crea il proprio profilo, neanche con dati validi', async () => {
     const me = db('carlo');
-    await denied(setDoc(doc(me, 'profiles/carlo'), write({ email: 'carlo@example.com' })));
-    await denied(setDoc(doc(me, 'profiles/carlo'), write({ username: 'Carlo C' })));
-    await denied(setDoc(doc(me, 'profiles/carlo'), write({ username: 'a'.repeat(25) })));
-    await denied(setDoc(doc(me, 'profiles/carlo'), write({ publicName: 'x'.repeat(81) })));
-    await denied(setDoc(doc(me, 'profiles/carlo'), write({ publicName: 'chiama 3331234567' })));
-    await denied(setDoc(doc(me, 'profiles/carlo'), write({ avatarUrl: { url: 'x' } })));
-    await denied(setDoc(doc(me, 'profiles/carlo'), write({ updatedAt: past() })));
+    await denied(setDoc(doc(me, 'profiles/carlo'), write()));
+    await denied(setDoc(doc(me, 'profiles/carlo'), write(), { merge: true }));
+    assert.equal((await readAdmin('profiles/carlo')).exists(), false);
   });
 
-  test('nessuno scrive il profilo di un altro né lo cancella', async () => {
+  test('il proprietario non modifica username, nome pubblico o avatar', async () => {
     await seed('profiles/carlo', validProfile());
-    await denied(setDoc(doc(db('alice'), 'profiles/carlo'), write()));
+    const me = db('carlo');
+    const ref = doc(me, 'profiles/carlo');
+    await denied(updateDoc(ref, { username: 'admin', updatedAt: serverTimestamp() }));
+    await denied(updateDoc(ref, { publicName: 'Mario R.', updatedAt: serverTimestamp() }));
+    await denied(updateDoc(ref, { avatarUrl: 'https://cdn.example.com/altro.webp', updatedAt: serverTimestamp() }));
+    await denied(updateDoc(ref, { updatedAt: serverTimestamp() }));
+    await denied(setDoc(ref, write({ username: 'mario.r' })));
+    await denied(setDoc(ref, { publicName: 'Mario R.' }, { merge: true }));
+    // Il documento scritto dal server resta invariato e leggibile.
+    assert.deepEqual((await readAdmin('profiles/carlo')).data().username, 'carlo.c');
+    await assertSucceeds(getDoc(doc(db('alice'), 'profiles/carlo')));
+  });
+
+  test('nessuno crea o falsifica il profilo di un altro utente', async () => {
+    await seed('profiles/carlo', validProfile());
+    await denied(setDoc(doc(db('alice'), 'profiles/carlo'), write({ username: 'alice' })));
+    await denied(updateDoc(doc(db('alice'), 'profiles/carlo'), { publicName: 'Alice A.' }));
+    await denied(setDoc(doc(db('alice'), 'profiles/nuovo'), write()));
+    await denied(setDoc(doc(anon(), 'profiles/anonimo'), write()));
+  });
+
+  test('nessuna cancellazione di profili dai client', async () => {
+    await seed('profiles/carlo', validProfile());
     await denied(deleteDoc(doc(db('carlo'), 'profiles/carlo')));
+    await denied(deleteDoc(doc(db('alice'), 'profiles/carlo')));
+    assert.ok((await readAdmin('profiles/carlo')).exists());
+  });
+
+  test('scrittura lato server (Admin SDK, simulata) leggibile dagli utenti autenticati', async () => {
+    await seed('profiles/carlo', validProfile({ username: 'Carlo.C', publicName: 'carlo@studio.it R.' }));
+    const snap = await assertSucceeds(getDoc(doc(db('alice'), 'profiles/carlo')));
+    assert.equal(snap.data().publicName, 'carlo@studio.it R.');
+  });
+
+  test('i dispositivi push funzionano senza documento profilo e con profilo chiuso', async () => {
+    const path = 'profiles/nuovo/devices/fid_0123456789abcdef';
+    const device = {
+      platform: 'android', appVersion: '0.1.0', enabled: true,
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(), lastSeenAt: serverTimestamp(),
+    };
+    assert.equal((await readAdmin('profiles/nuovo')).exists(), false);
+    await assertSucceeds(setDoc(doc(db('nuovo'), path), device, { merge: true }));
+    await assertSucceeds(getDoc(doc(db('nuovo'), path)));
+    await assertSucceeds(deleteDoc(doc(db('nuovo'), path)));
+    // Con un profilo esistente scritto dal server il percorso dei dispositivi non cambia.
+    await seed('profiles/carlo', validProfile());
+    await assertSucceeds(setDoc(doc(db('carlo'), 'profiles/carlo/devices/fid_aaaaaaaaaaaa'), device));
   });
 });
 

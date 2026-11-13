@@ -57,7 +57,9 @@ l'indirizzo di una persona dalle coordinate o dalla distanza.
 ## Chat cifrata end-to-end (Fase 4)
 
 - Testo e media vengono cifrati **sul dispositivo**; Firestore conserva solo `ciphertext` e
-  `iv`. La copia dei profili su Firestore è minima (nome abbreviato, `@username`, avatar).
+  `iv`. La copia dei profili su Firestore è minima (nome abbreviato, `@username`, avatar) e la
+  scrive solo il server, sincronizzandola da Supabase (fonte ufficiale) nella Fase 2: i client
+  non possono crearla né modificarla.
 - Il protocollo deve essere collaudato, non inventato: in Fase 4 si valuta una libreria del
   protocollo Signal (X3DH + Double Ratchet) o MLS per i gruppi, con verifica delle chiavi di
   sicurezza e frase di recupero per il backup.

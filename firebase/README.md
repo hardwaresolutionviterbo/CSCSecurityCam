@@ -92,10 +92,18 @@ scrittura sia la lettura**. Il dettaglio dei campi ammessi è in
 - **Letture singole (get) rivalidate**: profili, chat, membership, messaggi e richieste sono
   leggibili solo se hanno esattamente i campi previsti, con i tipi giusti. Un documento legacy
   con campi extra (`email`, `address`…) o strutture annidate **non è leggibile**.
-- **Profili allineati a Supabase**: `username` con lo stesso vincolo di `profiles.username`
-  (3-24 caratteri tra lettere, cifre, punto e trattino basso, maiuscole comprese perché il
-  campo è `citext`); `publicName` come il `public_name` generato da Supabase, fino a 80
+- **Profili: copia minima scritta solo dal server**. La fonte ufficiale dei profili è
+  Supabase (`public.profiles`); l'autenticazione è Firebase Auth. `profiles/{uid}` in
+  Firestore contiene solo `username`, `publicName`, `avatarUrl` e `updatedAt`, usati da chat,
+  chiamate e notifiche. **Nessun client può creare, modificare o cancellare un profilo**, neanche
+  il proprio: la copia la scriverà la sincronizzazione lato server Supabase → Firestore (Fase 2,
+  non ancora implementata). Finché manca, i profili Firestore restano vuoti.
+- **Profili: lettura rivalidata con i vincoli di Supabase**: `username` come
+  `profiles.username` (3-24 caratteri tra lettere, cifre, punto e trattino basso, maiuscole
+  comprese perché il campo è `citext`); `publicName` come il `public_name` generato, fino a 80
   caratteri, `@` compresa. Resta escluso un `publicName` che somiglia a un numero di telefono.
+  Le regole di prodotto (es. vietare username di sole cifre o simili a un telefono) vanno in
+  Supabase nella Fase 2.
 - **Query (list)**: le regole valutano i filtri, non i documenti restituiti, quindi le query
   su membri, messaggi e richieste devono filtrare `schemaVersion == 2`, valore che un client può
   scrivere solo con un documento completamente valido. I profili e le chat non sono
@@ -112,7 +120,8 @@ scrittura sia la lettura**. Il dettaglio dei campi ammessi è in
   nello stesso batch di ogni aggiunta o rimozione di una membership. La chat nasce con l'owner e
   al più un secondo membro; gli altri si aggiungono un batch alla volta.
 - **Richieste di messaggio**: le crea il mittente, le accetta o rifiuta solo il destinatario.
-- `/profiles/{uid}/devices/{fid}` è leggibile e modificabile solo dal proprietario (invariato).
+- `/profiles/{uid}/devices/{fid}` è leggibile e modificabile solo dal proprietario (invariato);
+  funziona anche senza documento profilo.
 - Tutto ciò che non è elencato è negato.
 
 ### Pubblicazione delle regole (deploy)

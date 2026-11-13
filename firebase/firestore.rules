@@ -13,6 +13,8 @@ rules_version = '2';
 //  • Le regole valgono solo per i client. Admin SDK, console e import le ignorano: i dati
 //    scritti così vanno verificati con l'audit in sola lettura prima del deploy (vedi
 //    firebase/README.md). Una membership malformata non concede comunque accesso.
+//  • profiles/{uid} è una copia minima del profilo Supabase, scritta solo dal server: i
+//    client la leggono ma non la creano né la modificano.
 //  • Le chat contengono solo testo cifrato lato dispositivo (ciphertext + iv in base64).
 //  • L'appartenenza a una chat sta in chats/{chatId}/members/{uid}: owner, admin, member.
 //    Un utente rimosso perde subito l'accesso; il reinvito crea una nuova membership.
@@ -91,7 +93,9 @@ service cloud.firestore {
 
     // ─── Profili ────────────────────────────────────────────────────────────
 
-    // Copia pubblica e minima del profilo (il profilo completo è su Supabase).
+    // Copia pubblica e minima del profilo. La fonte ufficiale è Supabase
+    // (public.profiles): questa copia la scrive solo il server (sincronizzazione
+    // Supabase → Firestore della Fase 2, con Admin SDK). In lettura resta rivalidata.
     function isPublicProfile(d) {
       return d.keys().hasAll(['username', 'publicName', 'updatedAt'])
         && d.keys().hasOnly(['username', 'publicName', 'avatarUrl', 'updatedAt'])
@@ -123,13 +127,13 @@ service cloud.firestore {
       allow get: if signedIn() && isPublicProfile(resource.data);
       // Nessuna enumerazione dei profili: la ricerca utenti passa da Supabase.
       allow list: if false;
-      allow create, update: if isSelf(uid)
-        && isPublicProfile(request.resource.data)
-        && request.resource.data.updatedAt == request.time;
-      allow delete: if false;
+      // Nessuna scrittura dai client, neanche dal proprietario: username e dati
+      // pubblici non si possono falsificare. Le modifiche passano da Supabase.
+      allow create, update, delete: if false;
 
       // Dispositivi push associati all'account. Il FID è la chiave del
-      // documento e non è mai esposto agli altri utenti.
+      // documento e non è mai esposto agli altri utenti. Sotto-collezione con regole
+      // proprie: funziona anche se il documento profilo non esiste.
       match /devices/{deviceId} {
         allow read, delete: if isSelf(uid);
         allow create: if isSelf(uid) && validPushDevice(deviceId);
