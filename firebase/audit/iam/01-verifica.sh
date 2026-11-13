@@ -9,6 +9,8 @@
 # Uscita: 0 nessun problema, 1 problemi trovati, 2 verifica impossibile.
 
 set -uo pipefail
+# Nessuna domanda interattiva di gcloud (per esempio "attivare l'API?"): risposta sempre no.
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
 PROJECT="nexus-social-e3eee"
 SA="firestore-audit@${PROJECT}.iam.gserviceaccount.com"
@@ -27,11 +29,16 @@ TMP="$(mktemp -d)"
 chmod 700 "$TMP"
 trap 'rm -rf "$TMP"' EXIT
 
-# Ogni lettura salva un file JSON; se non riesce il file resta vuoto e l'analisi lo segnala.
+# Ogni lettura salva il JSON e un esito: ok, notfound (la risorsa non esiste: NOT_FOUND)
+# oppure error (permessi insufficienti, API spenta, rete...). Un errore non viene MAI
+# interpretato come "non esiste" o "elenco vuoto": l'analisi interrompe la verifica.
 read_json() {
   local file="$1"; shift
-  if ! gcloud "$@" --format=json >"$TMP/$file" 2>"$TMP/$file.err"; then
+  if gcloud "$@" --format=json >"$TMP/$file" 2>"$TMP/$file.err"; then
+    echo ok >"$TMP/$file.status"
+  else
     : >"$TMP/$file"
+    if grep -q 'NOT_FOUND' "$TMP/$file.err"; then echo notfound; else echo error; fi >"$TMP/$file.status"
   fi
 }
 
@@ -41,7 +48,7 @@ read_json project_policy.json projects get-iam-policy "$PROJECT"
 read_json ancestors.json      projects get-ancestors-iam-policy "$PROJECT"
 read_json sa_list.json        iam service-accounts list --project="$PROJECT"
 read_json sa.json             iam service-accounts describe "$SA" --project="$PROJECT"
-if [[ -s "$TMP/sa.json" ]]; then
+if [[ "$(cat "$TMP/sa.json.status")" == ok ]]; then
   read_json sa_policy.json    iam service-accounts get-iam-policy "$SA" --project="$PROJECT"
   read_json keys.json         iam service-accounts keys list --iam-account="$SA" --project="$PROJECT" --managed-by=user
 fi

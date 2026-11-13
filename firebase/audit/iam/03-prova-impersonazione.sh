@@ -10,6 +10,17 @@
 # Uscita: 0 solo lettura confermata, 1 permessi non previsti o mancanti, 2 prova impossibile.
 
 set -uo pipefail
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+
+# Nasconde le email di persone (lascia quelle degli account di servizio) e accorcia il testo.
+mask() {
+  python3 -c '
+import re, sys
+text = sys.stdin.read()
+text = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+              lambda m: m.group(0) if m.group(0).endswith(".gserviceaccount.com") else "<email>", text)
+print(" ".join(text.split())[:300])'
+}
 
 PROJECT="nexus-social-e3eee"
 SA="firestore-audit@${PROJECT}.iam.gserviceaccount.com"
@@ -31,23 +42,35 @@ FORBIDDEN=(
 )
 
 echo "== 1. Token temporaneo di firestore-audit (impersonazione)"
-if ! TOKEN="$(gcloud auth print-access-token --impersonate-service-account="$SA" 2>/dev/null)" || [[ -z "$TOKEN" ]]; then
+err_file="$(mktemp)"
+trap 'rm -f "$err_file"' EXIT
+if ! TOKEN="$(gcloud auth print-access-token --impersonate-service-account="$SA" 2>"$err_file")" || [[ -z "$TOKEN" ]]; then
   echo "  PROBLEMA impersonazione non riuscita: manca Token Creator, l'API iamcredentials è spenta"
   echo "           oppure i permessi non si sono ancora propagati (riprova tra qualche minuto)."
+  echo "           Motivo: $(mask <"$err_file")"
   exit 2
 fi
 echo "  OK       token ottenuto (non mostrato, valido circa 1 ora, non salvato)"
 
 echo "== 2. Permessi effettivi sul progetto (testIamPermissions)"
 body="$(python3 -c 'import json,sys; print(json.dumps({"permissions": sys.argv[1:]}))' "${READ[@]}" "${FORBIDDEN[@]}")"
-response="$(curl -sS -X POST \
-  -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+# Il token arriva a curl da stdin (--config -) tramite printf, che è un comando interno di
+# bash: non compare mai tra gli argomenti dei processi (ps, /proc/*/cmdline).
+if ! response="$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" | curl -sS --config - -X POST \
+  -H "Content-Type: application/json" \
   "https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}:testIamPermissions" \
-  -d "$body")"
+  -d "$body" 2>"$err_file")"; then
+  unset TOKEN
+  echo "  PROBLEMA richiesta non riuscita: $(mask <"$err_file")"
+  exit 2
+fi
 unset TOKEN
 
 python3 - "$response" "${#READ[@]}" "${READ[@]}" "${FORBIDDEN[@]}" <<'EOF'
-import json, sys
+import json, re, sys
+def mask(text):
+    return re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+                  lambda m: m.group(0) if m.group(0).endswith(".gserviceaccount.com") else "<email>", text)
 response, n_read = sys.argv[1], int(sys.argv[2])
 read = sys.argv[3:3 + n_read]
 forbidden = sys.argv[3 + n_read:]
@@ -57,7 +80,7 @@ except ValueError:
     print("  PROBLEMA risposta non valida da Google"); sys.exit(2)
 if "error" in data:
     err = data["error"]
-    print(f"  PROBLEMA errore Google: {err.get('status')} {str(err.get('message', ''))[:200]}")
+    print(f"  PROBLEMA errore Google: {err.get('status')} {mask(str(err.get('message', '')))[:200]}")
     sys.exit(2)
 granted = set(data.get("permissions", []))
 missing = [p for p in read if p not in granted]

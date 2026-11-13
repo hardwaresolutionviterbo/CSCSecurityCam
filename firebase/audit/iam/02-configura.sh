@@ -15,6 +15,8 @@
 # Uso (Google Cloud Shell):  bash 02-configura.sh
 
 set -euo pipefail
+# Nessuna domanda interattiva di gcloud: l'unica conferma è quella esplicita qui sotto.
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
 PROJECT="nexus-social-e3eee"
 SA_ID="firestore-audit"
@@ -37,15 +39,17 @@ fi
 
 echo
 echo "Sto per modificare IAM del progetto ${PROJECT} con i 4 passi descritti in cima al file."
-read -r -p "Per confermare scrivi il nome del progetto: " answer
+IFS= read -r -p "Per confermare scrivi il nome del progetto: " answer || answer=""
 if [[ "$answer" != "$PROJECT" ]]; then
   echo "Conferma non valida. Nessuna modifica eseguita."; exit 1
 fi
 
 echo
 echo "== 1. API"
+# Se l'elenco non si legge, set -e interrompe lo script (nessuna attivazione "alla cieca").
+enabled="$(gcloud services list --enabled --project="$PROJECT" --format="value(config.name)")"
 for api in iamcredentials.googleapis.com cloudresourcemanager.googleapis.com; do
-  if gcloud services list --enabled --project="$PROJECT" --filter="config.name=$api" --format="value(config.name)" | grep -qx "$api"; then
+  if grep -qx "$api" <<<"$enabled"; then
     echo "  già attiva: $api"
   else
     gcloud services enable "$api" --project="$PROJECT"
@@ -54,9 +58,17 @@ for api in iamcredentials.googleapis.com cloudresourcemanager.googleapis.com; do
 done
 
 echo "== 2. Account di servizio"
-if gcloud iam service-accounts describe "$SA" --project="$PROJECT" --format="value(email)" >/dev/null 2>&1; then
+# Crea l'account solo se Google risponde NOT_FOUND; qualsiasi altro errore interrompe.
+describe_err="$(mktemp)"
+if gcloud iam service-accounts describe "$SA" --project="$PROJECT" --format="value(email)" >/dev/null 2>"$describe_err"; then
+  rm -f "$describe_err"
   echo "  esiste già: $SA"
+elif ! grep -q 'NOT_FOUND' "$describe_err"; then
+  rm -f "$describe_err"
+  echo "  ERRORE: impossibile verificare se l'account esiste (permessi insufficienti?). Mi fermo."
+  exit 1
 else
+  rm -f "$describe_err"
   gcloud iam service-accounts create "$SA_ID" --project="$PROJECT" \
     --display-name="Firestore audit (sola lettura)" \
     --description="Solo roles/datastore.viewer. Nessuna chiave. Impersonato solo dal proprietario." \
@@ -82,6 +94,11 @@ echo "  Token Creator assegnato a te sull'account firestore-audit"
 
 echo
 echo "== Verifica finale (sola lettura)"
-bash "$HERE/01-verifica.sh" || true
+if ! bash "$HERE/01-verifica.sh"; then
+  echo
+  echo "CONFIGURAZIONE NON VERIFICATA: la verifica finale ha trovato problemi o non è riuscita."
+  echo "Non eseguire l'audit. Se hai appena creato l'account, riprova 01-verifica.sh tra qualche minuto."
+  exit 1
+fi
 echo
-echo "Fatto. Aspetta 2-5 minuti (propagazione IAM), poi esegui: bash 03-prova-impersonazione.sh"
+echo "Configurazione verificata. Aspetta 2-5 minuti (propagazione IAM), poi esegui: bash 03-prova-impersonazione.sh"

@@ -62,6 +62,47 @@ def bad(msg):
 def title(msg): print(f"\n== {msg}")
 
 
+EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+
+def mask(text):
+    """Nasconde le email di persone; lascia quelle degli account di servizio."""
+    return EMAIL.sub(lambda m: m.group(0) if m.group(0).endswith(".gserviceaccount.com") else "<email>", text)
+
+
+def status(name):
+    """ok | notfound | error | missing (lettura non eseguita)."""
+    path = os.path.join(DIR, name + ".status")
+    if not os.path.exists(path):
+        return "missing"
+    with open(path, encoding="utf-8") as f:
+        return f.read().strip()
+
+
+def reason(name):
+    path = os.path.join(DIR, name + ".err")
+    if not os.path.exists(path):
+        return "motivo non disponibile"
+    with open(path, encoding="utf-8", errors="replace") as f:
+        lines = [l.strip() for l in f if l.strip()]
+    return mask(lines[-1])[:240] if lines else "motivo non disponibile"
+
+
+def stop(msg):
+    """Errore di accesso: la verifica non può essere considerata superata."""
+    bad(msg)
+    print(f"\nVerifica INTERROTTA: {problems} problemi, {warnings} avvisi. Nessun esito positivo è possibile.")
+    sys.exit(2)
+
+
+def require(name, what, allow_notfound=False):
+    st = status(name)
+    if st == "ok" or (allow_notfound and st == "notfound"):
+        return st
+    stop(f"{what}: lettura non riuscita ({reason(name)}). "
+         "Un errore di accesso non viene trattato come assenza di dati")
+
+
 def load(name, default=None):
     path = os.path.join(DIR, name)
     if not os.path.exists(path) or os.path.getsize(path) == 0:
@@ -102,6 +143,7 @@ def condition_text(binding):
 
 # --- 1. Progetto e gerarchia -------------------------------------------------------------
 title("1. Progetto e gerarchia")
+require("project.json", "dati del progetto")
 project = load("project.json")
 if not project or project.get("projectId") != PROJECT:
     bad("progetto non leggibile o diverso da quello previsto")
@@ -124,10 +166,8 @@ if ancestors:
     for a in ancestors:
         levels.append((a.get("type", "?"), a.get("id", "?"), (a.get("policy") or {}).get("bindings", [])))
 else:
+    require("project_policy.json", "criteri IAM del progetto (servono almeno Viewer o Security Reviewer)")
     policy = load("project_policy.json")
-    if policy is None:
-        bad("impossibile leggere i criteri IAM del progetto (servono almeno Viewer o Security Reviewer)")
-        sys.exit(2)
     levels.append(("project", PROJECT, policy.get("bindings", [])))
 
 
@@ -152,7 +192,9 @@ else:
 
 # --- 3. Account di servizio ----------------------------------------------------------------
 title("3. Account di servizio firestore-audit")
-sa = load("sa.json")
+require("sa_list.json", "elenco degli account di servizio")
+sa_state = require("sa.json", "dettagli dell'account firestore-audit", allow_notfound=True)
+sa = load("sa.json") if sa_state == "ok" else None
 sa_list = load("sa_list.json", [])
 if sa is None:
     info("non esiste ancora: lo crea 02-configura.sh")
@@ -195,24 +237,22 @@ info("i ruoli ricevuti tramite gruppi Google non sono visibili qui: non aggiunge
 
 # --- 5. Chi può impersonare l'account ---------------------------------------------------------
 title("5. Chi può impersonare l'account di audit")
-sa_policy = load("sa_policy.json")
 if sa is not None:
-    if sa_policy is None:
-        bad("impossibile leggere i permessi sull'account di servizio")
-    else:
-        mine = False
-        for b in sa_policy.get("bindings", []):
-            cond = condition_text(b)
-            for m in b.get("members", []):
-                if b["role"] == TOKEN_CREATOR and m == f"user:{ME}" and not cond:
-                    mine = True
-                    ok("tu: Service Account Token Creator, senza condizioni")
-                elif b["role"] == TOKEN_CREATOR and m == f"user:{ME}":
-                    warn(f"tu: Token Creator con condizione{cond}")
-                else:
-                    bad(f"sull'account: {who(m)} ha {b['role']}{cond}")
-        if not mine:
-            info("la tua autorizzazione all'impersonazione non c'è ancora: la aggiunge 02-configura.sh")
+    require("sa_policy.json", "permessi sull'account di servizio")
+    sa_policy = load("sa_policy.json", {})
+    mine = False
+    for b in sa_policy.get("bindings", []):
+        cond = condition_text(b)
+        for m in b.get("members", []):
+            if b["role"] == TOKEN_CREATOR and m == f"user:{ME}" and not cond:
+                mine = True
+                ok("tu: Service Account Token Creator, senza condizioni")
+            elif b["role"] == TOKEN_CREATOR and m == f"user:{ME}":
+                warn(f"tu: Token Creator con condizione{cond}")
+            else:
+                bad(f"sull'account: {who(m)} ha {b['role']}{cond}")
+    if not mine:
+        info("la tua autorizzazione all'impersonazione non c'è ancora: la aggiunge 02-configura.sh")
 
 print("  Ruoli di progetto o superiori che permettono di agire come QUALSIASI account di servizio:")
 others = 0
@@ -233,7 +273,10 @@ if not others:
 
 # --- 6. Chiavi -------------------------------------------------------------------------------
 title("6. Chiavi dell'account")
-keys = load("keys.json", [])
+keys = []
+if sa is not None:
+    require("keys.json", "elenco delle chiavi dell'account")
+    keys = load("keys.json", [])
 if sa is None:
     info("account non ancora creato")
 elif keys:
@@ -260,6 +303,7 @@ else:
 
 # --- 8. API ----------------------------------------------------------------------------------
 title("8. API necessarie")
+require("services.json", "elenco delle API attive")
 services = {s.get("config", {}).get("name") for s in load("services.json", [])}
 for api, why in REQUIRED_APIS.items():
     if api in services:
@@ -271,6 +315,7 @@ for api, why in REQUIRED_APIS.items():
 
 # --- 9. Contenuto di roles/datastore.viewer ---------------------------------------------------
 title(f"9. Permessi contenuti in {ROLE}")
+require("role.json", "definizione di roles/datastore.viewer")
 role = load("role.json")
 if not role:
     bad("impossibile leggere la definizione del ruolo")
