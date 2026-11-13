@@ -11,6 +11,7 @@
 set -uo pipefail
 # Nessuna domanda interattiva di gcloud (per esempio "attivare l'API?"): risposta sempre no.
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+export PYTHONDONTWRITEBYTECODE=1
 
 PROJECT="nexus-social-e3eee"
 SA="firestore-audit@${PROJECT}.iam.gserviceaccount.com"
@@ -55,6 +56,8 @@ fi
 read_json deny.json           iam policies list --kind=denypolicies \
                                 --attachment-point="cloudresourcemanager.googleapis.com%2Fprojects%2F${PROJECT}"
 read_json services.json       services list --enabled --project="$PROJECT"
-read_json role.json           iam roles describe roles/datastore.viewer
+read_json custom_role.json    iam roles describe firestoreAuditReader --project="$PROJECT"
+read_json testable.json       iam list-testable-permissions \
+                                "//cloudresourcemanager.googleapis.com/projects/${PROJECT}" --filter='name~^datastore\.'
 
 PROJECT="$PROJECT" SA="$SA" ME="$ME" python3 "$HERE/analizza.py" "$TMP"

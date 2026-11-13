@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# gcloud SIMULATO, solo per i test: nessuna chiamata a Google.
+# Registra ogni comando, risponde con i file JSON dello scenario ($FAKE/state o, dopo la prima
+# modifica IAM, $FAKE/after) e fallisce con il messaggio di <chiave>.fail se presente.
+echo "$*" >> "$FAKE/calls.log"
+[ "${CLOUDSDK_CORE_DISABLE_PROMPTS:-}" = 1 ] || echo "PROMPTS_ENABLED $*" >> "$FAKE/calls.log"
+D="$FAKE/state"; [ -f "$FAKE/modified" ] && [ -d "$FAKE/after" ] && D="$FAKE/after"
+case "$1 $2 $3" in
+  "config get-value account") echo "$FAKE_ME"; exit 0;;
+  "projects describe "*) k=project;;
+  "projects get-iam-policy "*) k=project_policy;;
+  "projects get-ancestors-iam-policy "*) k=ancestors;;
+  "iam service-accounts list") k=sa_list;;
+  "iam service-accounts describe") k=sa;;
+  "iam service-accounts get-iam-policy") k=sa_policy;;
+  "iam service-accounts keys") k=keys;;
+  "iam policies list") k=deny;;
+  "services list --enabled") k=services;;
+  "iam roles describe") k=custom_role;;
+  "iam list-testable-permissions "*) k=testable;;
+  "auth print-access-token "*) k=token;;
+  "services enable "*)
+    [ -f "$FAKE/flip_on_enable" ] && touch "$FAKE/modified"; exit 0;;
+  "iam roles create") exit 0;;
+  "iam service-accounts create"|"projects add-iam-policy-binding "*|"iam service-accounts add-iam-policy-binding")
+    touch "$FAKE/modified"; exit 0;;
+  *) echo "ERROR: comando non previsto dal simulatore: $*" >&2; exit 3;;
+esac
+if [ -f "$D/$k.fail" ]; then
+  # Simula la domanda "attivare l'API?": compare solo se i prompt di gcloud sono abilitati.
+  if [ -f "$D/$k.prompt" ] && [ "${CLOUDSDK_CORE_DISABLE_PROMPTS:-}" != 1 ]; then
+    printf 'API not enabled. Would you like to enable and retry? (y/N)? ' >&2
+    read -r ans && [ "$ans" = y ] && echo "services enable (da prompt)" >> "$FAKE/calls.log"
+  fi
+  cat "$D/$k.fail" >&2; exit 1
+fi
+[ "$k" = token ] && { cat "$D/token.txt"; exit 0; }
+[ -f "$D/$k.json" ] || { echo "ERROR: (gcloud) NOT_FOUND: risorsa simulata inesistente" >&2; exit 1; }
+case "$*" in
+  *"--format=value(config.name)"*) python3 -c 'import json,sys; [print(s["config"]["name"]) for s in json.load(open(sys.argv[1]))]' "$D/$k.json";;
+  *) cat "$D/$k.json";;
+esac

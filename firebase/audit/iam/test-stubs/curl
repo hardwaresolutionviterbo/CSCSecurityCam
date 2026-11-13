@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# curl SIMULATO, solo per i test: risponde come testIamPermissions senza contattare Google.
+# Salva argomenti, stdin (configurazione con il token) e, alla prima chiamata, tutti i processi.
+printf '%s\n' "$@" >> "$FAKE/curl.args"
+cat >> "$FAKE/curl.stdin"
+[ -f "$FAKE/ps.txt" ] || ps -eo args > "$FAKE/ps.txt" 2>/dev/null
+[ -f "$FAKE/curl.fail" ] && { cat "$FAKE/curl.fail" >&2; exit 6; }
+body=""; prev=""
+for a in "$@"; do [ "$prev" = "--data-binary" ] && body="${a#@}"; prev="$a"; done
+python3 - "$FAKE" "$body" <<'PY'
+import json, os, sys
+fake, body = sys.argv[1], sys.argv[2]
+f = lambda n: os.path.join(fake, n)
+req = json.load(open(body))["permissions"]
+with open(f("curl.requests"), "a") as out:
+    out.write(json.dumps(req) + "\n")
+if os.path.exists(f("curl.error.json")):
+    print(open(f("curl.error.json")).read()); print("403", end=""); sys.exit(0)
+if os.path.exists(f("curl.raw")):
+    print(open(f("curl.raw")).read()); print("200", end=""); sys.exit(0)
+invalid = set(json.load(open(f("invalid.json")))) if os.path.exists(f("invalid.json")) else set()
+if invalid & set(req):
+    print(json.dumps({"error": {"code": 400, "status": "INVALID_ARGUMENT", "message": "Permission is not valid"}}))
+    print("400", end=""); sys.exit(0)
+granted = set(json.load(open(f("granted.json"))))
+print(json.dumps({"permissions": [p for p in req if p in granted]})); print("200", end="")
+PY

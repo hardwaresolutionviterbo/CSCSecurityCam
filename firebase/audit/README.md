@@ -65,8 +65,9 @@ Esiti e codici di uscita:
 
 ## Garanzie di sola lettura
 
-1. **IAM**: l'account di servizio `firestore-audit` ha solo il ruolo **Cloud Datastore Viewer**
-   (`roles/datastore.viewer`) e viene **impersonato**, senza chiavi.
+1. **IAM**: l'account di servizio `firestore-audit` ha solo il ruolo personalizzato
+   `firestoreAuditReader`, con **esattamente** `datastore.databases.list`,
+   `datastore.entities.get` e `datastore.entities.list`, e viene **impersonato**, senza chiavi.
 2. **Identità verificata**: lo script accetta solo `GOOGLE_APPLICATION_CREDENTIALS` di tipo
    `impersonated_service_account` (Cloud Shell) o `external_account` con impersonazione (Workload
    Identity), e solo per `firestore-audit@nexus-social-e3eee.iam.gserviceaccount.com`. Rifiuta
@@ -90,63 +91,40 @@ Esiti e codici di uscita:
 
 Nessuna chiave: Google rilascia token temporanei per l'account di sola lettura.
 
-### 1. Cosa configuri tu, una volta (con il tuo account proprietario)
+### 1. e 2. Configurazione e verifiche: script guidati
 
-In Cloud Shell ([console.cloud.google.com](https://console.cloud.google.com) → icona del
-terminale), sostituendo `TUA_EMAIL`:
+Ruolo, account, autorizzazioni e verifiche si preparano con gli script di
+[`iam/`](iam/README.md):
 
-```bash
-PROJECT=nexus-social-e3eee
-SA=firestore-audit@$PROJECT.iam.gserviceaccount.com
-gcloud config set project $PROJECT
-gcloud iam service-accounts create firestore-audit --display-name="Firestore audit (sola lettura)"
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:$SA" --role="roles/datastore.viewer"
-gcloud iam service-accounts add-iam-policy-binding $SA --member="user:TUA_EMAIL" --role="roles/iam.serviceAccountTokenCreator"
-```
+1. `bash 01-verifica.sh`: sola lettura;
+2. `bash 02-configura.sh`: modifica IAM, solo dopo una verifica senza problemi e la tua conferma;
+3. `bash 03-prova-impersonazione.sh`: permessi effettivi su **tutti** i permessi verificabili
+   del progetto; deve risultare che l'account ha esattamente i 3 permessi previsti.
 
-- `roles/datastore.viewer`: lettura dei dati Firestore, nient'altro.
-- `roles/iam.serviceAccountTokenCreator` **solo sull'account `firestore-audit`**: ti permette di
-  impersonarlo, non di agire su altri account.
-- Non creare chiavi per l'account. I permessi possono impiegare qualche minuto ad attivarsi.
-
-### 2. Verifiche prima di ogni audit
-
-```bash
-PROJECT=nexus-social-e3eee
-SA=firestore-audit@$PROJECT.iam.gserviceaccount.com
-gcloud config set project $PROJECT
-gcloud config get-value project
-#   deve stampare: nexus-social-e3eee
-gcloud projects get-iam-policy $PROJECT --flatten=bindings \
-  --filter="bindings.members:serviceAccount:$SA" --format="value(bindings.role)"
-#   deve stampare solo: roles/datastore.viewer
-gcloud firestore databases list --format="value(name)"
-#   atteso: projects/nexus-social-e3eee/databases/(default)
-#   (altri database vengono segnalati dall'audit, che in quel caso non dà PASS)
-gcloud services list --enabled --filter="config.name=cloudresourcemanager.googleapis.com" --format="value(config.name)"
-#   deve stampare: cloudresourcemanager.googleapis.com
-#   (serve al controllo dei permessi; se manca, l'audit si ferma con codice 2 senza leggere)
-gcloud iam service-accounts keys list --iam-account=$SA --managed-by=user --format="value(name)"
-#   non deve stampare nulla: nessuna chiave creata a mano
-```
+Prima di ogni audit ripeti `01-verifica.sh` e `03-prova-impersonazione.sh`.
 
 ### Limiti del controllo dei permessi
 
-`testIamPermissions` dice quali dei 32 permessi elencati nello script l'account possiede **sul
-progetto** (compresi quelli ereditati da cartella e organizzazione). Non vede:
+Anche il controllo più completo vede i permessi **sul progetto**, compresi quelli ereditati da
+cartella e organizzazione. Non vede:
 
 - permessi concessi su singole risorse (per esempio il ruolo Token Creator su un *altro* account di
-  servizio, che permetterebbe di impersonarlo);
+  servizio);
 - permessi su altri progetti;
-- permessi non presenti nell'elenco dello script.
+- ruoli ricevuti tramite gruppi Google.
 
-Per questo la sola lettura non si basa su un unico controllo, ma sulla somma di: account dedicato
-con il solo ruolo `roles/datastore.viewer` (verifica `get-iam-policy` qui sopra), nessuna chiave,
-controllo dei permessi dal vivo e codice che espone solo metodi di lettura.
+Per questo la sola lettura si basa su più controlli insieme:
+
+- account dedicato con il solo ruolo personalizzato (controllato da `01-verifica.sh`);
+- nessuna chiave;
+- permessi effettivi controllati con `03-prova-impersonazione.sh`;
+- controllo dei permessi dal vivo dentro l'audit;
+- codice che espone solo metodi di lettura.
 
 ### 3. Audit
 
 ```bash
+SA=firestore-audit@nexus-social-e3eee.iam.gserviceaccount.com
 gcloud auth application-default login --impersonate-service-account=$SA
 git clone --branch audit/firestore-readonly --depth 1 https://github.com/hardwaresolutionviterbo/Nexus-Social.git
 cd Nexus-Social/firebase/audit

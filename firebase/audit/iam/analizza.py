@@ -15,7 +15,8 @@ import sys
 PROJECT = os.environ["PROJECT"]
 SA = os.environ["SA"]
 ME = os.environ["ME"].lower()
-ROLE = "roles/datastore.viewer"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from permessi import ROLE_NAME as ROLE, ROLE_PERMISSIONS, classify, support_level  # noqa: E402
 TOKEN_CREATOR = "roles/iam.serviceAccountTokenCreator"
 DIR = sys.argv[1]
 
@@ -37,7 +38,6 @@ REQUIRED_APIS = {
     "cloudresourcemanager.googleapis.com": "controllo dei permessi dell'audit",
     "firestore.googleapis.com": "Firestore",
 }
-READ_VERBS = {"get", "list", "getMetadata"}
 
 problems = 0
 warnings = 0
@@ -313,19 +313,52 @@ for api, why in REQUIRED_APIS.items():
     else:
         warn(f"{api} non attiva ({why}): la attiva 02-configura.sh")
 
-# --- 9. Contenuto di roles/datastore.viewer ---------------------------------------------------
-title(f"9. Permessi contenuti in {ROLE}")
-require("role.json", "definizione di roles/datastore.viewer")
-role = load("role.json")
-if not role:
-    bad("impossibile leggere la definizione del ruolo")
-else:
-    perms = role.get("includedPermissions", [])
-    writes = [p for p in perms if p.rsplit(".", 1)[-1] not in READ_VERBS]
-    if writes:
-        bad("il ruolo contiene permessi che non sono di lettura: " + ", ".join(writes))
+# --- 9. Supporto dei permessi nei ruoli personalizzati ---------------------------------------
+title("9. Permessi del ruolo personalizzato: esistenza e supporto")
+require("testable.json", "permessi datastore verificabili sul progetto (list-testable-permissions)")
+testable = {e["name"]: e for e in load("testable.json", []) if "name" in e}
+for perm in ROLE_PERMISSIONS:
+    entry = testable.get(perm)
+    if entry is None:
+        bad(f"{perm}: non risulta tra i permessi verificabili sul progetto")
+        continue
+    level = support_level(entry)
+    stage = entry.get("stage", "?")
+    raw = "campo omesso = valore predefinito" if "customRolesSupportLevel" not in entry else "campo presente"
+    if level == "SUPPORTED":
+        ok(f"{perm}: stage {stage}, ruoli personalizzati {level} ({raw})")
     else:
-        ok(f"{len(perms)} permessi, tutti di sola lettura (get, list, getMetadata)")
+        bad(f"{perm}: stage {stage}, ruoli personalizzati {level}: non utilizzabile in un ruolo personalizzato")
+schemas = sorted(n for n in testable if n.startswith("datastore.schemas."))
+info("permessi datastore.schemas.* esistenti: " + (", ".join(schemas) if schemas else "nessuno"))
+
+# --- 10. Definizione esatta del ruolo personalizzato ------------------------------------------
+title(f"10. Definizione di {ROLE}")
+role_state = require("custom_role.json", "definizione del ruolo personalizzato", allow_notfound=True)
+if role_state == "notfound":
+    info("il ruolo non esiste ancora: lo crea 02-configura.sh con esattamente "
+         + ", ".join(ROLE_PERMISSIONS))
+else:
+    role = load("custom_role.json", {})
+    perms = set(role.get("includedPermissions", []))
+    if role.get("deleted"):
+        bad("il ruolo esiste ma è ELIMINATO: va ripristinato o scelto un altro nome (decisione tua)")
+    missing = sorted(set(ROLE_PERMISSIONS) - perms)
+    extra = sorted(perms - set(ROLE_PERMISSIONS))
+    if not missing and not extra:
+        ok(f"contiene esattamente i {len(ROLE_PERMISSIONS)} permessi previsti")
+    else:
+        bad(f"il ruolo non corrisponde alla definizione esatta ({len(missing)} mancanti, {len(extra)} in più)")
+        for p in missing:
+            bad(f"manca: {p}")
+        for p in extra:
+            kind = classify(p)
+            if kind == "scrittura":
+                bad(f"in più, di scrittura: {p}")
+            elif kind == "sconosciuto":
+                warn(f"in più, non classificato (da valutare a mano): {p}")
+            else:
+                info(f"in più, di lettura: {p}")
 
 print(f"\nRiepilogo: {problems} problemi, {warnings} avvisi.")
 sys.exit(1 if problems else 0)
