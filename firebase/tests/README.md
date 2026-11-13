@@ -41,7 +41,7 @@ copertura delle regole (JSON e HTML), caricato come artifact dalla CI.
 | `profiles/{uid}` | `username` (a-z 0-9 . _, 3-30, max 6 cifre consecutive), `publicName` (≤ 60, senza email/telefono), `updatedAt` timestamp · *`avatarUrl`* (https, senza spazi né @) | `get` da utenti autenticati, rivalidato; nessuna `list` |
 | `profiles/{uid}/devices/{fid}` | invariato | solo il proprietario |
 | `chats/{chatId}` | `type` direct/group, `createdBy`, `createdAt`, `updatedAt`, `schemaVersion` 2 · *`title`* (≤ 80, senza email/telefono), *`avatarUrl`*, *`lastMessageAt`* | `get` dai membri, rivalidato; nessuna `list` |
-| `chats/{chatId}/members/{uid}` | `uid` = id documento, `role` owner/admin/member, `permissions` {`addMembers`, `removeMembers`} booleani, `joinedAt`, `addedBy`, `schemaVersion` 2 | `get` dai membri, rivalidato; `list` dai membri; collection group solo con `where('uid', '==', mio uid)` |
+| `chats/{chatId}/members/{uid}` | `uid` = id documento, `role` owner/admin/member, `permissions` {`addMembers`, `removeMembers`} booleani, `joinedAt`, `addedBy`, `schemaVersion` 2 | `get` dai membri, rivalidato; `list` dai membri con `where('schemaVersion', '==', 2)`; collection group con `where('uid', '==', mio uid)` e `schemaVersion` 2 |
 | `chats/{chatId}/messages/{id}` | `senderId`, `ciphertext` e `iv` in base64, `type`, `createdAt`, `status` sent/delivered/read, `deletedForAll`, `schemaVersion` 2 · *`replyTo`* | `get` dai membri, rivalidato; `list` solo con `where('schemaVersion', '==', 2)` |
 | `messageRequests/{id}` | `from`, `to`, `status` pending/accepted/declined, `createdAt`, `schemaVersion` 2 · *`updatedAt`* | `get` da mittente/destinatario, rivalidato; `list` con `to` o `from` == mio uid e `schemaVersion` 2 |
 
@@ -50,18 +50,50 @@ auto-reinvito, niente reinvito da un membro normale o da un admin senza `addMemb
 da admin con `addMembers` (nuova membership con `joinedAt` e `addedBy` aggiornati), owner non
 rimovibile e con ruolo immutabile, niente falsificazione di ruoli e permessi.
 
+## Sicurezza delle query (list)
+
+Firestore valuta le regole di una query **sui filtri della query, non sui documenti
+restituiti**, e il client riceve sempre il documento intero (non esiste proiezione dei campi
+nell'SDK client). Una condizione come «ha solo questi campi» non si può dimostrare da un filtro:
+inserita in una regola `list`, renderebbe la query sempre negata. Per questo le letture singole
+(`get`) rivalidano tutto, mentre le query si basano su tre garanzie, tutte coperte dai test:
+
+1. **Filtro obbligatorio `schemaVersion == 2`** su membri (chat e collection group), messaggi e
+   richieste. Esclude i documenti scritti dai client con le regole precedenti: le membership non
+   erano scrivibili, i messaggi avevano un'allowlist senza `schemaVersion`, quindi nessun
+   documento legacy client può avere `schemaVersion: 2`.
+2. **Nessuna via client per creare o alterare un documento v2 non conforme**: ogni create e update
+   rivalida l'intero documento risultante (dati privati, mappe annidate nei campi ammessi, campi
+   extra aggiunti con update o merge: tutti negati).
+3. **Query legittime verificate**: elenco membri, proprie membership in tutte le chat, messaggi
+   ordinati per data con `limit`, posta in arrivo, inviata e filtrata per stato.
+
+I test `LIMITE` dimostrano ciò che le regole **non** possono impedire: un documento v2 con dati
+privati scritto **fuori dalle regole** (Admin SDK, console, import, migrazioni) compare nelle
+query, anche se la lettura singola resta negata.
+
+### Soluzione architetturale per i documenti scritti fuori dalle regole
+
+- **Precondizione al deploy delle regole**: audit in sola lettura di `chats/*/members`,
+  `chats/*/messages` e `messageRequests` in produzione, con esito «nessun documento v2 non
+  conforme». Le funzioni di chat non sono ancora nell'app, quindi ci si attende zero documenti.
+  Se l'audit ne trova, vanno bonificati con un intervento lato server approvato, prima del deploy.
+- **Richieste di messaggio legacy**: con le regole precedenti mittente e destinatario potevano
+  modificare liberamente la richiesta, anche aggiungendo `schemaVersion: 2`. È l'unica via
+  client legacy per un documento v2 non conforme, ed è coperta dallo stesso audit.
+- **Scrittori privilegiati** (Cloud Functions, script, migrazioni future): non scrivono in queste
+  collezioni, oppure lo fanno solo tramite un validatore condiviso con lo stesso schema delle
+  regole, con test dedicati.
+- **Se servisse una garanzia più forte** dopo il lancio: query servite da un backend (Cloud
+  Function con Admin SDK e proiezione dei campi), con `list` client disattivato. Costa realtime,
+  latenza e infrastruttura; per ora non è necessario.
+
 ## Limiti noti
 
-- **Query su documenti legacy**: le regole non possono rivalidare il contenuto dei documenti
-  restituiti da una query. Il filtro `schemaVersion == 2` esclude i documenti scritti con le
-  regole precedenti, ma un documento scritto da strumenti amministrativi (Admin SDK, console)
-  con `schemaVersion: 2` e campi privati comparirebbe nelle query. Le letture singole restano
-  protette. L'audit dei dati legacy è rimandato a una fase successiva.
-- **Richieste di messaggio legacy**: le regole precedenti permettevano a mittente e destinatario
-  di aggiornare liberamente la richiesta; un partecipante potrebbe quindi aver aggiunto
-  `schemaVersion: 2` a una propria richiesta legacy.
-- **Indice**: la query collection group su `members.uid` richiede in produzione l'indice a campo
-  singolo per collection group (da abilitare prima della Fase 4); l'emulatore non lo richiede.
+- **Documenti scritti fuori dalle regole**: vedi sopra.
+- **Indice**: la query collection group su `members` (`uid` + `schemaVersion`) richiede in
+  produzione un indice composito per collection group (da creare prima della Fase 4);
+  l'emulatore non lo richiede.
 - **Chat dirette**: le regole impediscono aggiunte dopo la creazione, ma non limitano a due il
   numero di membri inseriti nel batch di creazione.
 - **Emulatore**: il controllo dei dinieghi si basa sul formato del messaggio dell'emulatore

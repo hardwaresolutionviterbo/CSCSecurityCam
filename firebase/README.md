@@ -97,9 +97,11 @@ scrittura sia la lettura**. Il dettaglio dei campi ammessi è in
   leggibili solo se hanno esattamente i campi previsti, con i tipi giusti. Un documento legacy
   con campi extra (`email`, `address`…), strutture annidate o un `username`/`publicName` che
   contiene un'email o un numero di telefono **non è leggibile**.
-- **Query (list)**: le regole non filtrano i risultati, quindi le query sono ammesse solo su
-  documenti con `schemaVersion == 2` (scrivibili solo con queste regole) e devono filtrare su
-  quel campo. I profili e le chat non sono enumerabili.
+- **Query (list)**: le regole valutano i filtri, non i documenti restituiti, quindi le query
+  su membri, messaggi e richieste devono filtrare `schemaVersion == 2`, valore che un client può
+  scrivere solo con un documento completamente valido. I profili e le chat non sono
+  enumerabili. Prima del deploy serve un audit in sola lettura dei documenti scritti fuori dalle
+  regole: vedi [`tests/README.md`](tests/README.md#sicurezza-delle-query-list).
 - **Chat**: solo testo cifrato in base64 (`ciphertext` + `iv`), massimo 64 KB. Solo i membri
   leggono e scrivono; i destinatari aggiornano lo stato, il mittente «elimina per tutti».
 - **Membership** in `chats/{chatId}/members/{uid}`: ruoli `owner`, `admin`, `member` e permessi
