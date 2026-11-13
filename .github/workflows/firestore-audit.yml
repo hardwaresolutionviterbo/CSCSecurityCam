@@ -3,11 +3,13 @@ name: Firestore Audit (produzione, sola lettura)
 # Audit dei dati del progetto Firebase reale, SOLO LETTURA, avviato solo a mano.
 # Nessuna scrittura, nessuna correzione, nessun deploy. Istruzioni: firebase/audit/README.md
 #
-# Credenziali (una delle due, configurate su GitHub, mai in chat né nel repository):
-#   - variabili FIREBASE_AUDIT_WIF_PROVIDER e FIREBASE_AUDIT_SERVICE_ACCOUNT
-#     (Workload Identity Federation, senza chiavi: consigliato);
-#   - oppure segreto FIREBASE_AUDIT_SA_KEY (chiave JSON di un account di servizio).
-# L'account di servizio deve avere SOLO il ruolo "Cloud Datastore Viewer".
+# Credenziali: SOLO Workload Identity Federation, senza chiavi permanenti. Variabili del
+# repository (Settings → Secrets and variables → Actions → Variables):
+#   FIREBASE_AUDIT_WIF_PROVIDER     projects/<numero>/locations/global/workloadIdentityPools/<pool>/providers/<provider>
+#   FIREBASE_AUDIT_SERVICE_ACCOUNT  firestore-audit@nexus-social-e3eee.iam.gserviceaccount.com
+# L'account di servizio deve avere SOLO il ruolo "Cloud Datastore Viewer"; lo script
+# verifica identità e permessi effettivi e si ferma se trova permessi di scrittura.
+# Le chiavi JSON non sono supportate.
 on:
   workflow_dispatch:
     inputs:
@@ -62,19 +64,25 @@ jobs:
       - name: Dipendenze (npm ci)
         run: npm ci --no-audit --no-fund --omit=dev
 
-      - name: Credenziali Google (Workload Identity)
-        if: ${{ vars.FIREBASE_AUDIT_WIF_PROVIDER != '' }}
+      - name: Configurazione Workload Identity presente
+        working-directory: .
+        env:
+          WIF_PROVIDER: ${{ vars.FIREBASE_AUDIT_WIF_PROVIDER }}
+          WIF_SERVICE_ACCOUNT: ${{ vars.FIREBASE_AUDIT_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WIF_PROVIDER}" ] || [ -z "${WIF_SERVICE_ACCOUNT}" ]; then
+            echo "::error::Workload Identity non configurata (FIREBASE_AUDIT_WIF_PROVIDER, FIREBASE_AUDIT_SERVICE_ACCOUNT). Le chiavi JSON non sono supportate."
+            exit 1
+          fi
+
+      # Credenziali temporanee: file external_account che impersona l'account di sola lettura.
+      - name: Credenziali Google (Workload Identity, senza chiavi)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.FIREBASE_AUDIT_WIF_PROVIDER }}
           service_account: ${{ vars.FIREBASE_AUDIT_SERVICE_ACCOUNT }}
           project_id: ${{ env.PROJECT_ID }}
-
-      - name: Credenziali Google (chiave dell'account di servizio)
-        if: ${{ vars.FIREBASE_AUDIT_WIF_PROVIDER == '' }}
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.FIREBASE_AUDIT_SA_KEY }}
 
       - name: Audit in sola lettura
         id: audit
@@ -110,6 +118,7 @@ jobs:
             0)  echo "Esito: PASS" ;;
             10) echo "::warning::Esito: PASS CON AVVISI" ;;
             20) echo "::error::Esito: BLOCKED (anomalie bloccanti)"; exit 1 ;;
-            2)  echo "::error::Configurazione non valida (progetto o credenziali)"; exit 1 ;;
+            30) echo "::error::Esito: INCOMPLETO (letture parziali o database non analizzati)"; exit 1 ;;
+            2)  echo "::error::Verifica preliminare non superata (progetto, identità, permessi o database): nessun dato letto"; exit 1 ;;
             *)  echo "::error::Errore durante l'audit"; exit 1 ;;
           esac
