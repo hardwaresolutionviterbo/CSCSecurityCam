@@ -330,8 +330,14 @@ service cloud.firestore {
     // Richieste di messaggio dagli sconosciuti: il destinatario accetta o rifiuta.
     match /messageRequests/{requestId} {
       allow get: if isRequestParty(resource.data) && isMessageRequest(resource.data);
-      // La query deve filtrare su from o to == mio uid e schemaVersion == 2.
-      allow list: if isRequestParty(resource.data) && resource.data.schemaVersion == 2;
+      // Query: posta in arrivo (to == mio uid) o inviata (from == mio uid), sempre con
+      // schemaVersion == 2. Due regole distinte, una per ciascun filtro.
+      allow list: if signedIn()
+        && resource.data.to == request.auth.uid
+        && resource.data.schemaVersion == 2;
+      allow list: if signedIn()
+        && resource.data.from == request.auth.uid
+        && resource.data.schemaVersion == 2;
 
       allow create: if signedIn()
         && isMessageRequest(request.resource.data)

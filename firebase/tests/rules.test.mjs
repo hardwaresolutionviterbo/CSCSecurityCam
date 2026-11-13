@@ -677,8 +677,14 @@ describe('messageRequests', () => {
     assert.deepEqual(snap.docs.map((d) => d.id), ['r1']);
     await denied(getDocs(query(collection(db('bob'), 'messageRequests'), where('to', '==', 'bob'))),
       { missingFilter: ['from', 'schemaVersion'] });
-    await denied(getDocs(query(collection(db('carol'), 'messageRequests'),
-      where('to', '==', 'bob'), where('schemaVersion', '==', 2))));
+    const foreign = await denied(getDocs(query(collection(db('carol'), 'messageRequests'),
+      where('to', '==', 'bob'), where('schemaVersion', '==', 2))), { missingFilter: 'from' });
+    // La regola "posta in arrivo" nega con una condizione falsa (to != carol).
+    assert.ok(decisivePass(foreign.message).some(isCleanFalse));
+    // Posta inviata: alice vede la propria richiesta.
+    const sent = await assertSucceeds(getDocs(query(collection(db('alice'), 'messageRequests'),
+      where('from', '==', 'alice'), where('schemaVersion', '==', 2))));
+    assert.deepEqual(sent.docs.map((d) => d.id), ['r1']);
   });
 
   test('solo il destinatario accetta o rifiuta', async () => {
