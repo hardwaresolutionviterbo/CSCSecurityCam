@@ -8,8 +8,11 @@ rules_version = '2';
 //    regole precedenti. Un documento con campi extra o strutture annidate non previste
 //    non è leggibile.
 //  • Le query (list) non possono rivalidare il contenuto dei documenti ("rules are not
-//    filters"): sono consentite solo su documenti con schemaVersion == 2, che possono
-//    esistere solo se scritti con queste regole, e la query deve filtrare su quel campo.
+//    filters"): richiedono il filtro schemaVersion == 2. Un client può scrivere un
+//    documento con schemaVersion 2 solo se l'intero documento è valido.
+//  • Le regole valgono solo per i client. Admin SDK, console e import le ignorano: i dati
+//    scritti così vanno verificati con l'audit in sola lettura prima del deploy (vedi
+//    firebase/README.md). Una membership malformata non concede comunque accesso.
 //  • Le chat contengono solo testo cifrato lato dispositivo (ciphertext + iv in base64).
 //  • L'appartenenza a una chat sta in chats/{chatId}/members/{uid}: owner, admin, member.
 //    Un utente rimosso perde subito l'accesso; il reinvito crea una nuova membership.
@@ -43,7 +46,8 @@ service cloud.firestore {
       return s.matches('(?s).*[0-9][0-9 ./()+-]{5,}[0-9].*');
     }
 
-    // Testo pubblico breve: stringa non vuota, senza email né numeri di telefono.
+    // Testo pubblico breve scritto in app (es. titolo di un gruppo): stringa non vuota,
+    // senza email né numeri di telefono.
     function isSafeText(v, maxLen) {
       return v is string
         && v.size() >= 1
@@ -52,12 +56,21 @@ service cloud.firestore {
         && !hasPhone(v);
     }
 
-    // @username: minuscole, cifre, punto e trattino basso; niente email (la @ non è
-    // ammessa) e niente numeri di telefono (al massimo 6 cifre consecutive).
+    // @username: stesso vincolo di Supabase (profiles.username, citext con check
+    // '^[a-z0-9._]{3,24}$', che su citext non distingue maiuscole e minuscole).
+    // La @ non è ammessa dal formato, quindi niente email.
     function isUsername(v) {
+      return v is string && v.matches('^[A-Za-z0-9._]{3,24}$');
+    }
+
+    // Nome pubblico: copia del public_name generato da Supabase ("Carlo C."), lungo
+    // fino a 80 caratteri e che può contenere @ come il nome inserito. Resta escluso
+    // solo ciò che somiglia a un numero di telefono.
+    function isPublicName(v) {
       return v is string
-        && v.matches('^[a-z0-9._]{3,30}$')
-        && !v.matches('.*[0-9]{7,}.*');
+        && v.size() >= 1
+        && v.size() <= 80
+        && !hasPhone(v);
     }
 
     // URL immagine: solo https, senza spazi né @ (niente credenziali o email nell'URL).
@@ -83,7 +96,7 @@ service cloud.firestore {
       return d.keys().hasAll(['username', 'publicName', 'updatedAt'])
         && d.keys().hasOnly(['username', 'publicName', 'avatarUrl', 'updatedAt'])
         && isUsername(d.username)
-        && isSafeText(d.publicName, 60)
+        && isPublicName(d.publicName)
         && d.updatedAt is timestamp
         && (!('avatarUrl' in d) || isHttpsUrl(d.avatarUrl));
     }
@@ -136,20 +149,40 @@ service cloud.firestore {
       return /databases/$(database)/documents/chats/$(chatId)/members/$(uid);
     }
 
+    // Membro solo con una membership valida: un documento malformato (anche scritto con
+    // Admin SDK) non concede accesso alla chat.
     function isMember(chatId) {
-      return signedIn() && exists(memberPath(chatId, request.auth.uid));
+      return signedIn()
+        && exists(memberPath(chatId, request.auth.uid))
+        && isMembership(get(memberPath(chatId, request.auth.uid)).data, request.auth.uid);
     }
 
     function myMembership(chatId) {
       return get(memberPath(chatId, request.auth.uid)).data;
     }
 
+    // Ultima variazione dei membri: tiene il contatore allineato alle membership.
+    function isMemberChangeField(c) {
+      return c is map
+        && c.keys().hasAll(['op', 'uid'])
+        && c.keys().hasOnly(['op', 'uid'])
+        && c.op in ['add', 'remove']
+        && isUid(c.uid);
+    }
+
     function isChat(d) {
-      return d.keys().hasAll(['type', 'createdBy', 'createdAt', 'updatedAt', 'schemaVersion'])
+      return d.keys().hasAll([
+          'type', 'createdBy', 'createdAt', 'updatedAt', 'schemaVersion',
+          'memberCount', 'lastMemberChange'
+        ])
         && d.keys().hasOnly([
           'type', 'createdBy', 'createdAt', 'updatedAt', 'schemaVersion',
-          'title', 'avatarUrl', 'lastMessageAt'
+          'memberCount', 'lastMemberChange', 'title', 'avatarUrl', 'lastMessageAt'
         ])
+        && d.memberCount is int
+        && d.memberCount >= 1
+        && d.memberCount <= 256
+        && isMemberChangeField(d.lastMemberChange)
         && d.type in ['direct', 'group']
         && isUid(d.createdBy)
         && d.createdAt is timestamp
@@ -203,28 +236,66 @@ service cloud.firestore {
         && (!('replyTo' in d) || d.replyTo == null || isUid(d.replyTo));
     }
 
+    function isValidMemberChange(chatId) {
+      let change = request.resource.data.lastMemberChange;
+      let target = memberPath(chatId, change.uid);
+      return (change.op == 'add'
+          && request.resource.data.memberCount == resource.data.memberCount + 1
+          && !exists(target)
+          && existsAfter(target))
+        || (change.op == 'remove'
+          && request.resource.data.memberCount == resource.data.memberCount - 1
+          && exists(target)
+          && !existsAfter(target));
+    }
+
+    // La variazione del contatore nello stesso batch della membership.
+    function chatCountChangedBy(chatId, delta, op, memberId) {
+      return getAfter(chatPath(chatId)).data.memberCount == get(chatPath(chatId)).data.memberCount + delta
+        && getAfter(chatPath(chatId)).data.lastMemberChange == {'op': op, 'uid': memberId};
+    }
+
     match /chats/{chatId} {
       allow get: if isMember(chatId) && isChat(resource.data);
       // L'elenco delle proprie chat si ottiene dalla collection group "members".
       allow list: if false;
 
-      // La chat nasce in un unico batch insieme alla membership "owner" del creatore.
+      // La chat nasce in un unico batch con la membership "owner" del creatore e, al più,
+      // un secondo membro (chat diretta o gruppo con il primo invitato). memberCount deve
+      // corrispondere alle membership create: gli altri membri si aggiungono dopo, uno
+      // per batch, fino a 256.
       allow create: if signedIn()
         && isChat(request.resource.data)
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
         && existsAfter(memberPath(chatId, request.auth.uid))
-        && getAfter(memberPath(chatId, request.auth.uid)).data.role == 'owner';
+        && isMembership(getAfter(memberPath(chatId, request.auth.uid)).data, request.auth.uid)
+        && getAfter(memberPath(chatId, request.auth.uid)).data.role == 'owner'
+        && ((request.resource.data.memberCount == 1
+            && request.resource.data.lastMemberChange == {'op': 'add', 'uid': request.auth.uid})
+          || (request.resource.data.memberCount == 2
+            && request.resource.data.lastMemberChange.op == 'add'
+            && request.resource.data.lastMemberChange.uid != request.auth.uid
+            && existsAfter(memberPath(chatId, request.resource.data.lastMemberChange.uid))));
 
-      // Nome e foto del gruppo solo da owner/admin; ultimo messaggio da qualsiasi membro.
       allow update: if isMember(chatId)
         && isChat(request.resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['title', 'avatarUrl', 'updatedAt', 'lastMessageAt'])
         && request.resource.data.updatedAt == request.time
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['title', 'avatarUrl'])
-          || myMembership(chatId).role in ['owner', 'admin']);
+        && (
+          // Nome e foto del gruppo solo da owner/admin; ultimo messaggio da qualsiasi membro.
+          (request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['title', 'avatarUrl', 'updatedAt', 'lastMessageAt'])
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['title', 'avatarUrl'])
+              || myMembership(chatId).role in ['owner', 'admin']))
+          ||
+          // Contatore dei membri: cambia di uno solo insieme alla creazione o alla
+          // rimozione effettiva di quella membership nello stesso batch. L'autorizzazione
+          // ad aggiungere o rimuovere sta nelle regole della membership.
+          (request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['memberCount', 'lastMemberChange', 'updatedAt'])
+            && isValidMemberChange(chatId))
+        );
 
       allow delete: if false;
 
@@ -245,7 +316,10 @@ service cloud.firestore {
               && existsAfter(chatPath(chatId))
               && getAfter(chatPath(chatId)).data.createdBy == request.auth.uid
               && ((memberId == request.auth.uid && request.resource.data.role == 'owner')
-                || (memberId != request.auth.uid && request.resource.data.role == 'member')))
+                || (memberId != request.auth.uid
+                  && request.resource.data.role == 'member'
+                  && getAfter(chatPath(chatId)).data.memberCount == 2
+                  && getAfter(chatPath(chatId)).data.lastMemberChange.uid == memberId)))
             ||
             // 2) Aggiunta o reinvito in un gruppo esistente: owner, oppure admin con
             //    addMembers. Nessuno può aggiungere sé stesso; solo l'owner nomina admin.
@@ -256,7 +330,8 @@ service cloud.firestore {
               && myMembership(chatId).role in ['owner', 'admin']
               && myMembership(chatId).permissions.addMembers == true
               && (request.resource.data.role == 'member'
-                || (request.resource.data.role == 'admin' && myMembership(chatId).role == 'owner')))
+                || (request.resource.data.role == 'admin' && myMembership(chatId).role == 'owner'))
+              && chatCountChangedBy(chatId, 1, 'add', memberId))
           );
 
         // Solo l'owner cambia ruoli e permessi; il ruolo owner non si assegna né si toglie.
@@ -268,9 +343,11 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'permissions']);
 
         // Uscita volontaria, oppure rimozione da owner o da admin con removeMembers
-        // (un admin rimuove solo i member). L'owner non può essere rimosso.
+        // (un admin rimuove solo i member). L'owner non può essere rimosso. Il contatore
+        // della chat scende di uno nello stesso batch.
         allow delete: if signedIn()
           && resource.data.role != 'owner'
+          && chatCountChangedBy(chatId, -1, 'remove', memberId)
           && (memberId == request.auth.uid
             || (isMember(chatId)
               && (myMembership(chatId).role == 'owner'

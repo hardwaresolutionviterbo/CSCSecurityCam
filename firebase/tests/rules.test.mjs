@@ -22,9 +22,11 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   limit,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -157,6 +159,8 @@ const validChat = (createdBy, extra = {}) => ({
   createdAt: past(),
   updatedAt: past(),
   schemaVersion: 2,
+  memberCount: 1,
+  lastMemberChange: { op: 'add', uid: createdBy },
   title: 'Calcetto giovedì',
   ...extra,
 });
@@ -194,13 +198,37 @@ const validRequest = (from, to, extra = {}) => ({
 
 // Gruppo g1: owner, admin con tutti i permessi, admin senza permessi, due member.
 async function seedGroup(chatId = 'g1') {
-  await seed(`chats/${chatId}`, validChat('owner'));
+  await seed(`chats/${chatId}`, validChat('owner', { memberCount: 5, lastMemberChange: { op: 'add', uid: 'carol' } }));
   await seed(`chats/${chatId}/members/owner`, membership('owner', 'owner', PERMS.owner, 'owner'));
   await seed(`chats/${chatId}/members/admin`, membership('admin', 'admin', PERMS.adminFull, 'owner'));
   await seed(`chats/${chatId}/members/weakadmin`, membership('weakadmin', 'admin', PERMS.adminNone, 'owner'));
   await seed(`chats/${chatId}/members/bob`, membership('bob', 'member', PERMS.member, 'owner'));
   await seed(`chats/${chatId}/members/carol`, membership('carol', 'member', PERMS.member, 'owner'));
   await seed(`chats/${chatId}/messages/m1`, validMessage('owner'));
+}
+
+// Aggiunta di un membro: membership e contatore della chat nello stesso batch.
+function addMember(dbi, chatId, data, { count = increment(1), change } = {}) {
+  const batch = writeBatch(dbi);
+  batch.set(doc(dbi, `chats/${chatId}/members/${data.uid}`), data);
+  batch.update(doc(dbi, `chats/${chatId}`), {
+    memberCount: count,
+    lastMemberChange: change ?? { op: 'add', uid: data.uid },
+    updatedAt: serverTimestamp(),
+  });
+  return batch.commit();
+}
+
+// Rimozione o uscita: eliminazione della membership e contatore nello stesso batch.
+function removeMember(dbi, chatId, uid, { count = increment(-1), change } = {}) {
+  const batch = writeBatch(dbi);
+  batch.delete(doc(dbi, `chats/${chatId}/members/${uid}`));
+  batch.update(doc(dbi, `chats/${chatId}`), {
+    memberCount: count,
+    lastMemberChange: change ?? { op: 'remove', uid },
+    updatedAt: serverTimestamp(),
+  });
+  return batch.commit();
 }
 
 // Nuova membership scritta da un client (joinedAt = ora del server).
@@ -246,26 +274,62 @@ describe('profiles: lettura', () => {
     await denied(getDoc(doc(db('alice'), 'profiles/p1')));
   });
 
-  test('username con email o telefono non leggibile', async () => {
-    await seed('profiles/u1', validProfile({ username: 'carlo@example.com' }));
-    await seed('profiles/u2', validProfile({ username: '3331234567' }));
-    await seed('profiles/u3', validProfile({ username: 'carlo3331234567' }));
-    await seed('profiles/ok', validProfile({ username: 'carlo_2026' }));
-    for (const id of ['u1', 'u2', 'u3']) {
-      await denied(getDoc(doc(db('alice'), `profiles/${id}`)));
+  // Valori verificati su Postgres 16 con lo schema di supabase/migrations/0001_init.sql.
+  test('username accettati da Supabase sono leggibili', async () => {
+    const ok = ['carlo.c', 'Carlo.C', 'CARLO_2026', 'mario1234567', 'luca_20261113', '3331234567', 'abc', 'a'.repeat(24)];
+    for (const [i, username] of ok.entries()) {
+      await seed(`profiles/ok${i}`, validProfile({ username }));
+      await assertSucceeds(getDoc(doc(db('alice'), `profiles/ok${i}`)));
     }
-    await assertSucceeds(getDoc(doc(db('alice'), 'profiles/ok')));
   });
 
-  test('publicName con email o telefono non leggibile', async () => {
-    await seed('profiles/n1', validProfile({ publicName: 'carlo@example.com' }));
-    await seed('profiles/n2', validProfile({ publicName: 'Carlo +39 333 123 4567' }));
-    await seed('profiles/n3', validProfile({ publicName: 'Carlo 333-1234567' }));
-    await seed('profiles/ok', validProfile({ publicName: 'Carlo C. 2026' }));
-    for (const id of ['n1', 'n2', 'n3']) {
+  test('username rifiutati da Supabase non sono leggibili', async () => {
+    const bad = ['ab', 'a'.repeat(25), 'carlo-c', 'carlo c', 'àlex', 'carlo@example.com', '+393331234567', ''];
+    for (const [i, username] of bad.entries()) {
+      await seed(`profiles/ko${i}`, validProfile({ username }));
+      await denied(getDoc(doc(db('alice'), `profiles/ko${i}`)));
+    }
+  });
+
+  test('public_name generati da Supabase sono leggibili (anche con @, fino a 80 caratteri)', async () => {
+    const ok = {
+      base: 'Carlo C.',
+      chiocciola: 'carlo@studio.it R.',
+      ottanta: 'x'.repeat(80),
+      ottantaParole: `${'y'.repeat(77)} Z.`,
+      accentati: 'é'.repeat(80),
+      emoji: 'Luca 😀.',
+      aCapo: 'Ann\na R.',
+      tab: 'Mario\tRossi',
+      spazio: 'Maria .',
+      iniziale: 'Gianluca Ø.',
+      dataBreve: 'Anna 1.',
+      piu: 'Carlo +.',
+    };
+    for (const [id, publicName] of Object.entries(ok)) {
+      await seed(`profiles/${id}`, validProfile({ publicName }));
+      await assertSucceeds(getDoc(doc(db('alice'), `profiles/${id}`)), `public_name "${id}" deve essere leggibile`);
+    }
+  });
+
+  test('public_name oltre 80 caratteri, vuoto o con un numero di telefono non leggibile', async () => {
+    const bad = {
+      lungo: 'x'.repeat(81),
+      vuoto: '',
+      telefono: 'Carlo +39 333 123 4567',
+      telefono2: 'Carlo 333-1234567',
+    };
+    for (const [id, publicName] of Object.entries(bad)) {
+      await seed(`profiles/${id}`, validProfile({ publicName }));
       await denied(getDoc(doc(db('alice'), `profiles/${id}`)));
     }
-    await assertSucceeds(getDoc(doc(db('alice'), 'profiles/ok')));
+  });
+
+  // Supabase accetta un nome di una sola parola fatto di cifre: il public_name risultante
+  // somiglia a un numero di telefono e la copia Firestore resta non leggibile.
+  test('LIMITE: public_name "3331234567" generato da Supabase non è leggibile', async () => {
+    await seed('profiles/cifre', validProfile({ publicName: '3331234567' }));
+    await denied(getDoc(doc(db('alice'), 'profiles/cifre')));
   });
 
   test('avatarUrl, username e updatedAt con mappe annidate non leggibili', async () => {
@@ -299,12 +363,16 @@ describe('profiles: scrittura', () => {
   test('il proprietario crea e aggiorna un profilo valido (controllo positivo)', async () => {
     await assertSucceeds(setDoc(doc(db('carlo'), 'profiles/carlo'), write()));
     await assertSucceeds(setDoc(doc(db('carlo'), 'profiles/carlo'), write({ publicName: 'Carlo Cr.' })));
+    await assertSucceeds(setDoc(doc(db('carlo'), 'profiles/carlo'),
+      write({ username: 'Carlo.C', publicName: 'carlo@studio.it R.' })));
   });
 
   test('scritture non valide negate', async () => {
     const me = db('carlo');
     await denied(setDoc(doc(me, 'profiles/carlo'), write({ email: 'carlo@example.com' })));
     await denied(setDoc(doc(me, 'profiles/carlo'), write({ username: 'Carlo C' })));
+    await denied(setDoc(doc(me, 'profiles/carlo'), write({ username: 'a'.repeat(25) })));
+    await denied(setDoc(doc(me, 'profiles/carlo'), write({ publicName: 'x'.repeat(81) })));
     await denied(setDoc(doc(me, 'profiles/carlo'), write({ publicName: 'chiama 3331234567' })));
     await denied(setDoc(doc(me, 'profiles/carlo'), write({ avatarUrl: { url: 'x' } })));
     await denied(setDoc(doc(me, 'profiles/carlo'), write({ updatedAt: past() })));
@@ -317,22 +385,76 @@ describe('profiles: scrittura', () => {
   });
 });
 
-describe('profiles/{uid}/devices (invariato)', () => {
-  const device = () => ({
-    platform: 'android',
-    appVersion: '0.1.0',
-    enabled: true,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-    lastSeenAt: Timestamp.now(),
+describe('profiles/{uid}/devices (regole invariate, percorso usato da Flutter)', () => {
+  const FID = 'fid_0123456789abcdef';
+  const PATH = `profiles/carlo/devices/${FID}`;
+
+  // Stessa sequenza di PushDeviceRegistry._link: transazione, lettura, set con merge.
+  const link = (dbi, path = PATH, extra = {}) => runTransaction(dbi, async (tx) => {
+    const ref = doc(dbi, path);
+    const snap = await tx.get(ref);
+    const data = {
+      platform: 'android',
+      appVersion: '0.1.0',
+      enabled: true,
+      updatedAt: serverTimestamp(),
+      lastSeenAt: serverTimestamp(),
+      ...extra,
+    };
+    if (!snap.exists()) data.createdAt = serverTimestamp();
+    tx.set(ref, data, { merge: true });
   });
 
-  test('il proprietario registra e legge il dispositivo; gli altri no', async () => {
-    const path = 'profiles/carlo/devices/fid_0123456789';
-    await assertSucceeds(setDoc(doc(db('carlo'), path), device()));
-    await assertSucceeds(getDoc(doc(db('carlo'), path)));
-    await denied(getDoc(doc(db('alice'), path)));
-    await denied(setDoc(doc(db('alice'), 'profiles/carlo/devices/fid_9876543210'), device()));
+  test('registrazione, lettura e aggiornamento con merge dal proprietario', async () => {
+    const me = db('carlo');
+    await assertSucceeds(link(me));
+    const first = (await readAdmin(PATH)).data();
+    await assertSucceeds(getDoc(doc(me, PATH)));
+    await assertSucceeds(getDocs(collection(me, 'profiles/carlo/devices')));
+
+    // Secondo collegamento: merge senza createdAt, che resta quello originale.
+    await assertSucceeds(link(me));
+    const second = (await readAdmin(PATH)).data();
+    assert.equal(second.createdAt.toMillis(), first.createdAt.toMillis());
+    assert.ok(second.lastSeenAt.toMillis() >= first.lastSeenAt.toMillis());
+    await assertSucceeds(updateDoc(doc(me, PATH), { appVersion: '0.2.0', lastSeenAt: serverTimestamp() }));
+  });
+
+  test('aggiornamenti non validi del proprietario negati', async () => {
+    const me = db('carlo');
+    await assertSucceeds(link(me));
+    await denied(updateDoc(doc(me, PATH), { createdAt: serverTimestamp() }));
+    await denied(updateDoc(doc(me, PATH), { email: 'carlo@example.com' }));
+    await denied(updateDoc(doc(me, PATH), { platform: 'web' }));
+    await denied(updateDoc(doc(me, PATH), { enabled: false }));
+    await denied(setDoc(doc(me, 'profiles/carlo/devices/corto'), {
+      platform: 'android', appVersion: '0.1.0', enabled: true,
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(), lastSeenAt: serverTimestamp(),
+    }));
+  });
+
+  test('eliminazione da parte del proprietario', async () => {
+    const me = db('carlo');
+    await assertSucceeds(link(me));
+    await assertSucceeds(deleteDoc(doc(me, PATH)));
+    assert.equal((await readAdmin(PATH)).exists(), false);
+  });
+
+  test('nessun accesso ai dispositivi di altri utenti', async () => {
+    await assertSucceeds(link(db('carlo')));
+    for (const other of [db('alice'), anon()]) {
+      await denied(getDoc(doc(other, PATH)));
+      await denied(getDocs(collection(other, 'profiles/carlo/devices')));
+      await denied(updateDoc(doc(other, PATH), { lastSeenAt: serverTimestamp() }));
+      await denied(deleteDoc(doc(other, PATH)));
+      await denied(setDoc(doc(other, 'profiles/carlo/devices/fid_9876543210'), {
+        platform: 'android', appVersion: '0.1.0', enabled: true,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(), lastSeenAt: serverTimestamp(),
+      }));
+    }
+    await denied(link(db('alice')));
+    await denied(getDocs(collectionGroup(db('alice'), 'devices')));
+    assert.ok((await readAdmin(PATH)).exists());
   });
 });
 
@@ -349,7 +471,7 @@ describe('chats: creazione', () => {
   test('gruppo creato in un batch con owner e membri iniziali (controllo positivo)', async () => {
     const me = db('alice');
     const batch = writeBatch(me);
-    batch.set(doc(me, 'chats/c1'), newChat('alice'));
+    batch.set(doc(me, 'chats/c1'), newChat('alice', { memberCount: 2, lastMemberChange: { op: 'add', uid: 'bob' } }));
     batch.set(doc(me, 'chats/c1/members/alice'), invite('alice', 'owner', PERMS.owner, 'alice'));
     batch.set(doc(me, 'chats/c1/members/bob'), invite('bob', 'member', PERMS.member, 'alice'));
     await assertSucceeds(batch.commit());
@@ -373,7 +495,7 @@ describe('chats: creazione', () => {
   test('alla creazione nessuno diventa admin o owner oltre al creatore', async () => {
     const me = db('alice');
     const batch = writeBatch(me);
-    batch.set(doc(me, 'chats/c1'), newChat('alice'));
+    batch.set(doc(me, 'chats/c1'), newChat('alice', { memberCount: 2, lastMemberChange: { op: 'add', uid: 'bob' } }));
     batch.set(doc(me, 'chats/c1/members/alice'), invite('alice', 'owner', PERMS.owner, 'alice'));
     batch.set(doc(me, 'chats/c1/members/bob'), invite('bob', 'owner', PERMS.owner, 'alice'));
     await denied(batch.commit());
@@ -381,7 +503,7 @@ describe('chats: creazione', () => {
 
   test('membership owner su una chat creata da altri negata', async () => {
     await seedGroup();
-    await denied(setDoc(doc(db('mallory'), 'chats/g1/members/mallory'),
+    await denied(addMember(db('mallory'), 'g1',
       invite('mallory', 'owner', PERMS.owner, 'mallory')));
   });
 });
@@ -472,7 +594,7 @@ describe('members: rimozione e reinvito', () => {
     await assertSucceeds(getDoc(doc(bob, 'chats/g1')));
     await assertSucceeds(getDoc(doc(bob, 'chats/g1/messages/m1')));
 
-    await assertSucceeds(deleteDoc(doc(db('admin'), 'chats/g1/members/bob')));
+    await assertSucceeds(removeMember(db('admin'), 'g1', 'bob'));
 
     await denied(getDoc(doc(bob, 'chats/g1')));
     await denied(getDoc(doc(bob, 'chats/g1/messages/m1')));
@@ -484,31 +606,31 @@ describe('members: rimozione e reinvito', () => {
 
   test('l\'utente rimosso non può reinvitarsi da solo', async () => {
     await seedGroup();
-    await assertSucceeds(deleteDoc(doc(db('admin'), 'chats/g1/members/bob')));
-    await denied(setDoc(doc(db('bob'), 'chats/g1/members/bob'), invite('bob', 'member', PERMS.member, 'bob')));
-    await denied(setDoc(doc(db('bob'), 'chats/g1/members/bob'), invite('bob', 'member', PERMS.member, 'owner')));
+    await assertSucceeds(removeMember(db('admin'), 'g1', 'bob'));
+    await denied(addMember(db('bob'), 'g1', invite('bob', 'member', PERMS.member, 'bob')));
+    await denied(addMember(db('bob'), 'g1', invite('bob', 'member', PERMS.member, 'owner')));
   });
 
   test('un membro normale non può reinvitare un utente rimosso', async () => {
     await seedGroup();
-    await assertSucceeds(deleteDoc(doc(db('admin'), 'chats/g1/members/bob')));
-    await denied(setDoc(doc(db('carol'), 'chats/g1/members/bob'), invite('bob', 'member', PERMS.member, 'carol')));
+    await assertSucceeds(removeMember(db('admin'), 'g1', 'bob'));
+    await denied(addMember(db('carol'), 'g1', invite('bob', 'member', PERMS.member, 'carol')));
   });
 
   test('un admin senza addMembers non può reinvitare', async () => {
     await seedGroup();
-    await assertSucceeds(deleteDoc(doc(db('admin'), 'chats/g1/members/bob')));
-    await denied(setDoc(doc(db('weakadmin'), 'chats/g1/members/bob'),
+    await assertSucceeds(removeMember(db('admin'), 'g1', 'bob'));
+    await denied(addMember(db('weakadmin'), 'g1',
       invite('bob', 'member', PERMS.member, 'weakadmin')));
   });
 
   test('admin con addMembers reinvita: nuova membership e accesso ripristinato', async () => {
     await seedGroup();
     const before = (await readAdmin('chats/g1/members/bob')).data();
-    await assertSucceeds(deleteDoc(doc(db('admin'), 'chats/g1/members/bob')));
+    await assertSucceeds(removeMember(db('admin'), 'g1', 'bob'));
     await denied(getDoc(doc(db('bob'), 'chats/g1')));
 
-    await assertSucceeds(setDoc(doc(db('admin'), 'chats/g1/members/bob'),
+    await assertSucceeds(addMember(db('admin'), 'g1',
       invite('bob', 'member', PERMS.member, 'admin')));
 
     const fresh = (await readAdmin('chats/g1/members/bob')).data();
@@ -524,31 +646,34 @@ describe('members: rimozione e reinvito', () => {
 
   test('reinvito con addedBy o joinedAt falsificati negato', async () => {
     await seedGroup();
-    await assertSucceeds(deleteDoc(doc(db('admin'), 'chats/g1/members/bob')));
-    await denied(setDoc(doc(db('admin'), 'chats/g1/members/bob'), invite('bob', 'member', PERMS.member, 'owner')));
-    await denied(setDoc(doc(db('admin'), 'chats/g1/members/bob'),
+    await assertSucceeds(removeMember(db('admin'), 'g1', 'bob'));
+    await denied(addMember(db('admin'), 'g1', invite('bob', 'member', PERMS.member, 'owner')));
+    await denied(addMember(db('admin'), 'g1',
       { ...invite('bob', 'member', PERMS.member, 'admin'), joinedAt: past() }));
   });
 
   test('uscita volontaria consentita a un membro', async () => {
     await seedGroup();
-    await assertSucceeds(deleteDoc(doc(db('carol'), 'chats/g1/members/carol')));
+    await assertSucceeds(removeMember(db('carol'), 'g1', 'carol'));
     await denied(getDoc(doc(db('carol'), 'chats/g1')));
   });
 
   test('un membro normale non rimuove altri; un admin non rimuove un altro admin', async () => {
     await seedGroup();
-    await denied(deleteDoc(doc(db('carol'), 'chats/g1/members/bob')));
-    await denied(deleteDoc(doc(db('weakadmin'), 'chats/g1/members/bob')));
-    await denied(deleteDoc(doc(db('admin'), 'chats/g1/members/weakadmin')));
-    await assertSucceeds(deleteDoc(doc(db('owner'), 'chats/g1/members/weakadmin')));
+    await denied(removeMember(db('carol'), 'g1', 'bob'));
+    await denied(removeMember(db('weakadmin'), 'g1', 'bob'));
+    await denied(removeMember(db('admin'), 'g1', 'weakadmin'));
+    await assertSucceeds(removeMember(db('owner'), 'g1', 'weakadmin'));
   });
 
   test('nessuna aggiunta in una chat diretta dopo la creazione', async () => {
-    await seed('chats/d1', { type: 'direct', createdBy: 'owner', createdAt: past(), updatedAt: past(), schemaVersion: 2 });
+    await seed('chats/d1', {
+      type: 'direct', createdBy: 'owner', createdAt: past(), updatedAt: past(), schemaVersion: 2,
+      memberCount: 1, lastMemberChange: { op: 'add', uid: 'owner' },
+    });
     await seed('chats/d1/members/owner', membership('owner', 'owner', PERMS.owner, 'owner'));
     await assertSucceeds(getDoc(doc(db('owner'), 'chats/d1')));
-    await denied(setDoc(doc(db('owner'), 'chats/d1/members/eve'), invite('eve', 'member', PERMS.member, 'owner')));
+    await denied(addMember(db('owner'), 'd1', invite('eve', 'member', PERMS.member, 'owner')));
   });
 });
 
@@ -556,7 +681,7 @@ describe('members: owner, ruoli e permessi', () => {
   test('l\'owner non può essere rimosso da nessuno, neanche da sé stesso', async () => {
     await seedGroup();
     for (const actor of ['admin', 'bob', 'owner']) {
-      await denied(deleteDoc(doc(db(actor), 'chats/g1/members/owner')));
+      await denied(removeMember(db(actor), 'g1', 'owner'));
     }
     assert.ok((await readAdmin('chats/g1/members/owner')).exists());
   });
@@ -569,23 +694,23 @@ describe('members: owner, ruoli e permessi', () => {
 
   test('falsificazione dei ruoli in creazione negata', async () => {
     await seedGroup();
-    await denied(setDoc(doc(db('bob'), 'chats/g1/members/eve'), invite('eve', 'owner', PERMS.owner, 'bob')));
-    await denied(setDoc(doc(db('bob'), 'chats/g1/members/eve'), invite('eve', 'admin', PERMS.adminFull, 'bob')));
-    await denied(setDoc(doc(db('admin'), 'chats/g1/members/eve'), invite('eve', 'owner', PERMS.owner, 'admin')));
-    await denied(setDoc(doc(db('admin'), 'chats/g1/members/eve'), invite('eve', 'admin', PERMS.adminNone, 'admin')));
+    await denied(addMember(db('bob'), 'g1', invite('eve', 'owner', PERMS.owner, 'bob')));
+    await denied(addMember(db('bob'), 'g1', invite('eve', 'admin', PERMS.adminFull, 'bob')));
+    await denied(addMember(db('admin'), 'g1', invite('eve', 'owner', PERMS.owner, 'admin')));
+    await denied(addMember(db('admin'), 'g1', invite('eve', 'admin', PERMS.adminNone, 'admin')));
     // Controllo positivo: lo stesso admin può aggiungere un member.
-    await assertSucceeds(setDoc(doc(db('admin'), 'chats/g1/members/eve'), invite('eve', 'member', PERMS.member, 'admin')));
+    await assertSucceeds(addMember(db('admin'), 'g1', invite('eve', 'member', PERMS.member, 'admin')));
     // L'owner può nominare direttamente un admin.
-    await assertSucceeds(setDoc(doc(db('owner'), 'chats/g1/members/dan'), invite('dan', 'admin', PERMS.adminNone, 'owner')));
+    await assertSucceeds(addMember(db('owner'), 'g1', invite('dan', 'admin', PERMS.adminNone, 'owner')));
   });
 
   test('falsificazione dei permessi negata', async () => {
     await seedGroup();
-    await denied(setDoc(doc(db('admin'), 'chats/g1/members/eve'),
+    await denied(addMember(db('admin'), 'g1',
       invite('eve', 'member', { addMembers: true, removeMembers: false }, 'admin')));
-    await denied(setDoc(doc(db('admin'), 'chats/g1/members/eve'),
+    await denied(addMember(db('admin'), 'g1',
       invite('eve', 'member', { ...PERMS.member, editAll: true }, 'admin')));
-    await denied(setDoc(doc(db('admin'), 'chats/g1/members/eve'),
+    await denied(addMember(db('admin'), 'g1',
       invite('eve', 'member', { addMembers: 'true', removeMembers: false }, 'admin')));
   });
 
@@ -706,6 +831,184 @@ describe('messageRequests', () => {
   });
 });
 
+// ─── Contatore dei membri e limite di 256 ────────────────────────────────────
+
+describe('members: contatore e limite di 256', () => {
+  test('creazione legittima di un gruppo e aggiunta dei membri uno alla volta', async () => {
+    const owner = db('alice');
+    const batch = writeBatch(owner);
+    batch.set(doc(owner, 'chats/grp'), {
+      ...validChat('alice', { memberCount: 2, lastMemberChange: { op: 'add', uid: 'bob' } }),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(owner, 'chats/grp/members/alice'), invite('alice', 'owner', PERMS.owner, 'alice'));
+    batch.set(doc(owner, 'chats/grp/members/bob'), invite('bob', 'member', PERMS.member, 'alice'));
+    await assertSucceeds(batch.commit());
+
+    for (const uid of ['carol', 'dan', 'eve']) {
+      await assertSucceeds(addMember(owner, 'grp', invite(uid, 'member', PERMS.member, 'alice')));
+    }
+    assert.equal((await readAdmin('chats/grp')).data().memberCount, 5);
+    const roster = await assertSucceeds(getDocs(query(collection(db('eve'), 'chats/grp/members'), where('schemaVersion', '==', 2))));
+    assert.equal(roster.size, 5);
+
+    await assertSucceeds(removeMember(db('dan'), 'grp', 'dan'));
+    assert.equal((await readAdmin('chats/grp')).data().memberCount, 4);
+  });
+
+  test('chat diretta creata con due membri', async () => {
+    const me = db('alice');
+    const batch = writeBatch(me);
+    batch.set(doc(me, 'chats/dm'), {
+      ...validChat('alice', { type: 'direct', memberCount: 2, lastMemberChange: { op: 'add', uid: 'bob' } }),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(me, 'chats/dm/members/alice'), invite('alice', 'owner', PERMS.owner, 'alice'));
+    batch.set(doc(me, 'chats/dm/members/bob'), invite('bob', 'member', PERMS.member, 'alice'));
+    await assertSucceeds(batch.commit());
+    await assertSucceeds(getDoc(doc(db('bob'), 'chats/dm')));
+  });
+
+  test('alla creazione il contatore deve corrispondere alle membership create', async () => {
+    const attempts = [
+      // dichiarati 2 membri ma creato solo l'owner
+      { count: 2, change: { op: 'add', uid: 'bob' }, members: ['alice'] },
+      // terzo membro non dichiarato
+      { count: 2, change: { op: 'add', uid: 'bob' }, members: ['alice', 'bob', 'carol'] },
+      // contatore 1 ma due membri
+      { count: 1, change: { op: 'add', uid: 'alice' }, members: ['alice', 'bob'] },
+      // più di due membri alla creazione
+      { count: 3, change: { op: 'add', uid: 'carol' }, members: ['alice', 'bob', 'carol'] },
+    ];
+    for (const a of attempts) {
+      const me = db('alice');
+      const batch = writeBatch(me);
+      batch.set(doc(me, 'chats/c9'), {
+        ...validChat('alice', { memberCount: a.count, lastMemberChange: a.change }),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      for (const uid of a.members) {
+        batch.set(doc(me, `chats/c9/members/${uid}`),
+          invite(uid, uid === 'alice' ? 'owner' : 'member', uid === 'alice' ? PERMS.owner : PERMS.member, 'alice'));
+      }
+      await denied(batch.commit());
+    }
+  });
+
+  test('membership senza aggiornare il contatore negata', async () => {
+    await seedGroup();
+    await denied(setDoc(doc(db('owner'), 'chats/g1/members/eve'), invite('eve', 'member', PERMS.member, 'owner')));
+    await denied(deleteDoc(doc(db('owner'), 'chats/g1/members/bob')));
+    await denied(deleteDoc(doc(db('carol'), 'chats/g1/members/carol')));
+  });
+
+  test('contatore falsificato negato', async () => {
+    await seedGroup();
+    const owner = db('owner');
+    const add = (opts) => addMember(owner, 'g1', invite('eve', 'member', PERMS.member, 'owner'), opts);
+    await denied(add({ count: increment(2) }));
+    await denied(add({ count: increment(0) }));
+    await denied(add({ change: { op: 'add', uid: 'dan' } }));
+    await denied(add({ change: { op: 'remove', uid: 'eve' } }));
+    await denied(add({ change: { op: 'add', uid: 'eve', email: 'eve@example.com' } }));
+    await denied(removeMember(owner, 'g1', 'bob', { count: increment(-2) }));
+    await denied(removeMember(owner, 'g1', 'bob', { change: { op: 'remove', uid: 'carol' } }));
+    // Controllo positivo.
+    await assertSucceeds(add());
+  });
+
+  test('il contatore non cambia senza una membership reale nello stesso batch', async () => {
+    await seedGroup();
+    const bump = (dbi, change, by) => updateDoc(doc(dbi, 'chats/g1'),
+      { memberCount: increment(by), lastMemberChange: change, updatedAt: serverTimestamp() });
+    // Un membro non può gonfiare il contatore per bloccare le aggiunte.
+    await denied(bump(db('bob'), { op: 'add', uid: 'ghost' }, 1));
+    await denied(bump(db('owner'), { op: 'add', uid: 'ghost' }, 1));
+    // Né far scendere il contatore di una membership che esiste ancora.
+    await denied(bump(db('owner'), { op: 'remove', uid: 'carol' }, -1));
+    // Né insieme a un cambio di titolo.
+    await denied(updateDoc(doc(db('owner'), 'chats/g1'), {
+      title: 'Nuovo', memberCount: increment(1), lastMemberChange: { op: 'add', uid: 'ghost' }, updatedAt: serverTimestamp(),
+    }));
+  });
+
+  test('limite di 256 membri: la 256ª aggiunta riesce, la 257ª no', async () => {
+    await seedGroup('big');
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'chats/big'), { memberCount: 255 });
+    });
+    await assertSucceeds(addMember(db('owner'), 'big', invite('eve', 'member', PERMS.member, 'owner')));
+    assert.equal((await readAdmin('chats/big')).data().memberCount, 256);
+    await denied(addMember(db('owner'), 'big', invite('dan', 'member', PERMS.member, 'owner')));
+    // Dopo un'uscita c'è di nuovo posto.
+    await assertSucceeds(removeMember(db('carol'), 'big', 'carol'));
+    await assertSucceeds(addMember(db('owner'), 'big', invite('dan', 'member', PERMS.member, 'owner')));
+  });
+
+  test('chat con contatore non valido non leggibile', async () => {
+    await seedGroup();
+    for (const [id, extra] of Object.entries({
+      zero: { memberCount: 0 },
+      oltre: { memberCount: 257 },
+      testo: { memberCount: '5' },
+      senza: { memberCount: undefined },
+      change: { lastMemberChange: { op: 'add', uid: 'carol', email: 'c@example.com' } },
+    })) {
+      const data = validChat('owner', extra);
+      for (const k of Object.keys(data)) if (data[k] === undefined) delete data[k];
+      await seed(`chats/${id}`, data);
+      await seed(`chats/${id}/members/bob`, membership('bob', 'member', PERMS.member, 'owner'));
+      await denied(getDoc(doc(db('bob'), `chats/${id}`)));
+    }
+  });
+});
+
+// ─── Membership malformate (es. scritte con Admin SDK) ───────────────────────
+
+describe('members: una membership malformata non concede accesso', () => {
+  const MALFORMED = {
+    extra: () => membership('eve', 'member', PERMS.member, 'owner', { email: 'eve@example.com' }),
+    annidato: () => membership('eve', 'member', { ...PERMS.member, contact: { phone: '3331234567' } }, 'owner'),
+    ruolo: () => membership('eve', 'superadmin', PERMS.owner, 'owner'),
+    ownerFinto: () => membership('eve', 'owner', PERMS.member, 'owner'),
+    senzaPermessi: () => { const m = membership('eve', 'member', PERMS.member, 'owner'); delete m.permissions; return m; },
+    versione: () => membership('eve', 'member', PERMS.member, 'owner', { schemaVersion: 1 }),
+    uidDiverso: () => membership('mallory', 'member', PERMS.member, 'owner'),
+    legacy: () => ({ uid: 'eve', role: 'member' }),
+  };
+
+  test('membership valida: accesso consentito (controllo positivo)', async () => {
+    await seedGroup('ok');
+    await seed('chats/ok/members/eve', membership('eve', 'member', PERMS.member, 'owner'));
+    const eve = db('eve');
+    await assertSucceeds(getDoc(doc(eve, 'chats/ok')));
+    await assertSucceeds(getDoc(doc(eve, 'chats/ok/messages/m1')));
+    await assertSucceeds(getDocs(query(collection(eve, 'chats/ok/messages'), where('schemaVersion', '==', 2))));
+    await assertSucceeds(setDoc(doc(eve, 'chats/ok/messages/m2'), { ...validMessage('eve'), createdAt: serverTimestamp() }));
+  });
+
+  for (const [name, make] of Object.entries(MALFORMED)) {
+    test(`membership "${name}": nessun accesso a chat, messaggi e membri`, async () => {
+      const chat = `bad_${name}`;
+      await seedGroup(chat);
+      await seed(`chats/${chat}/members/eve`, make());
+      const eve = db('eve');
+      await denied(getDoc(doc(eve, `chats/${chat}`)));
+      await denied(getDoc(doc(eve, `chats/${chat}/messages/m1`)));
+      await denied(getDocs(query(collection(eve, `chats/${chat}/messages`), where('schemaVersion', '==', 2))));
+      await denied(setDoc(doc(eve, `chats/${chat}/messages/m2`), { ...validMessage('eve'), createdAt: serverTimestamp() }));
+      await denied(getDocs(query(collection(eve, `chats/${chat}/members`), where('schemaVersion', '==', 2))),
+        { missingFilter: 'uid' });
+      await denied(updateDoc(doc(eve, `chats/${chat}`), { lastMessageAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+      await denied(addMember(eve, chat, invite('dan', 'member', PERMS.member, 'eve')));
+      await denied(removeMember(eve, chat, 'bob'));
+    });
+  }
+});
+
 // ─── Query: documenti fuori schema ───────────────────────────────────────────
 //
 // Le regole delle query sono valutate sui filtri, non sui documenti: non possono
@@ -743,15 +1046,15 @@ describe('query members: scritture client non conformi negate', () => {
   test('un admin non può aggiungere una membership con dati privati o mappe annidate', async () => {
     await seedGroup();
     for (const extra of Object.values(PRIVATE_EXTRAS)) {
-      await denied(setDoc(doc(db('admin'), 'chats/g1/members/eve'),
+      await denied(addMember(db('admin'), 'g1',
         { ...invite('eve', 'member', PERMS.member, 'admin'), ...extra }));
     }
     for (const extra of mapsInAllowedFields.member) {
-      await denied(setDoc(doc(db('admin'), 'chats/g1/members/eve'),
+      await denied(addMember(db('admin'), 'g1',
         { ...invite('eve', 'member', PERMS.member, 'admin'), ...extra }));
     }
     // Controllo positivo: la stessa aggiunta senza campi extra riesce.
-    await assertSucceeds(setDoc(doc(db('admin'), 'chats/g1/members/eve'), invite('eve', 'member', PERMS.member, 'admin')));
+    await assertSucceeds(addMember(db('admin'), 'g1', invite('eve', 'member', PERMS.member, 'admin')));
   });
 
   test('nessuno può alterare una membership esistente aggiungendo dati privati', async () => {
@@ -768,7 +1071,7 @@ describe('query members: scritture client non conformi negate', () => {
   test('alla creazione della chat nessuna membership con dati privati', async () => {
     const me = db('alice');
     const batch = writeBatch(me);
-    batch.set(doc(me, 'chats/c1'), { ...validChat('alice'), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    batch.set(doc(me, 'chats/c1'), { ...validChat('alice', { memberCount: 2, lastMemberChange: { op: 'add', uid: 'bob' } }), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
     batch.set(doc(me, 'chats/c1/members/alice'), invite('alice', 'owner', PERMS.owner, 'alice'));
     batch.set(doc(me, 'chats/c1/members/bob'), { ...invite('bob', 'member', PERMS.member, 'alice'), phone: '3331234567' });
     await denied(batch.commit());
