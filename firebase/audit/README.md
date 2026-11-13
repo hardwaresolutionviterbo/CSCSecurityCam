@@ -123,7 +123,26 @@ gcloud projects get-iam-policy $PROJECT --flatten=bindings \
 gcloud firestore databases list --format="value(name)"
 #   atteso: projects/nexus-social-e3eee/databases/(default)
 #   (altri database vengono segnalati dall'audit, che in quel caso non dà PASS)
+gcloud services list --enabled --filter="config.name=cloudresourcemanager.googleapis.com" --format="value(config.name)"
+#   deve stampare: cloudresourcemanager.googleapis.com
+#   (serve al controllo dei permessi; se manca, l'audit si ferma con codice 2 senza leggere)
+gcloud iam service-accounts keys list --iam-account=$SA --managed-by=user --format="value(name)"
+#   non deve stampare nulla: nessuna chiave creata a mano
 ```
+
+### Limiti del controllo dei permessi
+
+`testIamPermissions` dice quali dei 32 permessi elencati nello script l'account possiede **sul
+progetto** (compresi quelli ereditati da cartella e organizzazione). Non vede:
+
+- permessi concessi su singole risorse (per esempio il ruolo Token Creator su un *altro* account di
+  servizio, che permetterebbe di impersonarlo);
+- permessi su altri progetti;
+- permessi non presenti nell'elenco dello script.
+
+Per questo la sola lettura non si basa su un unico controllo, ma sulla somma di: account dedicato
+con il solo ruolo `roles/datastore.viewer` (verifica `get-iam-policy` qui sopra), nessuna chiave,
+controllo dei permessi dal vivo e codice che espone solo metodi di lettura.
 
 ### 3. Audit
 
