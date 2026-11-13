@@ -6,7 +6,7 @@
 
 import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -42,6 +42,15 @@ before(async () => {
 });
 
 after(async () => {
+  // Report di copertura delle regole (facoltativo): mostra quali espressioni sono state
+  // valutate, con quale esito e se hanno prodotto errori di valutazione.
+  const out = process.env.RULES_COVERAGE_FILE;
+  const host = process.env.FIRESTORE_EMULATOR_HOST;
+  if (out && host) {
+    const base = `http://${host}/emulator/v1/projects/demo-nexus-social:ruleCoverage`;
+    writeFileSync(out, await (await fetch(base)).text());
+    writeFileSync(out.replace(/\.json$/, '.html'), await (await fetch(`${base}.html`)).text());
+  }
   await env?.cleanup();
 });
 

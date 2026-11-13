@@ -31,10 +31,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Node 22
+      - name: Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       # Il Firestore Emulator richiede Java 21.
       - name: Java 21
@@ -80,4 +80,30 @@ jobs:
         run: node --check rules.test.mjs
 
       - name: Test regole (Firestore Emulator)
+        env:
+          RULES_COVERAGE_FILE: ${{ github.workspace }}/rules-coverage.json
         run: npm test
+
+      # Diagnostica temporanea: lockfile e copertura nel log, compressi in base64.
+      - name: Diagnostica (lockfile e copertura)
+        if: always()
+        run: |
+          for f in package-lock.json ../../rules-coverage.json; do
+            [ -f "$f" ] || continue
+            echo "::group::$f"
+            echo "BEGIN $(basename "$f")"
+            gzip -9c "$f" | base64 -w 200
+            echo "END $(basename "$f")"
+            echo "::endgroup::"
+          done
+
+      - name: Carica report di copertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firestore-rules-coverage
+          path: |
+            rules-coverage.json
+            rules-coverage.html
+          if-no-files-found: ignore
+          retention-days: 14
