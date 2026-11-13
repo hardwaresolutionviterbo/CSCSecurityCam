@@ -22,6 +22,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -428,9 +430,12 @@ describe('members: lettura e privacy', () => {
   test('membership valida leggibile dai membri, non da estranei', async () => {
     await seedGroup();
     await assertSucceeds(getDoc(doc(db('bob'), 'chats/g1/members/carol')));
-    await assertSucceeds(getDocs(collection(db('bob'), 'chats/g1/members')));
+    const roster = query(collection(db('bob'), 'chats/g1/members'), where('schemaVersion', '==', 2));
+    assert.equal((await assertSucceeds(getDocs(roster))).size, 5);
+    await denied(getDocs(collection(db('bob'), 'chats/g1/members')), { missingFilter: 'schemaVersion' });
     await denied(getDoc(doc(db('mallory'), 'chats/g1/members/carol')));
-    await denied(getDocs(collection(db('mallory'), 'chats/g1/members')), { missingFilter: 'uid' });
+    await denied(getDocs(query(collection(db('mallory'), 'chats/g1/members'), where('schemaVersion', '==', 2))),
+      { missingFilter: 'uid' });
   });
 
   test('membership con campi privati o annidati non leggibile con get', async () => {
@@ -447,11 +452,14 @@ describe('members: lettura e privacy', () => {
   test('collection group: solo le proprie membership', async () => {
     await seedGroup('g1');
     await seedGroup('g2');
-    const mine = query(collectionGroup(db('bob'), 'members'), where('uid', '==', 'bob'));
+    const mine = query(collectionGroup(db('bob'), 'members'), where('uid', '==', 'bob'), where('schemaVersion', '==', 2));
     const snap = await assertSucceeds(getDocs(mine));
     assert.equal(snap.size, 2);
-    await denied(getDocs(query(collectionGroup(db('bob'), 'members'), where('uid', '==', 'carol'))));
-    await denied(getDocs(collectionGroup(db('bob'), 'members')), { missingFilter: 'uid' });
+    await denied(getDocs(query(collectionGroup(db('bob'), 'members'),
+      where('uid', '==', 'carol'), where('schemaVersion', '==', 2))));
+    await denied(getDocs(query(collectionGroup(db('bob'), 'members'), where('uid', '==', 'bob'))),
+      { missingFilter: 'schemaVersion' });
+    await denied(getDocs(collectionGroup(db('bob'), 'members')), { missingFilter: ['uid', 'schemaVersion'] });
   });
 });
 
@@ -695,6 +703,199 @@ describe('messageRequests', () => {
     await assertSucceeds(updateDoc(doc(db('bob'), 'messageRequests/r1'), answer));
     await denied(updateDoc(doc(db('bob'), 'messageRequests/r1'), { status: 'declined', updatedAt: serverTimestamp() }));
     await denied(deleteDoc(doc(db('bob'), 'messageRequests/r1')));
+  });
+});
+
+// ─── Query: documenti fuori schema ───────────────────────────────────────────
+//
+// Le regole delle query sono valutate sui filtri, non sui documenti: non possono
+// rivalidare allowlist e tipi. La protezione delle query è quindi:
+//  1) filtro schemaVersion == 2 obbligatorio, che esclude i documenti legacy dei client;
+//  2) nessuna via client per creare o alterare un documento v2 non conforme (verificato qui);
+//  3) per i documenti scritti fuori dalle regole (Admin SDK, console, import) serve una
+//     verifica lato server: i test "LIMITE" documentano ciò che le regole non possono fare.
+
+const PRIVATE_EXTRAS = {
+  email: { email: 'privato@example.com' },
+  telefono: { phone: '+39 333 123 4567' },
+  indirizzo: { address: 'Via Roma 1, Milano' },
+  annidato: { meta: { contact: { email: 'privato@example.com', phone: '3331234567' } } },
+};
+
+const mapsInAllowedFields = {
+  member: [
+    { permissions: { ...PERMS.member, contact: { email: 'privato@example.com' } } },
+    { addedBy: { uid: 'owner', email: 'owner@example.com' } },
+    { role: { name: 'member', phone: '3331234567' } },
+  ],
+  message: [
+    { replyTo: { id: 'm1', email: 'privato@example.com' } },
+    { status: { value: 'sent', phone: '3331234567' } },
+    { iv: { value: 'aXY=', address: 'Via Roma 1' } },
+  ],
+  request: [
+    { to: { uid: 'bob', email: 'bob@example.com' } },
+    { status: { value: 'pending', address: 'Via Roma 1' } },
+  ],
+};
+
+describe('query members: scritture client non conformi negate', () => {
+  test('un admin non può aggiungere una membership con dati privati o mappe annidate', async () => {
+    await seedGroup();
+    for (const extra of Object.values(PRIVATE_EXTRAS)) {
+      await denied(setDoc(doc(db('admin'), 'chats/g1/members/eve'),
+        { ...invite('eve', 'member', PERMS.member, 'admin'), ...extra }));
+    }
+    for (const extra of mapsInAllowedFields.member) {
+      await denied(setDoc(doc(db('admin'), 'chats/g1/members/eve'),
+        { ...invite('eve', 'member', PERMS.member, 'admin'), ...extra }));
+    }
+    // Controllo positivo: la stessa aggiunta senza campi extra riesce.
+    await assertSucceeds(setDoc(doc(db('admin'), 'chats/g1/members/eve'), invite('eve', 'member', PERMS.member, 'admin')));
+  });
+
+  test('nessuno può alterare una membership esistente aggiungendo dati privati', async () => {
+    await seedGroup();
+    for (const actor of ['owner', 'admin', 'bob']) {
+      for (const extra of Object.values(PRIVATE_EXTRAS)) {
+        await denied(updateDoc(doc(db(actor), 'chats/g1/members/bob'), extra));
+      }
+    }
+    await denied(setDoc(doc(db('owner'), 'chats/g1/members/bob'),
+      { ...membership('bob', 'admin', PERMS.adminFull, 'owner'), email: 'bob@example.com' }, { merge: true }));
+  });
+
+  test('alla creazione della chat nessuna membership con dati privati', async () => {
+    const me = db('alice');
+    const batch = writeBatch(me);
+    batch.set(doc(me, 'chats/c1'), { ...validChat('alice'), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    batch.set(doc(me, 'chats/c1/members/alice'), invite('alice', 'owner', PERMS.owner, 'alice'));
+    batch.set(doc(me, 'chats/c1/members/bob'), { ...invite('bob', 'member', PERMS.member, 'alice'), phone: '3331234567' });
+    await denied(batch.commit());
+  });
+});
+
+describe('query members: documenti legacy e fuori schema', () => {
+  test('membership senza schemaVersion 2 escluse da query di chat e collection group', async () => {
+    await seedGroup();
+    const legacy = {
+      lx1: { uid: 'lx1', role: 'member', email: 'lx1@example.com' },
+      lx2: { ...membership('lx2', 'member', PERMS.member, 'owner'), schemaVersion: 1, phone: '3331234567' },
+      lx3: { ...membership('lx3', 'member', PERMS.member, 'owner'), schemaVersion: '2', address: 'Via Roma 1' },
+    };
+    for (const [id, data] of Object.entries(legacy)) {
+      await seed(`chats/g1/members/${id}`, data);
+    }
+    // Membership legacy di bob in un'altra chat, con dati privati e senza schemaVersion 2.
+    await seed('chats/old/members/bob', { uid: 'bob', role: 'member', joinedAt: past(), email: 'bob@example.com' });
+
+    const roster = await assertSucceeds(getDocs(query(collection(db('bob'), 'chats/g1/members'), where('schemaVersion', '==', 2))));
+    const ids = roster.docs.map((d) => d.id).sort();
+    assert.deepEqual(ids, ['admin', 'bob', 'carol', 'owner', 'weakadmin']);
+    for (const d of roster.docs) assert.deepEqual(Object.keys(d.data()).sort(), ['addedBy', 'joinedAt', 'permissions', 'role', 'schemaVersion', 'uid']);
+
+    const mine = await assertSucceeds(getDocs(query(collectionGroup(db('bob'), 'members'),
+      where('uid', '==', 'bob'), where('schemaVersion', '==', 2))));
+    assert.deepEqual(mine.docs.map((d) => d.ref.path), ['chats/g1/members/bob']);
+  });
+
+  test('LIMITE: membership v2 con dati privati scritta fuori dalle regole compare nelle query', async () => {
+    await seedGroup();
+    // Scrittura con regole disattivate, equivalente a Admin SDK, console o import.
+    await seed('chats/g1/members/zed', { ...membership('zed', 'member', PERMS.member, 'owner'), ...PRIVATE_EXTRAS.annidato });
+    await seed('chats/other/members/bob', { ...membership('bob', 'member', PERMS.member, 'x'), ...PRIVATE_EXTRAS.email });
+
+    // La lettura singola resta protetta.
+    await denied(getDoc(doc(db('bob'), 'chats/g1/members/zed')));
+    // Le query non possono rivalidare il documento: il campo extra viene restituito.
+    const roster = await getDocs(query(collection(db('bob'), 'chats/g1/members'), where('schemaVersion', '==', 2)));
+    assert.ok(roster.docs.some((d) => d.id === 'zed' && 'meta' in d.data()));
+    const mine = await getDocs(query(collectionGroup(db('bob'), 'members'),
+      where('uid', '==', 'bob'), where('schemaVersion', '==', 2)));
+    assert.ok(mine.docs.some((d) => d.ref.path === 'chats/other/members/bob' && 'email' in d.data()));
+  });
+});
+
+describe('query messages: documenti non conformi', () => {
+  const send = (senderId, extra = {}) => ({ ...validMessage(senderId), createdAt: serverTimestamp(), ...extra });
+
+  test('nessun client crea o altera un messaggio v2 con dati privati', async () => {
+    await seedGroup();
+    for (const extra of [...Object.values(PRIVATE_EXTRAS), ...mapsInAllowedFields.message]) {
+      await denied(setDoc(doc(db('bob'), 'chats/g1/messages/x'), send('bob', extra)));
+    }
+    // Destinatario: stato + campo privato; mittente: elimina per tutti + campo privato.
+    for (const extra of Object.values(PRIVATE_EXTRAS)) {
+      await denied(updateDoc(doc(db('bob'), 'chats/g1/messages/m1'), { status: 'read', ...extra }));
+      await denied(updateDoc(doc(db('owner'), 'chats/g1/messages/m1'), { deletedForAll: true, ...extra }));
+    }
+    await denied(updateDoc(doc(db('bob'), 'chats/g1/messages/m1'), { status: { value: 'read', email: 'x@example.com' } }));
+    // Controllo positivo.
+    await assertSucceeds(updateDoc(doc(db('bob'), 'chats/g1/messages/m1'), { status: 'read' }));
+  });
+
+  test('messaggi legacy senza schemaVersion 2 esclusi dalla query; query ordinata funziona', async () => {
+    await seedGroup();
+    await seed('chats/g1/messages/m0', validMessage('owner', { createdAt: Timestamp.fromMillis(Date.now() - 7_200_000) }));
+    await seed('chats/g1/messages/legacy1', { senderId: 'owner', ciphertext: 'abc', iv: 'x', type: 'text', email: 'o@example.com' });
+    await seed('chats/g1/messages/legacy2', { ...validMessage('owner'), schemaVersion: 1, ...PRIVATE_EXTRAS.annidato });
+    await seed('chats/g1/messages/legacy3', { ...validMessage('owner'), schemaVersion: '2', ...PRIVATE_EXTRAS.telefono });
+
+    const q = query(collection(db('bob'), 'chats/g1/messages'), where('schemaVersion', '==', 2), orderBy('createdAt'));
+    const snap = await assertSucceeds(getDocs(q));
+    assert.deepEqual(snap.docs.map((d) => d.id), ['m0', 'm1']);
+    const recent = query(collection(db('bob'), 'chats/g1/messages'), where('schemaVersion', '==', 2),
+      orderBy('createdAt', 'desc'), limit(1));
+    assert.deepEqual((await assertSucceeds(getDocs(recent))).docs.map((d) => d.id), ['m1']);
+  });
+
+  test('LIMITE: messaggio v2 con dati privati scritto fuori dalle regole compare nella query', async () => {
+    await seedGroup();
+    await seed('chats/g1/messages/forged', { ...validMessage('owner'), ...PRIVATE_EXTRAS.indirizzo });
+    await denied(getDoc(doc(db('bob'), 'chats/g1/messages/forged')));
+    const snap = await getDocs(query(collection(db('bob'), 'chats/g1/messages'), where('schemaVersion', '==', 2)));
+    assert.ok(snap.docs.some((d) => d.id === 'forged' && 'address' in d.data()));
+  });
+});
+
+describe('query messageRequests: documenti non conformi', () => {
+  test('nessun client crea o altera una richiesta v2 con dati privati', async () => {
+    await seed('messageRequests/r1', validRequest('alice', 'bob'));
+    for (const extra of [...Object.values(PRIVATE_EXTRAS), ...mapsInAllowedFields.request]) {
+      await denied(setDoc(doc(db('alice'), 'messageRequests/x'),
+        { ...validRequest('alice', 'bob'), createdAt: serverTimestamp(), ...extra }));
+    }
+    for (const extra of Object.values(PRIVATE_EXTRAS)) {
+      await denied(updateDoc(doc(db('bob'), 'messageRequests/r1'), { status: 'accepted', updatedAt: serverTimestamp(), ...extra }));
+      await denied(updateDoc(doc(db('alice'), 'messageRequests/r1'), extra));
+    }
+    await assertSucceeds(updateDoc(doc(db('bob'), 'messageRequests/r1'), { status: 'accepted', updatedAt: serverTimestamp() }));
+  });
+
+  test('richieste legacy senza schemaVersion 2 escluse da posta in arrivo e inviata', async () => {
+    await seed('messageRequests/r1', validRequest('alice', 'bob'));
+    await seed('messageRequests/r2', validRequest('carol', 'bob', { status: 'declined', updatedAt: past() }));
+    await seed('messageRequests/l1', { from: 'alice', to: 'bob', status: 'pending', createdAt: past(), ...PRIVATE_EXTRAS.email });
+    await seed('messageRequests/l2', { ...validRequest('alice', 'bob'), schemaVersion: 1, ...PRIVATE_EXTRAS.annidato });
+    await seed('messageRequests/l3', { ...validRequest('alice', 'bob'), schemaVersion: '2', ...PRIVATE_EXTRAS.indirizzo });
+
+    const inbox = await assertSucceeds(getDocs(query(collection(db('bob'), 'messageRequests'),
+      where('to', '==', 'bob'), where('schemaVersion', '==', 2))));
+    assert.deepEqual(inbox.docs.map((d) => d.id).sort(), ['r1', 'r2']);
+    const pending = await assertSucceeds(getDocs(query(collection(db('bob'), 'messageRequests'),
+      where('to', '==', 'bob'), where('schemaVersion', '==', 2), where('status', '==', 'pending'))));
+    assert.deepEqual(pending.docs.map((d) => d.id), ['r1']);
+    const sent = await assertSucceeds(getDocs(query(collection(db('alice'), 'messageRequests'),
+      where('from', '==', 'alice'), where('schemaVersion', '==', 2))));
+    assert.deepEqual(sent.docs.map((d) => d.id), ['r1']);
+  });
+
+  test('LIMITE: richiesta v2 con dati privati scritta fuori dalle regole compare nella query', async () => {
+    await seed('messageRequests/forged', { ...validRequest('alice', 'bob'), ...PRIVATE_EXTRAS.telefono });
+    await denied(getDoc(doc(db('bob'), 'messageRequests/forged')));
+    const inbox = await getDocs(query(collection(db('bob'), 'messageRequests'),
+      where('to', '==', 'bob'), where('schemaVersion', '==', 2)));
+    assert.ok(inbox.docs.some((d) => d.id === 'forged' && 'phone' in d.data()));
   });
 });
 

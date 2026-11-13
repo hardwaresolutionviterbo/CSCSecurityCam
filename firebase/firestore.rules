@@ -230,8 +230,10 @@ service cloud.firestore {
 
       match /members/{memberId} {
         allow get: if isMember(chatId) && isMembership(resource.data, memberId);
-        // Le membership esistono solo se scritte con queste regole (prima erano negate).
-        allow list: if isMember(chatId);
+        // Query: solo membri, filtro where('schemaVersion', '==', 2) obbligatorio, come per
+        // messaggi e richieste. Le regole non possono rivalidare i documenti di una query:
+        // l'unica via client per scrivere una membership v2 è create/update validati qui sotto.
+        allow list: if isMember(chatId) && resource.data.schemaVersion == 2;
 
         allow create: if signedIn()
           && isMembership(request.resource.data, memberId)
@@ -279,7 +281,8 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow get: if isMember(chatId) && isMessage(resource.data);
-        // La query deve filtrare where('schemaVersion', '==', 2).
+        // Query: filtro where('schemaVersion', '==', 2) obbligatorio. Esclude i messaggi
+        // scritti con le regole precedenti, che non potevano contenere schemaVersion.
         allow list: if isMember(chatId) && resource.data.schemaVersion == 2;
 
         // Solo payload cifrato, del mittente autenticato.
@@ -304,9 +307,11 @@ service cloud.firestore {
     }
 
     // Elenco delle proprie membership in tutte le chat:
-    // collectionGroup('members').where('uid', '==', <mio uid>).
+    // collectionGroup('members').where('uid', '==', <mio uid>).where('schemaVersion', '==', 2).
     match /{path=**}/members/{memberId} {
-      allow list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow list: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && resource.data.schemaVersion == 2;
     }
 
     // ─── Richieste di messaggio ─────────────────────────────────────────────
