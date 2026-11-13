@@ -2,9 +2,18 @@
 # gcloud SIMULATO, solo per i test: nessuna chiamata a Google.
 # Registra ogni comando, risponde con i file JSON dello scenario ($FAKE/state o, dopo la prima
 # modifica IAM, $FAKE/after) e fallisce con il messaggio di <chiave>.fail se presente.
+# Altre leve dei test:
+#   $FAKE/flip_at_role_describe  N: alla N-esima "iam roles describe firestoreAuditReader" lo
+#                                scenario passa ad "after" (stato cambiato durante l'esecuzione)
+#   $FAKE/fail.<operazione>      fa fallire una modifica: roles-create, sa-create,
+#                                project-binding, sa-binding (messaggio = contenuto del file)
 echo "$*" >> "$FAKE/calls.log"
 [ "${CLOUDSDK_CORE_DISABLE_PROMPTS:-}" = 1 ] || echo "PROMPTS_ENABLED $*" >> "$FAKE/calls.log"
-D="$FAKE/state"; [ -f "$FAKE/modified" ] && [ -d "$FAKE/after" ] && D="$FAKE/after"
+
+fail_op() {
+  if [ -f "$FAKE/fail.$1" ]; then cat "$FAKE/fail.$1" >&2; exit 1; fi
+}
+
 case "$1 $2 $3" in
   "config get-value account") echo "$FAKE_ME"; exit 0;;
   "projects describe "*) k=project;;
@@ -16,16 +25,32 @@ case "$1 $2 $3" in
   "iam service-accounts keys") k=keys;;
   "iam policies list") k=deny;;
   "services list --enabled") k=services;;
-  "iam roles describe") k=custom_role;;
+  "iam roles describe")
+    if [ "$4" = firestoreAuditReader ]; then
+      k=custom_role
+      n=$(( $(cat "$FAKE/role_describe.count" 2>/dev/null || echo 0) + 1 ))
+      echo "$n" > "$FAKE/role_describe.count"
+      if [ -f "$FAKE/flip_at_role_describe" ] && [ "$n" -ge "$(cat "$FAKE/flip_at_role_describe")" ]; then
+        touch "$FAKE/modified"
+      fi
+    else
+      full="$4"
+      case "${5:-}" in
+        --project=*) full="projects/${5#--project=}/roles/$4";;
+        --organization=*) full="organizations/${5#--organization=}/roles/$4";;
+      esac
+      k="ruolo_$(printf '%s' "$full" | tr -c 'A-Za-z0-9' '_')"
+    fi;;
   "iam list-testable-permissions "*) k=testable;;
   "auth print-access-token "*) k=token;;
-  "services enable "*)
-    [ -f "$FAKE/flip_on_enable" ] && touch "$FAKE/modified"; exit 0;;
-  "iam roles create") exit 0;;
-  "iam service-accounts create"|"projects add-iam-policy-binding "*|"iam service-accounts add-iam-policy-binding")
-    touch "$FAKE/modified"; exit 0;;
+  "services enable "*) exit 0;;
+  "iam roles create") fail_op roles-create; exit 0;;
+  "iam service-accounts create") fail_op sa-create; touch "$FAKE/modified"; exit 0;;
+  "projects add-iam-policy-binding "*) fail_op project-binding; touch "$FAKE/modified"; exit 0;;
+  "iam service-accounts add-iam-policy-binding") fail_op sa-binding; touch "$FAKE/modified"; exit 0;;
   *) echo "ERROR: comando non previsto dal simulatore: $*" >&2; exit 3;;
 esac
+D="$FAKE/state"; [ -f "$FAKE/modified" ] && [ -d "$FAKE/after" ] && D="$FAKE/after"
 if [ -f "$D/$k.fail" ]; then
   # Simula la domanda "attivare l'API?": compare solo se i prompt di gcloud sono abilitati.
   if [ -f "$D/$k.prompt" ] && [ "${CLOUDSDK_CORE_DISABLE_PROMPTS:-}" != 1 ]; then
@@ -38,5 +63,6 @@ fi
 [ -f "$D/$k.json" ] || { echo "ERROR: (gcloud) NOT_FOUND: risorsa simulata inesistente" >&2; exit 1; }
 case "$*" in
   *"--format=value(config.name)"*) python3 -c 'import json,sys; [print(s["config"]["name"]) for s in json.load(open(sys.argv[1]))]' "$D/$k.json";;
+  *"--format=none"*) ;;
   *) cat "$D/$k.json";;
 esac

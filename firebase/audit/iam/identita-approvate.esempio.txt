@@ -1,0 +1,20 @@
+# Identità approvate per 01-verifica.sh (esempio).
+#
+# Copia questo file come identita-approvate.txt nella stessa cartella (non va su GitHub: è
+# escluso da .gitignore perché può contenere email) e lascia SOLO le righe che hai controllato.
+#
+# Senza questo file nessuna identità è approvata: ogni identità diversa da te che, nel progetto o
+# sopra, può impersonare firestore-audit, crearne chiavi, cambiarne i permessi o modificare il
+# ruolo personalizzato fa fallire la verifica. Lo stesso vale per gruppi, domini e identità
+# federate con un ruolo qualsiasi, perché non si può controllare se comprendono l'account.
+#
+# Una riga per membro IAM, scritto esattamente come in IAM. Il testo dopo # viene ignorato.
+#
+# Agenti di servizio gestiti da Google per QUESTO progetto (service-NUMERO@...,
+# NUMERO@cloudservices..., firebase-sa-management): non sono usabili da persone.
+# agenti-google-del-progetto
+#
+# Esempi (da adattare):
+# serviceAccount:nexus-social-e3eee@appspot.gserviceaccount.com
+# serviceAccount:firebase-adminsdk-xxxxx@nexus-social-e3eee.iam.gserviceaccount.com
+# group:amministratori@example.com

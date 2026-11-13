@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # Nexus Social · verifica IAM dell'account di audit Firestore.
 #
-# SOLA LETTURA: legge configurazioni IAM, account di servizio, chiavi (solo l'elenco) e API.
-# Non modifica nulla, non crea nulla e non legge dati Firestore.
-# Non stampa email di persone. I file temporanei vengono cancellati alla fine.
+# SOLA LETTURA: legge configurazioni IAM, account di servizio, chiavi (solo l'elenco), API e la
+# descrizione di ogni ruolo assegnato nel progetto e sopra. Non modifica nulla, non crea nulla e
+# non legge dati Firestore. Non stampa email di persone. I file temporanei vengono cancellati
+# alla fine, anche se lo script viene interrotto.
 #
-# Uso (Google Cloud Shell):  bash 01-verifica.sh
+# Uso (Google Cloud Shell):
+#   bash 01-verifica.sh            verifica preliminare (prima di 02-configura.sh)
+#   bash 01-verifica.sh --finale   verifica finale: tutto deve essere presente ed esatto
 # Uscita: 0 nessun problema, 1 problemi trovati, 2 verifica impossibile.
+#
+# Identità approvate: file identita-approvate.txt accanto allo script (o APPROVATI_FILE),
+# vedi identita-approvate.esempio.txt. Non va messo su GitHub (contiene email).
 
 set -uo pipefail
 # Nessuna domanda interattiva di gcloud (per esempio "attivare l'API?"): risposta sempre no.
@@ -16,6 +22,13 @@ export PYTHONDONTWRITEBYTECODE=1
 PROJECT="nexus-social-e3eee"
 SA="firestore-audit@${PROJECT}.iam.gserviceaccount.com"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODO="preliminare"
+case "${1:-}" in
+  "") ;;
+  --finale) MODO="finale" ;;
+  *) echo "Uso: bash 01-verifica.sh [--finale]"; exit 2 ;;
+esac
+APPROVATI_FILE="${APPROVATI_FILE:-$HERE/identita-approvate.txt}"
 
 command -v gcloud >/dev/null || { echo "gcloud non trovato: usa Google Cloud Shell."; exit 2; }
 command -v python3 >/dev/null || { echo "python3 non trovato."; exit 2; }
@@ -29,6 +42,7 @@ fi
 TMP="$(mktemp -d)"
 chmod 700 "$TMP"
 trap 'rm -rf "$TMP"' EXIT
+trap 'exit 130' INT TERM HUP
 
 # Ogni lettura salva il JSON e un esito: ok, notfound (la risorsa non esiste: NOT_FOUND)
 # oppure error (permessi insufficienti, API spenta, rete...). Un errore non viene MAI
@@ -60,4 +74,16 @@ read_json custom_role.json    iam roles describe firestoreAuditReader --project=
 read_json testable.json       iam list-testable-permissions \
                                 "//cloudresourcemanager.googleapis.com/projects/${PROJECT}" --filter='name~^datastore\.'
 
-PROJECT="$PROJECT" SA="$SA" ME="$ME" python3 "$HERE/analizza.py" "$TMP"
+# Permessi di OGNI ruolo assegnato nel progetto e sopra (predefinito o personalizzato). Un ruolo
+# che non si riesce a leggere blocca l'esito positivo (lo controlla analizza.py).
+export PROJECT SA ME MODO APPROVATI_FILE
+while IFS=$'\t' read -r name a1 a2; do
+  [[ -n "$name" ]] || continue
+  if [[ -n "${a2:-}" ]]; then
+    read_json "ruolo_${name}.json" iam roles describe "$a1" "$a2"
+  else
+    read_json "ruolo_${name}.json" iam roles describe "$a1"
+  fi
+done < <(python3 "$HERE/analizza.py" "$TMP" --ruoli)
+
+python3 "$HERE/analizza.py" "$TMP"

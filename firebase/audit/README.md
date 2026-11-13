@@ -97,11 +97,12 @@ Ruolo, account, autorizzazioni e verifiche si preparano con gli script di
 [`iam/`](iam/README.md):
 
 1. `bash 01-verifica.sh`: sola lettura;
-2. `bash 02-configura.sh`: modifica IAM, solo dopo una verifica senza problemi e la tua conferma;
+2. `bash 02-configura.sh`: modifica IAM, solo dopo una verifica senza problemi, un riepilogo e la
+   tua conferma; non attiva API e termina con la verifica finale rigorosa;
 3. `bash 03-prova-impersonazione.sh`: permessi effettivi su **tutti** i permessi verificabili
    del progetto; deve risultare che l'account ha esattamente i 3 permessi previsti.
 
-Prima di ogni audit ripeti `01-verifica.sh` e `03-prova-impersonazione.sh`.
+Prima di ogni audit ripeti `01-verifica.sh --finale` e `03-prova-impersonazione.sh`.
 
 ### Limiti del controllo dei permessi
 

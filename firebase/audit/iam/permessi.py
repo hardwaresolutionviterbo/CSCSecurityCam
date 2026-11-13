@@ -58,3 +58,58 @@ def support_level(entry: dict) -> str:
     campo assente significa SUPPORTED. Qualsiasi altro valore viene restituito così com'è.
     """
     return entry.get("customRolesSupportLevel") or "SUPPORTED"
+
+
+# --- Privilegi che permettono di agire come l'account di audit o di allargarne i permessi ------
+# Chi ha anche uno solo di questi permessi, a livello di progetto o superiore, può:
+#   - ottenere token o firme dell'account (impersonazione);
+#   - farlo usare a una risorsa che gira con la sua identità (actAs);
+#   - creargli una chiave;
+#   - cambiare chi può impersonarlo, i criteri IAM del progetto o il ruolo personalizzato.
+DANGEROUS_PERMISSIONS = frozenset({
+    "iam.serviceAccounts.getAccessToken",
+    "iam.serviceAccounts.getOpenIdToken",
+    "iam.serviceAccounts.signBlob",
+    "iam.serviceAccounts.signJwt",
+    "iam.serviceAccounts.implicitDelegation",
+    "iam.serviceAccounts.actAs",
+    "iam.serviceAccounts.setIamPolicy",
+    "iam.serviceAccountKeys.create",
+    "iam.roles.update",
+    "resourcemanager.projects.setIamPolicy",
+    "resourcemanager.folders.setIamPolicy",
+    "resourcemanager.organizations.setIamPolicy",
+})
+
+# Ruoli predefiniti considerati pericolosi comunque, anche se la loro descrizione letta da Google
+# non contenesse i permessi qui sopra (difesa in profondità).
+DANGEROUS_ROLES = frozenset({
+    "roles/owner",
+    "roles/editor",
+    "roles/iam.serviceAccountTokenCreator",
+    "roles/iam.serviceAccountOpenIdTokenCreator",
+    "roles/iam.serviceAccountUser",
+    "roles/iam.serviceAccountAdmin",
+    "roles/iam.serviceAccountKeyAdmin",
+    "roles/iam.workloadIdentityUser",
+    "roles/iam.securityAdmin",
+    "roles/iam.roleAdmin",
+    "roles/iam.organizationRoleAdmin",
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/resourcemanager.folderAdmin",
+    "roles/resourcemanager.folderIamAdmin",
+    "roles/resourcemanager.organizationAdmin",
+    "roles/firebase.admin",
+})
+
+# Riga speciale del file delle identità approvate: approva gli agenti di servizio gestiti da
+# Google per QUESTO progetto (service-NUMERO@..., NUMERO@cloudservices..., firebase-sa-management).
+APPROVE_GOOGLE_AGENTS = "agenti-google-del-progetto"
+
+
+def dangerous(role: str, permissions) -> list:
+    """Permessi pericolosi di un ruolo (ordinati); il nome del ruolo se è nell'elenco fisso."""
+    found = sorted(set(permissions) & DANGEROUS_PERMISSIONS)
+    if not found and role in DANGEROUS_ROLES:
+        found = [f"(ruolo {role})"]
+    return found
