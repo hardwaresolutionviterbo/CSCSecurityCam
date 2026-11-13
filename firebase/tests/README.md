@@ -38,9 +38,9 @@ copertura delle regole (JSON e HTML), caricato come artifact dalla CI.
 
 | Percorso | Campi (obbligatori · *facoltativi*) | Lettura |
 | --- | --- | --- |
-| `profiles/{uid}` | `username` (a-z 0-9 . _, 3-30, max 6 cifre consecutive), `publicName` (≤ 60, senza email/telefono), `updatedAt` timestamp · *`avatarUrl`* (https, senza spazi né @) | `get` da utenti autenticati, rivalidato; nessuna `list` |
+| `profiles/{uid}` | `username` (A-Z a-z 0-9 . _, 3-24, come Supabase), `publicName` (1-80 caratteri, come `public_name` di Supabase, @ ammessa, niente numeri di telefono), `updatedAt` timestamp · *`avatarUrl`* (https, senza spazi né @) | `get` da utenti autenticati, rivalidato; nessuna `list` |
 | `profiles/{uid}/devices/{fid}` | invariato | solo il proprietario |
-| `chats/{chatId}` | `type` direct/group, `createdBy`, `createdAt`, `updatedAt`, `schemaVersion` 2 · *`title`* (≤ 80, senza email/telefono), *`avatarUrl`*, *`lastMessageAt`* | `get` dai membri, rivalidato; nessuna `list` |
+| `chats/{chatId}` | `type` direct/group, `createdBy`, `createdAt`, `updatedAt`, `schemaVersion` 2, `memberCount` (1-256), `lastMemberChange` {`op` add/remove, `uid`} · *`title`* (≤ 80, senza email/telefono), *`avatarUrl`*, *`lastMessageAt`* | `get` dai membri, rivalidato; nessuna `list` |
 | `chats/{chatId}/members/{uid}` | `uid` = id documento, `role` owner/admin/member, `permissions` {`addMembers`, `removeMembers`} booleani, `joinedAt`, `addedBy`, `schemaVersion` 2 | `get` dai membri, rivalidato; `list` dai membri con `where('schemaVersion', '==', 2)`; collection group con `where('uid', '==', mio uid)` e `schemaVersion` 2 |
 | `chats/{chatId}/messages/{id}` | `senderId`, `ciphertext` e `iv` in base64, `type`, `createdAt`, `status` sent/delivered/read, `deletedForAll`, `schemaVersion` 2 · *`replyTo`* | `get` dai membri, rivalidato; `list` solo con `where('schemaVersion', '==', 2)` |
 | `messageRequests/{id}` | `from`, `to`, `status` pending/accepted/declined, `createdAt`, `schemaVersion` 2 · *`updatedAt`* | `get` da mittente/destinatario, rivalidato; `list` con `to` o `from` == mio uid e `schemaVersion` 2 |
@@ -48,7 +48,29 @@ copertura delle regole (JSON e HTML), caricato come artifact dalla CI.
 Regole funzionali coperte dai test: rimozione con revoca immediata dell'accesso, niente
 auto-reinvito, niente reinvito da un membro normale o da un admin senza `addMembers`, reinvito
 da admin con `addMembers` (nuova membership con `joinedAt` e `addedBy` aggiornati), owner non
-rimovibile e con ruolo immutabile, niente falsificazione di ruoli e permessi.
+rimovibile e con ruolo immutabile, niente falsificazione di ruoli e permessi, membership
+malformate senza accesso, massimo 256 membri.
+
+### Come l'app crea una chat e gestisce i membri
+
+- **Creazione** (un batch): chat con `memberCount` 1 e `lastMemberChange` `{op: 'add', uid:
+  <creatore>}` più la membership `owner`; oppure `memberCount` 2, `lastMemberChange` sul secondo
+  membro e le due membership (chat diretta, o gruppo con il primo invitato).
+- **Aggiunta** (un batch per membro): nuova membership più aggiornamento della chat con
+  `memberCount: increment(1)`, `lastMemberChange: {op: 'add', uid}` e `updatedAt` del server.
+- **Rimozione o uscita** (un batch): eliminazione della membership più `increment(-1)` e
+  `lastMemberChange: {op: 'remove', uid}`.
+
+Le regole verificano che il contatore cambi solo insieme a una membership creata o eliminata
+davvero nello stesso batch: nessuno può gonfiarlo per bloccare le aggiunte.
+
+### Vincoli verificati su Supabase
+
+I casi dei test sui profili vengono da `supabase/migrations/0001_init.sql` eseguito su
+PostgreSQL 16: `username` di tipo `citext` con check `^[a-z0-9._]{3,24}$` (che su `citext`
+accetta anche le maiuscole) e `public_name` generato da `full_name` (2-80 caratteri),
+quindi fino a 80 caratteri, con `@`, cifre, emoji, tabulazioni e a capo. In Firestore
+`size()` conta i caratteri come `char_length` (verificato con 80 caratteri accentati).
 
 ## Sicurezza delle query (list)
 
@@ -90,12 +112,19 @@ query, anche se la lettura singola resta negata.
 
 ## Limiti noti
 
-- **Documenti scritti fuori dalle regole**: vedi sopra.
+- **Documenti scritti fuori dalle regole**: vedi sopra. Il deploy è subordinato all'audit in
+  sola lettura (vedi [`../README.md`](../README.md#pubblicazione-delle-regole-deploy)).
+- **public_name di sole cifre**: Supabase accetta un nome di una sola parola come
+  `3331234567`; il `public_name` risultante somiglia a un numero di telefono e la copia
+  Firestore non è leggibile (test `LIMITE`). Si risolve solo con un vincolo su Supabase.
+- **Membri aggiunti uno alla volta**: oltre al secondo membro, ogni aggiunta è un batch
+  separato che aggiorna lo stesso documento chat; aggiunte contemporanee si serializzano
+  (eventuali tentativi ripetuti dall'SDK).
 - **Indice**: la query collection group su `members` (`uid` + `schemaVersion`) richiede in
   produzione un indice composito per collection group (da creare prima della Fase 4);
   l'emulatore non lo richiede.
-- **Chat dirette**: le regole impediscono aggiunte dopo la creazione, ma non limitano a due il
-  numero di membri inseriti nel batch di creazione.
+- **Chat dirette**: al massimo due membri (creazione) e nessuna aggiunta dopo; non è però
+  verificato che il secondo membro abbia accettato una richiesta di messaggio.
 - **Emulatore**: il controllo dei dinieghi si basa sul formato del messaggio dell'emulatore
   (`false for '<operazione>' @ L<riga>`). Se una versione futura cambia formato, i test negativi
   falliscono invece di passare: il controllo è conservativo.

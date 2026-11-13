@@ -49,8 +49,9 @@ l'indirizzo di una persona dalle coordinate o dalla distanza.
 - Foto in `listing-photos/<user-id>/…`: ognuno scrive solo nella propria cartella.
 - Firestore: allowlist di campi e tipi anche in lettura (i documenti legacy con dati privati
   non sono leggibili), query solo su documenti `schemaVersion == 2`, messaggi solo cifrati,
-  membership con ruoli in `chats/{chatId}/members`, default negato. Test con l'emulatore in
-  `firebase/tests/`.
+  membership con ruoli in `chats/{chatId}/members` (valide per dare accesso, massimo 256 per
+  chat), profili allineati ai vincoli di Supabase, default negato. Test con l'emulatore in
+  `firebase/tests/`; deploy solo dopo l'audit in sola lettura (vedi `firebase/README.md`).
 - Le chiavi `anon` di Supabase sono pubbliche per definizione: la sicurezza sta nelle policy.
 
 ## Chat cifrata end-to-end (Fase 4)

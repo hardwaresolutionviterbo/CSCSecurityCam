@@ -26,8 +26,8 @@ esclusi da `.gitignore`.
 
 6. Imposta `FIREBASE_ENABLED=true` in `env.json` (o nelle variabili di Codemagic) e passa
    `--dart-define-from-file=env.json` alla build.
-7. Pubblica le regole Firestore: `firebase deploy --only firestore:rules`
-   (oppure incolla `firestore.rules` in Console → Firestore → Regole).
+7. Pubblica le regole Firestore **solo dopo** l'audit in sola lettura descritto in
+   [Pubblicazione delle regole](#pubblicazione-delle-regole-deploy).
 
 Senza questi passaggi l'app funziona lo stesso: mostra «Firebase non configurato» nella
 sezione Profilo e non tenta nessuna connessione.
@@ -68,12 +68,8 @@ account il flusso di autenticazione deve chiamare `PushDeviceRegistry.unlinkCurr
 autenticato. Un cambio account diretto non può cancellare il documento del vecchio utente.
 
 L'app non ha ancora la schermata di accesso (Fase 2): fino al primo login la diagnostica mostra
-«in attesa di accesso» e non viene scritto nulla. Dopo aver aggiunto le regole aggiornate,
-pubblica con:
-
-```bash
-firebase deploy --only firestore:rules
-```
+«in attesa di accesso» e non viene scritto nulla. Le regole aggiornate si pubblicano seguendo
+[Pubblicazione delle regole](#pubblicazione-delle-regole-deploy).
 
 ### Test manuale con Firebase Console
 
@@ -95,8 +91,11 @@ scrittura sia la lettura**. Il dettaglio dei campi ammessi è in
 
 - **Letture singole (get) rivalidate**: profili, chat, membership, messaggi e richieste sono
   leggibili solo se hanno esattamente i campi previsti, con i tipi giusti. Un documento legacy
-  con campi extra (`email`, `address`…), strutture annidate o un `username`/`publicName` che
-  contiene un'email o un numero di telefono **non è leggibile**.
+  con campi extra (`email`, `address`…) o strutture annidate **non è leggibile**.
+- **Profili allineati a Supabase**: `username` con lo stesso vincolo di `profiles.username`
+  (3-24 caratteri tra lettere, cifre, punto e trattino basso, maiuscole comprese perché il
+  campo è `citext`); `publicName` come il `public_name` generato da Supabase, fino a 80
+  caratteri, `@` compresa. Resta escluso un `publicName` che somiglia a un numero di telefono.
 - **Query (list)**: le regole valutano i filtri, non i documenti restituiti, quindi le query
   su membri, messaggi e richieste devono filtrare `schemaVersion == 2`, valore che un client può
   scrivere solo con un documento completamente valido. I profili e le chat non sono
@@ -107,10 +106,34 @@ scrittura sia la lettura**. Il dettaglio dei campi ammessi è in
 - **Membership** in `chats/{chatId}/members/{uid}`: ruoli `owner`, `admin`, `member` e permessi
   `addMembers`/`removeMembers`. Chi viene rimosso perde subito l'accesso e non può reinvitarsi;
   un membro normale non può reinvitare; un admin con `addMembers` sì, e il reinvito crea una
-  nuova membership con `joinedAt` e `addedBy` aggiornati. L'owner non si rimuove.
+  nuova membership con `joinedAt` e `addedBy` aggiornati. L'owner non si rimuove. Una
+  membership malformata (per esempio scritta con Admin SDK) non concede accesso.
+- **Massimo 256 membri**: la chat tiene `memberCount` e `lastMemberChange`, che cambiano di uno
+  nello stesso batch di ogni aggiunta o rimozione di una membership. La chat nasce con l'owner e
+  al più un secondo membro; gli altri si aggiungono un batch alla volta.
 - **Richieste di messaggio**: le crea il mittente, le accetta o rifiuta solo il destinatario.
 - `/profiles/{uid}/devices/{fid}` è leggibile e modificabile solo dal proprietario (invariato).
 - Tutto ciò che non è elencato è negato.
+
+### Pubblicazione delle regole (deploy)
+
+Le regole Firestore valgono **solo per le richieste dei client**. Admin SDK, Firebase Console,
+import ed eventuali Cloud Functions le ignorano completamente: i documenti scritti in questi modi
+non sono vincolati dalle regole e, se hanno `schemaVersion: 2`, compaiono nelle query.
+
+Il deploy è quindi subordinato a questa sequenza, da eseguire ogni volta:
+
+1. **Audit in sola lettura** dei dati in produzione su `profiles`, `chats` (con `members` e
+   `messages`) e `messageRequests`: nessuna scrittura, nessuna correzione automatica, report
+   senza valori sensibili.
+2. **Esito richiesto**: nessun documento con `schemaVersion: 2` che non rispetta lo schema in
+   [`tests/README.md`](tests/README.md#modello-dati-verificato). Se l'audit ne trova, il deploy
+   si ferma: la bonifica è un intervento lato server separato, da approvare.
+3. **Test verdi** del workflow **Firestore Rules** sul commit da pubblicare.
+4. Solo allora: `firebase deploy --only firestore:rules`.
+
+Lo script di audit non è ancora nel repository (escluso dalla Fase A.1): finché manca, le regole
+non vanno pubblicate su un progetto che contiene dati.
 
 ### Test automatici
 
