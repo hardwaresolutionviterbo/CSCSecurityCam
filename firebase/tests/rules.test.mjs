@@ -432,7 +432,7 @@ describe('members: lettura e privacy', () => {
     await assertSucceeds(getDoc(doc(db('bob'), 'chats/g1/members/carol')));
     const roster = query(collection(db('bob'), 'chats/g1/members'), where('schemaVersion', '==', 2));
     assert.equal((await assertSucceeds(getDocs(roster))).size, 5);
-    await denied(getDocs(collection(db('bob'), 'chats/g1/members')), { missingFilter: 'schemaVersion' });
+    await denied(getDocs(collection(db('bob'), 'chats/g1/members')), { missingFilter: ['schemaVersion', 'uid'] });
     await denied(getDoc(doc(db('mallory'), 'chats/g1/members/carol')));
     await denied(getDocs(query(collection(db('mallory'), 'chats/g1/members'), where('schemaVersion', '==', 2))),
       { missingFilter: 'uid' });
