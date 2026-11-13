@@ -102,13 +102,14 @@ const isCleanFalse = (item) => /^false for '/.test(item);
 // Per le query (list) le regole sono valutate sui filtri della query, non sui documenti:
 // se la query omette un filtro richiesto, l'emulatore risponde "Property <campo> is
 // undefined". Con { missingFilter: '<campo>' } il test verifica che il diniego sia dovuto
-// proprio a quel filtro mancante e a nient'altro.
+// proprio a quel filtro mancante e a nient'altro (anche più campi: ['from', 'schemaVersion']).
 async function denied(promise, { missingFilter } = {}) {
   const err = await assertFails(promise);
   assert.equal(err.code, 'permission-denied', `atteso permission-denied, ricevuto ${err.code}`);
   const pass = decisivePass(err.message);
-  const filterError = (item) => missingFilter !== undefined
-    && item.startsWith(`Property ${missingFilter} is undefined on object. for 'list'`);
+  const fields = [missingFilter].flat().filter((f) => f !== undefined);
+  const filterError = (item) => fields.some(
+    (f) => item.startsWith(`Property ${f} is undefined on object. for 'list'`));
   assert.ok(pass.length > 0 && pass.every((i) => isCleanFalse(i) || filterError(i)),
     `diniego non dovuto a una condizione falsa:\n${err.message}`);
   if (missingFilter !== undefined) {
@@ -675,7 +676,7 @@ describe('messageRequests', () => {
     const snap = await assertSucceeds(getDocs(inbox));
     assert.deepEqual(snap.docs.map((d) => d.id), ['r1']);
     await denied(getDocs(query(collection(db('bob'), 'messageRequests'), where('to', '==', 'bob'))),
-      { missingFilter: 'schemaVersion' });
+      { missingFilter: ['from', 'schemaVersion'] });
     await denied(getDocs(query(collection(db('carol'), 'messageRequests'),
       where('to', '==', 'bob'), where('schemaVersion', '==', 2))));
   });
