@@ -78,7 +78,8 @@ const CATCH_ALL_LINE = (() => {
 // sul documento reale. Si considera decisivo l'ultimo passaggio, che termina con la
 // regola finale di diniego.
 function decisivePass(message) {
-  const items = String(message).split(/,\s*(?=(?:evaluation error|false|true|Null value error|Property|Function|[A-Z][a-z]+ [a-z]+ error)[^,]*for ')/);
+  const body = String(message).replace(/^[\s\S]*?PERMISSION_DENIED:\s*/, '');
+  const items = body.split(/,\s*(?=[^,]*for '[a-z]+' @ L\d+)/);
   const passes = [];
   let current = [];
   for (const item of items) {
@@ -92,15 +93,27 @@ function decisivePass(message) {
   return passes.at(-1) ?? [];
 }
 
+const isCleanFalse = (item) => /^false for '/.test(item);
+
 // Diniego autorizzativo pulito: permission-denied e, nel passaggio decisivo, solo esiti
 // "false". Un test negativo non può quindi passare perché una regola va in errore
 // (campo mancante, documento nullo) invece di valutare una condizione falsa.
-async function denied(promise) {
+//
+// Per le query (list) le regole sono valutate sui filtri della query, non sui documenti:
+// se la query omette un filtro richiesto, l'emulatore risponde "Property <campo> is
+// undefined". Con { missingFilter: '<campo>' } il test verifica che il diniego sia dovuto
+// proprio a quel filtro mancante e a nient'altro.
+async function denied(promise, { missingFilter } = {}) {
   const err = await assertFails(promise);
   assert.equal(err.code, 'permission-denied', `atteso permission-denied, ricevuto ${err.code}`);
   const pass = decisivePass(err.message);
-  assert.ok(pass.length > 0 && pass.every((i) => /^.*\bfalse for '/.test(i) && !/error/i.test(i)),
+  const filterError = (item) => missingFilter !== undefined
+    && item.startsWith(`Property ${missingFilter} is undefined on object. for 'list'`);
+  assert.ok(pass.length > 0 && pass.every((i) => isCleanFalse(i) || filterError(i)),
     `diniego non dovuto a una condizione falsa:\n${err.message}`);
+  if (missingFilter !== undefined) {
+    assert.ok(pass.some(filterError), `atteso diniego per filtro mancante su ${missingFilter}:\n${err.message}`);
+  }
   return err;
 }
 
@@ -416,7 +429,7 @@ describe('members: lettura e privacy', () => {
     await assertSucceeds(getDoc(doc(db('bob'), 'chats/g1/members/carol')));
     await assertSucceeds(getDocs(collection(db('bob'), 'chats/g1/members')));
     await denied(getDoc(doc(db('mallory'), 'chats/g1/members/carol')));
-    await denied(getDocs(collection(db('mallory'), 'chats/g1/members')));
+    await denied(getDocs(collection(db('mallory'), 'chats/g1/members')), { missingFilter: 'uid' });
   });
 
   test('membership con campi privati o annidati non leggibile con get', async () => {
@@ -437,7 +450,7 @@ describe('members: lettura e privacy', () => {
     const snap = await assertSucceeds(getDocs(mine));
     assert.equal(snap.size, 2);
     await denied(getDocs(query(collectionGroup(db('bob'), 'members'), where('uid', '==', 'carol'))));
-    await denied(getDocs(collectionGroup(db('bob'), 'members')));
+    await denied(getDocs(collectionGroup(db('bob'), 'members')), { missingFilter: 'uid' });
   });
 });
 
@@ -616,7 +629,7 @@ describe('messages', () => {
     assert.ok(ids.includes('m1'));
     assert.ok(!ids.includes('legacy1'), 'il messaggio legacy senza schemaVersion non deve comparire');
     // Senza il filtro su schemaVersion la query è negata.
-    await denied(getDocs(collection(bob, 'chats/g1/messages')));
+    await denied(getDocs(collection(bob, 'chats/g1/messages')), { missingFilter: 'schemaVersion' });
   });
 
   test('stato aggiornato dai destinatari; elimina per tutti solo dal mittente', async () => {
@@ -661,7 +674,8 @@ describe('messageRequests', () => {
       where('to', '==', 'bob'), where('schemaVersion', '==', 2));
     const snap = await assertSucceeds(getDocs(inbox));
     assert.deepEqual(snap.docs.map((d) => d.id), ['r1']);
-    await denied(getDocs(query(collection(db('bob'), 'messageRequests'), where('to', '==', 'bob'))));
+    await denied(getDocs(query(collection(db('bob'), 'messageRequests'), where('to', '==', 'bob'))),
+      { missingFilter: 'schemaVersion' });
     await denied(getDocs(query(collection(db('carol'), 'messageRequests'),
       where('to', '==', 'bob'), where('schemaVersion', '==', 2))));
   });
@@ -691,19 +705,19 @@ describe('collezioni non previste', () => {
 
 describe('controllo dei dinieghi', () => {
   const L = CATCH_ALL_LINE;
-  const clean = (pass) => pass.every((i) => /\bfalse for '/.test(i) && !/error/i.test(i));
+  const clean = (pass) => pass.length > 0 && pass.every(isCleanFalse);
 
   test('passaggio decisivo con sola condizione falsa: diniego pulito', () => {
-    const msg = `PERMISSION_DENIED: \nevaluation error at L10:5 for 'get' @ L10, false for 'get' @ L${L}, `
+    const msg = `7 PERMISSION_DENIED: \nevaluation error at L10:5 for 'get' @ L10, false for 'get' @ L${L}, `
       + `false for 'get' @ L10, false for 'get' @ L${L}`;
     assert.deepEqual(decisivePass(msg), ["false for 'get' @ L10", `false for 'get' @ L${L}`]);
     assert.ok(clean(decisivePass(msg)));
+    assert.ok(clean(decisivePass(`7 PERMISSION_DENIED: \nfalse for 'delete' @ L5, false for 'delete' @ L${L}`)));
   });
 
   test('errore nel passaggio decisivo: non accettato come diniego', () => {
-    const msg = `PERMISSION_DENIED: \nNull value error. for 'create' @ L20, false for 'create' @ L${L}`;
-    assert.ok(!clean(decisivePass(msg)));
-    const msg2 = `PERMISSION_DENIED: \nevaluation error at L20:3 for 'create' @ L20, false for 'create' @ L${L}`;
-    assert.ok(!clean(decisivePass(msg2)));
+    assert.ok(!clean(decisivePass(`PERMISSION_DENIED: \nNull value error. for 'create' @ L20, false for 'create' @ L${L}`)));
+    assert.ok(!clean(decisivePass(`PERMISSION_DENIED: \nevaluation error at L20:3 for 'create' @ L20, false for 'create' @ L${L}`)));
+    assert.ok(!clean(decisivePass(`PERMISSION_DENIED: \nProperty uid is undefined on object. for 'list' @ L30, false for 'list' @ L${L}`)));
   });
 });
