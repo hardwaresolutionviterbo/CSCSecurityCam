@@ -190,8 +190,9 @@ describe('classificazione', () => {
     assert.equal(findingCount(r, 'avviso:collezione_non_prevista_dalle_regole'), 2);
     assert.equal(findingCount(r, 'avviso:membership_in_chat_inesistente'), 1);
     assert.equal(findingCount(r, 'avviso:membership_v2_in_chat_non_conforme'), 1);
-    // email nel profilo, email nel messaggio legacy, telefono nella membership e nella richiesta v2
-    assert.equal(findingCount(r, 'avviso:possibile_dato_privato'), 4);
+    // email nel profilo, nel messaggio legacy e nella chat g3; telefono nella membership e
+    // nella richiesta v2
+    assert.equal(findingCount(r, 'avviso:possibile_dato_privato'), 5);
 
     // Dettaglio tecnico: solo nomi di campo dello schema o segnaposto.
     assert.equal(r.issueCodes['profile:campo_non_ammesso:email'].count, 1);
@@ -446,7 +447,9 @@ describe('codice dell\'audit senza operazioni di scrittura', () => {
       const lines = readFileSync(join(HERE, file), 'utf8').split('\n');
       const hits = lines
         .map((l, i) => ({ l, n: i + 1 }))
-        .filter(({ l }) => !l.trim().startsWith('//') && !l.includes('FORBIDDEN_DB = new Set') && !l.includes('new Set(['))
+        // Eccezioni esplicite: dichiarazioni di insiemi e l'HMAC dell'anonimizzazione
+        // (createHmac(...).update(...) non riguarda Firestore).
+        .filter(({ l }) => !l.trim().startsWith('//') && !l.includes('new Set([') && !l.includes('createHmac('))
         .filter(({ l }) => forbidden.test(l));
       assert.deepEqual(hits, [], `${file}: ${hits.map((h) => h.n).join(', ')}`);
     }

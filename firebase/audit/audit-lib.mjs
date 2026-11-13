@@ -244,7 +244,7 @@ export function safeFieldName(k) {
 
 export function makeAnonymizer(saltHex) {
   const salt = saltHex ? Buffer.from(saltHex, 'hex') : randomBytes(32);
-  const cache = Object.create(null);
+  const cache = { __proto__: null };
   const id = (raw) => {
     cache[raw] ??= createHmac('sha256', salt).update(raw).digest('hex').slice(0, 12);
     return cache[raw];

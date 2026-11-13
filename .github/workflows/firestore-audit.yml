@@ -1,0 +1,115 @@
+name: Firestore Audit (produzione, sola lettura)
+
+# Audit dei dati del progetto Firebase reale, SOLO LETTURA, avviato solo a mano.
+# Nessuna scrittura, nessuna correzione, nessun deploy. Istruzioni: firebase/audit/README.md
+#
+# Credenziali (una delle due, configurate su GitHub, mai in chat né nel repository):
+#   - variabili FIREBASE_AUDIT_WIF_PROVIDER e FIREBASE_AUDIT_SERVICE_ACCOUNT
+#     (Workload Identity Federation, senza chiavi: consigliato);
+#   - oppure segreto FIREBASE_AUDIT_SA_KEY (chiave JSON di un account di servizio).
+# L'account di servizio deve avere SOLO il ruolo "Cloud Datastore Viewer".
+on:
+  workflow_dispatch:
+    inputs:
+      conferma_progetto:
+        description: "Scrivi l'id del progetto da verificare (nexus-social-e3eee)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: firestore-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Audit Firestore · sola lettura
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Ambiente GitHub dedicato: si possono richiedere approvatori prima dell'avvio.
+    environment: firestore-audit
+    env:
+      PROJECT_ID: nexus-social-e3eee
+    defaults:
+      run:
+        working-directory: firebase/audit
+
+    steps:
+      - name: Conferma del progetto
+        working-directory: .
+        env:
+          CONFERMA: ${{ inputs.conferma_progetto }}
+        run: |
+          set -euo pipefail
+          if [ "${CONFERMA}" != "${PROJECT_ID}" ]; then
+            echo "::error::Conferma non valida: scrivi esattamente ${PROJECT_ID}."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: firebase/audit/package-lock.json
+
+      - name: Dipendenze (npm ci)
+        run: npm ci --no-audit --no-fund --omit=dev
+
+      - name: Credenziali Google (Workload Identity)
+        if: ${{ vars.FIREBASE_AUDIT_WIF_PROVIDER != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.FIREBASE_AUDIT_WIF_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_AUDIT_SERVICE_ACCOUNT }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Credenziali Google (chiave dell'account di servizio)
+        if: ${{ vars.FIREBASE_AUDIT_WIF_PROVIDER == '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_AUDIT_SA_KEY }}
+
+      - name: Audit in sola lettura
+        id: audit
+        run: |
+          set -uo pipefail
+          mkdir -p reports
+          node audit-firestore.mjs --project "${PROJECT_ID}" --out reports/firestore-audit.json > reports/riepilogo.txt
+          code=$?
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+          # Il riepilogo contiene solo conteggi e codici di anomalia.
+          {
+            echo '```'
+            cat reports/riepilogo.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat reports/riepilogo.txt
+          exit 0
+
+      - name: Carica report anonimo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firestore-audit-report
+          path: |
+            firebase/audit/reports/firestore-audit.json
+            firebase/audit/reports/riepilogo.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Esito
+        run: |
+          case "${{ steps.audit.outputs.code }}" in
+            0)  echo "Esito: PASS" ;;
+            10) echo "::warning::Esito: PASS CON AVVISI" ;;
+            20) echo "::error::Esito: BLOCKED (anomalie bloccanti)"; exit 1 ;;
+            2)  echo "::error::Configurazione non valida (progetto o credenziali)"; exit 1 ;;
+            *)  echo "::error::Errore durante l'audit"; exit 1 ;;
+          esac

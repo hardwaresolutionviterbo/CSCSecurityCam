@@ -37,6 +37,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
+          cache-dependency-path: firebase/audit/package-lock.json
 
       # Il Firestore Emulator richiede Java 21.
       - name: Java 21
@@ -45,18 +47,9 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Dipendenze
-        run: |
-          set -euo pipefail
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            echo "::warning::package-lock.json assente: installazione iniziale per generarlo."
-            npm install --no-audit --no-fund
-            echo "BEGIN package-lock.json"
-            gzip -9c package-lock.json | base64 -w 200
-            echo "END package-lock.json"
-          fi
+      # Installazione riproducibile dal lockfile versionato.
+      - name: Dipendenze (npm ci)
+        run: npm ci --no-audit --no-fund
 
       - name: Versioni
         run: |

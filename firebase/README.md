@@ -158,8 +158,9 @@ Il deploy è quindi subordinato a questa sequenza, da eseguire ogni volta:
 8. Solo allora: `firebase deploy --only firestore:rules`, senza modifiche ai dati; poi prova
    manuale della registrazione dei dispositivi push nell'app.
 
-Lo script di audit non è ancora nel repository (escluso dalla Fase A.1): finché manca, le regole
-non vanno pubblicate su un progetto che contiene dati.
+Lo script di audit è in [`audit/`](audit/README.md) (Fase A.2): sola lettura, account di servizio
+con il solo ruolo Cloud Datastore Viewer, output senza dati personali. Finché non è stato eseguito
+sul progetto reale con esito PASS o PASS CON AVVISI accettati, le regole non vanno pubblicate.
 
 ### Test automatici
 

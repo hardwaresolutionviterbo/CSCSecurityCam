@@ -12,7 +12,7 @@
     "test": "firebase emulators:exec --config ../../firebase.json --only firestore --project demo-nexus-audit \"node --test --test-reporter=spec audit.test.mjs\""
   },
   "dependencies": {
-    "firebase-admin": "latest"
+    "firebase-admin": "14.5.1"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "6.0.0",
