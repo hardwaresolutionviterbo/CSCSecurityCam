@@ -8,8 +8,9 @@
   },
   "scripts": {
     "audit": "node audit-firestore.mjs",
-    "check": "node --check audit-firestore.mjs && node --check audit-lib.mjs && node --check audit.test.mjs",
-    "test": "firebase emulators:exec --config ../../firebase.json --only firestore --project demo-nexus-audit \"node --test --test-reporter=spec audit.test.mjs\""
+    "check": "node --check audit-firestore.mjs && node --check audit-lib.mjs && node --check audit.test.mjs && node --check credentials.e2e.test.mjs",
+    "test": "firebase emulators:exec --config ../../firebase.json --only firestore --project demo-nexus-audit \"node --test --test-reporter=spec audit.test.mjs\"",
+    "test:credenziali": "node --test --test-reporter=spec credentials.e2e.test.mjs"
   },
   "dependencies": {
     "firebase-admin": "14.5.1"

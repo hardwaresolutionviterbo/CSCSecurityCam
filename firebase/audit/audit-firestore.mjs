@@ -138,27 +138,63 @@ export function checkTarget(opts, env = process.env) {
 
 export const REQUIRED_READ_PERMISSIONS = ['datastore.entities.get', 'datastore.entities.list', 'datastore.databases.list'];
 
-// Permessi che l'account di audit NON deve avere. Se ne ha anche uno solo, l'audit si
-// ferma: le garanzie di sola lettura devono valere anche a livello IAM.
+// Permessi che l'account di audit NON deve avere sul progetto. Se ne ha anche uno solo,
+// l'audit si ferma. Solo nomi documentati da Google (un nome inesistente farebbe fallire
+// l'intera verifica; i caratteri jolly non sono ammessi da testIamPermissions).
 export const FORBIDDEN_PERMISSIONS = [
+  // Scrittura dei documenti Firestore
   'datastore.entities.create',
   'datastore.entities.update',
   'datastore.entities.delete',
+  // Gestione dei database: creazione, modifica, cancellazione, import/export, clonazione,
+  // eliminazione in blocco, ripristino da backup
   'datastore.databases.create',
   'datastore.databases.update',
   'datastore.databases.delete',
   'datastore.databases.export',
   'datastore.databases.import',
-  'datastore.indexes.create',
-  'datastore.indexes.update',
-  'datastore.indexes.delete',
+  'datastore.databases.bulkDelete',
+  'datastore.databases.clone',
+  'datastore.backups.restoreDatabase',
+  'datastore.backups.delete',
+  'datastore.backupSchedules.create',
+  'datastore.backupSchedules.delete',
+  // Indici Firestore
+  'datastore.schemas.create',
+  'datastore.schemas.delete',
+  // Regole di sicurezza Firebase (deploy)
   'firebaserules.releases.create',
   'firebaserules.releases.update',
   'firebaserules.releases.delete',
   'firebaserules.rulesets.create',
+  // Amministrazione IAM e aggiramento del ruolo di sola lettura: modifica dei permessi,
+  // chiavi, impersonazione di altri account di servizio
   'resourcemanager.projects.setIamPolicy',
+  'iam.serviceAccounts.setIamPolicy',
   'iam.serviceAccountKeys.create',
+  'iam.serviceAccounts.actAs',
+  'iam.serviceAccounts.getAccessToken',
+  'iam.serviceAccounts.getOpenIdToken',
+  'iam.serviceAccounts.signJwt',
+  'iam.serviceAccounts.signBlob',
+  'iam.serviceAccounts.implicitDelegation',
 ];
+
+// Dettaglio di un errore Google, senza dati personali: stato (es. PERMISSION_DENIED,
+// INVALID_ARGUMENT) e messaggio breve con eventuali indirizzi email mascherati, tranne
+// quelli degli account di servizio.
+async function googleErrorDetail(res) {
+  try {
+    const body = await res.json();
+    const status = String(body?.error?.status ?? '');
+    const message = String(body?.error?.message ?? '')
+      .replace(/[\w.+-]+@(?![\w-]+\.iam\.gserviceaccount\.com)[\w.-]+/g, '<email>')
+      .slice(0, 240);
+    return [status, message].filter(Boolean).join(': ');
+  } catch {
+    return '';
+  }
+}
 
 async function getJson(fetchImpl, url, init, what) {
   let res;
@@ -167,7 +203,10 @@ async function getJson(fetchImpl, url, init, what) {
   } catch {
     throw new ConfigError(`${what}: richiesta non riuscita`);
   }
-  if (!res.ok) throw new ConfigError(`${what}: risposta HTTP ${res.status}`);
+  if (!res.ok) {
+    const detail = await googleErrorDetail(res);
+    throw new ConfigError(`${what}: risposta HTTP ${res.status}${detail ? ` (${detail})` : ''}`);
+  }
   try {
     return await res.json();
   } catch {

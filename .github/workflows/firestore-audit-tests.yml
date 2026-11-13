@@ -62,3 +62,38 @@ jobs:
 
       - name: Test audit (Firestore Emulator)
         run: npm test
+
+  # Credenziali impersonate con Firebase Admin SDK, contro endpoint Google simulati in
+  # locale: nessuna richiesta lascia il runner (i nomi Google puntano a 127.0.0.1).
+  credentials-e2e:
+    name: Audit Firestore · credenziali impersonate (Google simulato)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: firebase/audit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: firebase/audit/package-lock.json
+
+      - name: Dipendenze (npm ci)
+        run: npm ci --no-audit --no-fund
+
+      - name: Nomi Google verso 127.0.0.1
+        run: |
+          set -euo pipefail
+          echo "127.0.0.1 oauth2.googleapis.com www.googleapis.com accounts.google.com sts.googleapis.com iamcredentials.googleapis.com cloudresourcemanager.googleapis.com firestore.googleapis.com" | sudo tee -a /etc/hosts
+          getent hosts firestore.googleapis.com
+
+      - name: Test credenziali impersonate
+        env:
+          E2E_FAKE_GOOGLE: '1'
+        run: sudo -E env "PATH=$PATH" E2E_FAKE_GOOGLE=1 node --test --test-reporter=spec credentials.e2e.test.mjs
