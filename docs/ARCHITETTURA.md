@@ -47,8 +47,10 @@ l'indirizzo di una persona dalle coordinate o dalla distanza.
 - Trigger che impediscono al client di modificare proprietario, tipo, coordinate, data di
   creazione, media stelle e tipo di account.
 - Foto in `listing-photos/<user-id>/…`: ognuno scrive solo nella propria cartella.
-- Firestore: messaggi solo cifrati, solo membri della chat, nessuna cancellazione, default
-  negato.
+- Firestore: allowlist di campi e tipi anche in lettura (i documenti legacy con dati privati
+  non sono leggibili), query solo su documenti `schemaVersion == 2`, messaggi solo cifrati,
+  membership con ruoli in `chats/{chatId}/members`, default negato. Test con l'emulatore in
+  `firebase/tests/`.
 - Le chiavi `anon` di Supabase sono pubbliche per definizione: la sicurezza sta nelle policy.
 
 ## Chat cifrata end-to-end (Fase 4)

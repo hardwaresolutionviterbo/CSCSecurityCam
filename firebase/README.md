@@ -89,13 +89,32 @@ Firebase Console: la ricezione di una notifica reale va confermata con il test m
 
 ## Cosa fanno le regole Firestore
 
-- Le chat contengono **solo testo cifrato** (`ciphertext` + `iv`), scritto dal dispositivo.
-  Le regole rifiutano campi in chiaro e payload oltre 64 KB.
-- Solo i membri delle chat leggono e scrivono i messaggi; le chat non si cancellano.
-- I destinatari possono aggiornare solo stato di consegna/lettura.
-- `/profiles/{uid}` è una copia minima e pubblica (nome abbreviato, @username, avatar).
-- `/profiles/{uid}/devices/{fid}` è leggibile e modificabile solo dal proprietario del profilo.
+Firestore restituisce sempre il documento intero, quindi le regole controllano **sia la
+scrittura sia la lettura**. Il dettaglio dei campi ammessi è in
+[`tests/README.md`](tests/README.md#modello-dati-verificato).
+
+- **Letture singole (get) rivalidate**: profili, chat, membership, messaggi e richieste sono
+  leggibili solo se hanno esattamente i campi previsti, con i tipi giusti. Un documento legacy
+  con campi extra (`email`, `address`…), strutture annidate o un `username`/`publicName` che
+  contiene un'email o un numero di telefono **non è leggibile**.
+- **Query (list)**: le regole non filtrano i risultati, quindi le query sono ammesse solo su
+  documenti con `schemaVersion == 2` (scrivibili solo con queste regole) e devono filtrare su
+  quel campo. I profili e le chat non sono enumerabili.
+- **Chat**: solo testo cifrato in base64 (`ciphertext` + `iv`), massimo 64 KB. Solo i membri
+  leggono e scrivono; i destinatari aggiornano lo stato, il mittente «elimina per tutti».
+- **Membership** in `chats/{chatId}/members/{uid}`: ruoli `owner`, `admin`, `member` e permessi
+  `addMembers`/`removeMembers`. Chi viene rimosso perde subito l'accesso e non può reinvitarsi;
+  un membro normale non può reinvitare; un admin con `addMembers` sì, e il reinvito crea una
+  nuova membership con `joinedAt` e `addedBy` aggiornati. L'owner non si rimuove.
+- **Richieste di messaggio**: le crea il mittente, le accetta o rifiuta solo il destinatario.
+- `/profiles/{uid}/devices/{fid}` è leggibile e modificabile solo dal proprietario (invariato).
 - Tutto ciò che non è elencato è negato.
+
+### Test automatici
+
+`firebase/tests/` contiene i test permanenti con il Firestore Emulator, eseguiti da GitHub
+Actions (workflow **Firestore Rules**) a ogni modifica di `firebase/`. Istruzioni in
+[`tests/README.md`](tests/README.md).
 
 ## Decisioni aperte (Fase 4)
 

@@ -57,6 +57,7 @@ lib/
     admin/                   gestionale (Fase 7)
 supabase/migrations/         schema e regole di sicurezza Supabase
 firebase/firestore.rules     regole di sicurezza Firestore
+firebase/tests/              test delle regole con Firestore Emulator (CI: Firestore Rules)
 codemagic.yaml               build nel cloud
 docs/                        checklist Fase 0 e architettura
 ```
