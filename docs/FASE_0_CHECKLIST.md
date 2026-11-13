@@ -19,17 +19,17 @@ Legenda:
 
 | Requisito del piano | Stato | Evidenza / cosa manca |
 |---|---|---|
-| Nome definitivo «Nexus Social» e controllo sugli store | 🔷 | Verifica fatta: [`fase0/VERIFICA_NOME_STORE.md`](fase0/VERIFICA_NOME_STORE.md). L'identificativo Android `com.nexussocial.app` è **già usato su Google Play** da un'altra app; il nome ha omonimi. Decisione sul nome e sul nuovo identificativo: tua. |
+| Nome definitivo «Nexus Social» e controllo sugli store | ✅ deciso (F8) | Verifica: [`fase0/VERIFICA_NOME_STORE.md`](fase0/VERIFICA_NOME_STORE.md). Nome invariato. L'identificativo `com.nexussocial.app`, già usato su Google Play da un'altra app, va cambiato **prima del primo caricamento su Play, entro la Fase 9**. |
 | Account GitHub | ✅ | Repository attivo |
 | Account Firebase | ✅ | La build Android in CI contiene la configurazione Firebase |
 | Account Supabase | ✅ | La CI raggiunge Supabase e trova lo schema (HTTP 200) |
-| Account Codemagic | 🔷 | `codemagic.yaml` presente, ma nessuna build Codemagic risulta eseguita. Le build attuali usano GitHub Actions. Conferma se l'account esiste. |
-| Servizio mappa 3D (account e chiave gratuita) | 🔷 | Analisi: [`fase0/DECISIONE_MAPPA.md`](fase0/DECISIONE_MAPPA.md). Proposta: MapLibre + OpenFreeMap, che non richiedono account né chiave. Il rilievo 3D del terreno non è disponibile ufficialmente: va deciso cosa si intende per «3D». |
-| Chiavi e password in un posto sicuro | 🔷 | Non verificabile dal repository: serve la tua conferma (gestore di password). Nessuna chiave nel repository. |
+| Account Codemagic | 🟡 deciso (F11) | Android resta su GitHub Actions; Codemagic per le build iPhone. **Account gratuito da creare o confermare.** |
+| Servizio mappa 3D (account e chiave gratuita) | ✅ deciso (F9) | [`fase0/DECISIONE_MAPPA.md`](fase0/DECISIONE_MAPPA.md): MapLibre + OpenFreeMap, senza account né chiave. «3D» = inclinazione ed edifici 3D. Prototipo di conferma all'inizio della Fase 3. |
+| Chiavi e password in un posto sicuro | ✅ confermato (F10) | Confermato dal titolare. Nessuna chiave nel repository. |
 | Logo, icona, colori, stile (moderno, avatar animati, modalità scura) | 🟡 | Monogramma «N» su gradiente viola-menta, icona dell'app, tema chiaro e scuro presenti. Lo stile degli **avatar animati** non è ancora definito; l'icona definitiva per gli store è prevista in Fase 9/10. |
 | Piano costi | 🟡 | Voci di costo sotto. Mancano le soglie gratuite attuali di Firebase, Supabase e SMS, da verificare prima della Fase 2 (SMS). |
 | Bozze di Termini d'uso, Privacy Policy, Regole della community | ✅ come **bozze non validate** | [`fase0/BOZZA_TERMINI_USO.md`](fase0/BOZZA_TERMINI_USO.md), [`fase0/BOZZA_PRIVACY_POLICY.md`](fase0/BOZZA_PRIVACY_POLICY.md), [`fase0/BOZZA_REGOLE_COMMUNITY.md`](fase0/BOZZA_REGOLE_COMMUNITY.md). Revisione professionale prevista in Fase 9. |
-| Impostazioni Privacy, Controllo privacy, separazione dati pubblici e privati | ✅ progetto, 🔷 15 scelte da approvare | [`fase0/PRIVACY_IMPOSTAZIONI.md`](fase0/PRIVACY_IMPOSTAZIONI.md) |
+| Impostazioni Privacy, Controllo privacy, separazione dati pubblici e privati | ✅ progettate e approvate | [`fase0/PRIVACY_IMPOSTAZIONI.md`](fase0/PRIVACY_IMPOSTAZIONI.md); decisioni P1-P15, D1-D4, M1-M7 in [`fase0/DECISIONI_PRIVACY_APPROVATE.md`](fase0/DECISIONI_PRIVACY_APPROVATE.md) |
 
 ## Decisioni aperte
 
@@ -37,18 +37,28 @@ Il piano elenca sei «decisioni ancora da prendere». Questa tabella ne riporta 
 
 | Decisione | Stato | Quando serve |
 |---|---|---|
-| Servizio mappa 3D e limiti gratuiti | Proposta pronta (MapLibre + OpenFreeMap, con condizioni) | Prima della Fase 3 |
+| Servizio mappa 3D e limiti gratuiti | **Decisa (F9)**: MapLibre + OpenFreeMap, prototipo in Fase 3 | Prima della Fase 3 |
 | Verifica partita IVA (VIES o servizio completo) | Aperta. Proposta: VIES più confronto manuale dell'admin | Fasi 6 e 7 |
 | Limiti di peso dei media in chat | Aperta. Proposta: foto 10 MB compresse, video 50 MB / 60 s, documenti 25 MB | Fase 4 |
 | Città pilota | Aperta | Fase 10 |
 | Regole di moderazione (motivi, durata dei ban, testi) | Aperta. Proposta: avviso → 24 ore → 7 giorni → permanente; motivi: spam, truffa, molestie, contenuti illegali, profilo falso | Prima della Fase 5 (commenti) e della Fase 7 |
-| Nome definitivo dopo il controllo sugli store | **Urgente**: l'identificativo Android va cambiato prima di qualsiasi pubblicazione | Prima possibile |
+| Nome definitivo dopo il controllo sugli store | **Decisa (F8)**: «Nexus Social»; identificativo da cambiare prima del primo caricamento su Play | Entro la Fase 9 |
 
-Decisioni nuove emerse in Fase 0:
+Decisioni prese in Fase 0, tutte in
+[`fase0/DECISIONI_PRIVACY_APPROVATE.md`](fase0/DECISIONI_PRIVACY_APPROVATE.md):
 
-- età minima, 14 o 18 anni (proposta: 18);
-- le 15 scelte P1-P15 delle impostazioni Privacy;
-- significato di «3D» per la mappa.
+- **P1-P15**: impostazioni privacy;
+- **D1**: età minima 14 anni, con numero e data di nascita, senza documenti né servizi a
+  pagamento;
+- **D2**: identità di Nexus Social, social network con marketplace, non app di incontri romantici
+  né per adulti;
+- **D3**: sicurezza dei minorenni, con avviso sulla Mappa Social;
+- **D4**: esperienza semplice, simile a WhatsApp;
+- **M1-M7**: dettagli per i minorenni;
+- **F8-F11**: nome, mappa, chiavi, build.
+
+Restano aperte le decisioni del piano che servono più avanti: verifica partita IVA, limiti dei
+media in chat, città pilota, regole di moderazione.
 
 ## Account
 
@@ -93,16 +103,21 @@ Mai nel repository. In locale stanno in `env.json`, che è escluso da git. In CI
 
 ## Attività residue per chiudere la Fase 0
 
-1. 🔷 Approvare o modificare le scelte P1-P15 di
-   [`fase0/PRIVACY_IMPOSTAZIONI.md`](fase0/PRIVACY_IMPOSTAZIONI.md).
-2. 🔷 Decidere il nome e il nuovo identificativo dell'app. La modifica tecnica dell'identificativo è
-   un intervento di Fase 1, da autorizzare a parte.
-3. 🔷 Approvare la proposta per la mappa e il significato di «3D».
-4. 🔷 Decidere l'età minima (14 o 18 anni).
-5. 🔷 Confermare che le chiavi e le password sono salvate in un gestore sicuro.
-6. 🔷 Confermare l'account Codemagic, oppure decidere di usare solo GitHub Actions per le build
-   Android.
+Fatte:
+
+1. ✅ Scelte P1-P15 approvate.
+2. ✅ Nome deciso; cambio dell'identificativo pianificato entro la Fase 9 (F8).
+3. ✅ Mappa approvata (F9).
+4. ✅ Età minima: 14 anni (D1).
+5. ✅ Chiavi e password confermate (F10).
+
+Ancora da fare:
+
+6. 🟡 Creare o confermare l'account gratuito Codemagic per le build iPhone (F11). Azione tua.
 7. ⏳ Definire lo stile degli avatar animati (bozza grafica).
 8. ⏳ Verificare le soglie gratuite attuali di Firebase (SMS), Supabase e servizio mappa.
 9. ⏳ Compilare i dati del titolare nelle bozze legali. La revisione del professionista è prevista
-   in Fase 9.
+   in Fase 9 e deve coprire anche gli obblighi sui minorenni (Digital Services Act, art. 28).
+
+Per dichiarare conclusa la Fase 0 servono i punti 6-8. Il punto 9 può restare aperto fino alla
+Fase 9, perché il piano chiede in Fase 0 solo le bozze.

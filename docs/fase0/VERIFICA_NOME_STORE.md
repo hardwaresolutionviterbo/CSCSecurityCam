@@ -66,10 +66,17 @@ Google Play Console o App Store Connect, che non esistono ancora (Fase 10).
 3. In entrambi i casi: verifica del marchio (EUIPO per l'UE, UIBM per l'Italia) prima della
    decisione finale.
 
+## Decisione (13 novembre 2026, F8)
+
+- Il nome **«Nexus Social» resta invariato**.
+- L'identificativo `com.nexussocial.app` resta durante lo sviluppo e i test con APK.
+- Va **cambiato prima del primo caricamento su Google Play, entro la Fase 9** (beta chiusa).
+- Il cambio è un intervento tecnico da autorizzare: Firebase, CI e iOS.
+
 ## Azioni residue
 
-- [ ] Decidere il nome (opzione 1 o 2).
-- [ ] Scegliere il nuovo identificativo Android/iOS e autorizzare la modifica tecnica (Fase 1).
+- [x] Decidere il nome: «Nexus Social» invariato (F8).
+- [ ] Scegliere il nuovo identificativo Android/iOS e autorizzare la modifica tecnica, entro la Fase 9.
   Comporta: nuova app Android su Firebase, nuovo `google-services.json`, aggiornamento della CI.
 - [ ] Ricerca di marchio sul nome scelto.
 - [ ] Prenotare il nome su App Store Connect quando verrà creato l'account Apple (Fase 10).

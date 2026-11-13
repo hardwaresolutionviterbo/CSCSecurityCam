@@ -10,17 +10,29 @@
 
 ## 1. Chi siamo e cosa offre l'app
 
-Nexus Social è gestita da **[NOME O RAGIONE SOCIALE, SEDE, PARTITA IVA, CONTATTI]**. L'app
-permette di:
+Nexus Social è gestita da **[NOME O RAGIONE SOCIALE, SEDE, PARTITA IVA, CONTATTI]**.
 
-- chattare e chiamare con crittografia end-to-end;
-- vedere sulla mappa annunci e promozioni vicini;
-- scambiare e vendere oggetti;
-- per le attività, pubblicare promozioni con abbonamento.
+Nexus Social è un **social network con marketplace integrato**. Permette di:
+
+- socializzare e conoscere persone;
+- organizzare incontri informali, per esempio un caffè;
+- chiedere o offrire aiuto;
+- trovare persone con interessi comuni;
+- chattare uno a uno e in gruppo, con crittografia end-to-end;
+- usare la Mappa Social per scoprire persone, attività e iniziative;
+- pubblicare annunci di vendita, acquisto, scambio e regalo;
+- per aziende, negozi, bar e ristoranti: promuovere i propri locali e comparire sulla mappa con la
+  sede ufficiale.
+
+**Nexus Social non è un'app di incontri romantici e non è una piattaforma per adulti o per
+contenuti sessuali.**
 
 ## 2. Chi può usare l'app
 
-- Devi avere almeno **[14 / 18 · DECISIONE]** anni.
+- Devi avere almeno **14 anni**.
+- Ti registri con il numero di telefono e la data di nascita, senza documenti d'identità.
+- **[⚠ Da verificare: capacità dei minorenni per compravendite e abbonamenti; obblighi del
+  Digital Services Act sulla protezione dei minori]**
 - Ti registri con un numero di telefono valido, come **Privato** o come **Azienda**.
 - Le informazioni che fornisci devono essere vere. Sei responsabile della sicurezza del tuo
   telefono e del tuo account.
@@ -45,6 +57,7 @@ permette di:
 
 ## 5. Aziende, promozioni e abbonamento
 
+- Il profilo Azienda e l'abbonamento sono riservati ai **maggiorenni**.
 - Per registrarsi come Azienda servono partita IVA, ragione sociale e indirizzo; il documento è
   facoltativo.
 - L'abbonamento costa **9,99 € al mese**, con **prova gratuita di 7 giorni**, e si acquista
@@ -61,7 +74,11 @@ permette di:
 
 ## 6. Sicurezza negli incontri
 
+- Gli incontri organizzati con Nexus Social sono incontri informali (un caffè, un'attività
+  insieme, uno scambio di oggetti).
 - Quando incontri una persona conosciuta nell'app, scegli luoghi pubblici.
+- Se sei minorenne, fai ancora più attenzione: leggi l'avviso di sicurezza della Mappa Social e
+  usa blocco e segnalazione appena qualcosa non va.
 - Usa la funzione «Condividi l'incontro con un amico», quando sarà disponibile.
 - Nexus Social non verifica l'identità degli utenti privati. **[⚠ Da verificare: formulazione]**
 

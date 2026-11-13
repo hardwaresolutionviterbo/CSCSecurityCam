@@ -59,6 +59,7 @@ Livelli di visibilità:
 | Dato | Livello | Fonte nel piano / nota |
 |---|---|---|
 | Nome e cognome completi | Privato | [PDF] in pubblico solo abbreviato |
+| Data di nascita ed età | Privato: serve solo a controllare l'età minima e le protezioni per i minorenni | Decisione D1 (vedi `DECISIONI_PRIVACY_APPROVATE.md`) |
 | Nome abbreviato (es. «Carlo C.») | Pubblico (autenticati) | [PDF] |
 | @username | Pubblico (autenticati) | [PDF] univoco |
 | Avatar | Pubblico (autenticati) | [PDF] |

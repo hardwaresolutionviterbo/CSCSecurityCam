@@ -1,4 +1,4 @@
-# Fase 0 · Decisioni privacy approvate (P1-P15)
+# Fase 0 · Decisioni privacy approvate (P1-P15) e decisioni aggiuntive (D1-D4)
 
 Decisioni prese il 13 novembre 2026 sulle proposte di
 [`PRIVACY_IMPOSTAZIONI.md`](PRIVACY_IMPOSTAZIONI.md).
@@ -188,3 +188,119 @@ Sul telefono, nelle fasi indicate e nei test della Fase 9:
    posizione del titolare; P.IVA e documento non sono visibili ad altri utenti.
 5. **P12:** l'utente bloccato non può scrivere né commentare, e i due non vedono le reciproche
    reazioni e commenti.
+
+---
+
+# Decisioni aggiuntive della Fase 0 (13 novembre 2026)
+
+Decise dal titolare del progetto. Non modificano P1-P15 né i requisiti del PDF.
+
+## D1 · Età minima
+
+- Età minima dichiarata per registrarsi: **14 anni**.
+- Registrazione semplice con **numero di telefono e data di nascita**.
+- **Nessun caricamento obbligatorio di documenti d'identità.**
+- **Nessun servizio esterno a pagamento** per la verifica dell'età nella prima versione.
+- Nessuna procedura di verifica complessa che allontani Nexus Social dall'esperienza semplice di
+  WhatsApp.
+- Protezioni adeguate per i minorenni (D3) e verifica degli obblighi normativi prima della
+  pubblicazione (vedi «Obblighi da verificare»).
+- La data di nascita è un dato **privato**: serve solo al controllo dell'età e alle protezioni per
+  i minorenni. È classificata così in `PRIVACY_IMPOSTAZIONI.md`.
+
+## D2 · Identità e finalità di Nexus Social
+
+Nexus Social **non è un'app di incontri romantici** e **non è una piattaforma per adulti o per
+contenuti a luci rosse**.
+
+È un **social network con marketplace integrato**, pensato per:
+
+- socializzare e conoscere persone;
+- organizzare incontri informali, per esempio andare a prendere un caffè;
+- chiedere o offrire aiuto;
+- trovare persone con interessi comuni, per esempio giocare insieme alla PlayStation;
+- creare chat individuali e gruppi;
+- usare la Mappa Social per scoprire persone, attività e iniziative;
+- pubblicare annunci di vendita, acquisto, scambio e regalo;
+- permettere ad aziende, negozi, bar e ristoranti di promuovere i propri locali e comparire sulla
+  mappa con la propria sede ufficiale (vedi P4).
+
+Nota di coerenza con il PDF:
+
+- «regalo» rientra negli annunci di Scambia e Vendita;
+- gli incontri informali e la ricerca di persone con interessi comuni rientrano negli annunci
+  della Mappa Sociale e negli eventi di gruppo, già previsti in Fase 3.
+
+Nessuna funzione nuova rispetto al piano.
+
+## D3 · Sicurezza dei minorenni
+
+- Nella **Mappa Social**, soprattutto al **primo accesso**, compare questo avviso di sicurezza,
+  con il testo esatto:
+
+  > «Se sei minorenne, presta attenzione alle persone che non conosci. Non condividere informazioni
+  > personali e non accettare incontri con sconosciuti senza le dovute precauzioni. Se qualcuno ti
+  > molesta, ti minaccia o si comporta in modo inappropriato, bloccalo e segnalalo immediatamente.»
+
+- Strumenti **semplici e accessibili** per **bloccare** e **segnalare** gli utenti. Il PDF li
+  prevede già nelle Fasi 2, 4, 5 e 7; gli effetti del blocco sono quelli di P12.
+- **Protezioni adeguate della posizione personale.** Valgono già per tutti P9, P10 e P11, oltre al
+  requisito del PDF che la posizione esatta non sia mai pubblica. Eventuali protezioni aggiuntive
+  per i minorenni sono nella sezione «Dettagli».
+
+## D4 · Principio fondamentale
+
+Nexus Social **non diventa una piattaforma riservata agli adulti** né un sistema di messaggistica
+con procedure e limitazioni eccessive. L'esperienza resta **semplice e immediata, simile a
+WhatsApp**, e mantiene le funzioni social, la Mappa Social e il marketplace.
+
+Ogni protezione per i minorenni va valutata anche rispetto a questo principio.
+
+## Obblighi da verificare prima della pubblicazione (Fase 9, con il professionista)
+
+Sono indicazioni per la revisione legale, non decisioni.
+
+1. **GDPR e Codice privacy:** in Italia il consenso digitale autonomo è valido dai 14 anni
+   (art. 2-quinquies). Le informative devono essere comprensibili anche per i minori.
+2. **Digital Services Act, art. 28:** le piattaforme online accessibili ai minori devono adottare
+   misure adeguate e proporzionate per un elevato livello di privacy, sicurezza e protezione dei
+   minori. Lo stesso articolo vieta la pubblicità basata sulla profilazione verso i minori.
+3. **Linee guida della Commissione europea del 14 luglio 2025 sull'art. 28.**
+   - Raccomandano la **stima dell'età** anche quando i termini prevedono un'età minima inferiore
+     ai 18 anni.
+   - Sono il riferimento con cui viene valutata la conformità.
+   - **Possibile tensione con D1** (solo data di nascita dichiarata): da valutare con il
+     professionista, cercando la soluzione più semplice compatibile con D4.
+4. **Compravendite e abbonamenti dei minorenni:** capacità di concludere contratti e regole degli
+   store per gli acquisti dei minori.
+5. **Promozioni e notifiche geolocalizzate ai minorenni:** compatibilità con il divieto di
+   pubblicità profilata (punto 2).
+
+## Dettagli di D1-D3 (M1-M7)
+
+| N. | Argomento | Decisione | Fase |
+|---|---|---|---|
+| M1 | Data di nascita | Privata: età e data mai visibili agli altri; nessun segno «minorenne» nel profilo pubblico | 2 |
+| M2 | Chi dichiara meno di 14 anni | Registrazione bloccata con messaggio chiaro; data e numero non salvati | 2 |
+| M3 | Avviso di sicurezza della Mappa | A tutti al primo accesso, chiuso con «Ho capito»; sempre consultabile da un'icona «Sicurezza» sulla mappa. Per i minorenni, ripetuto prima di pubblicare un annuncio con posizione precisa o GPS in tempo reale | 3 |
+| M4 | Posizione dei minorenni | Il GPS in tempo reale si condivide solo con contatti riconosciuti dalla rubrica, mai con sconosciuti; la posizione precisa scelta a mano resta disponibile | 3 |
+| M5 | Richieste di messaggio da sconosciuti ai minorenni | Stesso meccanismo del PDF (accetta o rifiuta), con un richiamo breve all'avviso di sicurezza e i pulsanti Blocca e Segnala ben visibili | 4 |
+| M6 | Marketplace e Azienda | I minorenni usano Scambia e Vendita come tutti, con l'avviso antitruffa; profilo Azienda e abbonamento solo per maggiorenni | 5, 6 |
+| M7 | Notifiche geolocalizzate delle promozioni | Ai minorenni il consenso non viene proposto: niente notifiche, promozioni visibili su mappa e scheda | 6 |
+
+Note:
+
+- In M3 la domanda diceva «ogni volta che pubblicano il loro primo annuncio», una formulazione
+  ambigua. Qui è registrato il richiamo **prima di ogni annuncio** con posizione precisa o GPS in
+  tempo reale. Se preferisci solo la prima volta, si corregge prima della Fase 3.
+- M4, M6 e M7 vanno confermate con il professionista in Fase 9: obblighi del Digital Services Act
+  e capacità dei minori.
+
+# Altre decisioni della Fase 0 (F8-F11)
+
+| N. | Argomento | Decisione |
+|---|---|---|
+| F8 | Nome e identificativo | Nome «Nexus Social» invariato. Identificativo `com.nexussocial.app` mantenuto durante lo sviluppo; va **cambiato prima del primo caricamento su Google Play, entro la Fase 9** (beta chiusa), perché è già usato da un'altra app. Il cambio sarà un intervento tecnico da autorizzare (Firebase, CI, iOS) |
+| F9 | Servizio mappa | **MapLibre + OpenFreeMap approvati.** «3D» = inclinazione, rotazione ed edifici 3D; il rilievo del terreno si aggiunge quando MapLibre lo rilascerà ufficialmente. Conferma con un prototipo all'inizio della Fase 3 (mappa, posizione, avatar animato, batteria); fornitore di riserva se fallisce |
+| F10 | Chiavi e password | Confermato dal titolare: conservate in un posto sicuro |
+| F11 | Build | Android su GitHub Actions (già attivo); iPhone su Codemagic: account gratuito da creare o confermare. Per installare su iPhone serve comunque l'account Apple (Fasi 9-10) |

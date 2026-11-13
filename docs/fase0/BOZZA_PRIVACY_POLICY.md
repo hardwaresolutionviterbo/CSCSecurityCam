@@ -22,7 +22,7 @@ consulente.
 
 | Categoria | Dati | Quando |
 |---|---|---|
-| Account | Numero di telefono, codice di verifica SMS, tipo di profilo (Privato o Azienda), dati della verifica in due passaggi | Alla registrazione e all'accesso |
+| Account | Numero di telefono, codice di verifica SMS, **data di nascita** (per controllare l'età minima, non mostrata agli altri), tipo di profilo (Privato o Azienda), dati della verifica in due passaggi | Alla registrazione e all'accesso |
 | Profilo | Nome e cognome (in pubblico solo abbreviato, es. «Carlo C.»), @username, foto profilo, bio, link social | Quando completi il profilo |
 | Posizione | Posizione del telefono, per centrare la mappa e mostrarti gli annunci entro il raggio scelto; posizione degli annunci (zona approssimata, posizione scelta a mano o, se lo attivi, GPS in tempo reale) | Quando usi la mappa o pubblichi |
 | Rubrica (facoltativa) | Dati derivati dai numeri della rubrica, protetti con una tecnica che non li rende leggibili in chiaro **[descrizione tecnica da completare in Fase 2]** | Solo se attivi «Trova i contatti iscritti» |
@@ -102,11 +102,24 @@ legittimo interesse (artt. 15-22 GDPR).
 
 ## 9. Età minima
 
-**[DECISIONE: 14 o 18 anni]**
+Per usare Nexus Social devi avere **almeno 14 anni** (decisione D1 della Fase 0).
 
-In Italia l'età minima per il consenso digitale autonomo è 14 anni (art. 2-quinquies del Codice
-privacy). Considerando che l'app prevede incontri tra sconosciuti e compravendite, si propone **18
-anni**. **[⚠ Da verificare con il consulente; da decidere anche come verificare l'età]**
+- All'iscrizione chiediamo il numero di telefono e la data di nascita.
+- Non chiediamo documenti d'identità.
+- In Italia l'età minima per il consenso digitale autonomo è 14 anni (art. 2-quinquies del Codice
+  privacy).
+- Chi dichiara meno di 14 anni non può registrarsi, e i dati inseriti non vengono conservati.
+- La tua età non è mai visibile agli altri utenti.
+- Per gli utenti tra 14 e 17 anni:
+  - il GPS in tempo reale si può condividere solo con contatti riconosciuti dalla rubrica;
+  - niente notifiche geolocalizzate delle promozioni;
+  - niente profilo Azienda né abbonamento;
+  - avvisi di sicurezza sulla mappa e nelle richieste di messaggio da sconosciuti.
+- **[⚠ Da verificare prima della pubblicazione]**
+  - obblighi dell'art. 28 del Digital Services Act sulla protezione dei minori, comprese le linee
+    guida della Commissione europea del 14 luglio 2025 sulla verifica e sulla stima dell'età;
+  - divieto di pubblicità basata sulla profilazione verso i minori;
+  - capacità dei minorenni di concludere compravendite e abbonamenti.
 
 ## 10. Sicurezza
 

@@ -4,8 +4,12 @@ Il piano elenca il servizio per la mappa 3D tra le **decisioni ancora da prender
 della Fase 0 indicava MapLibre come soluzione consigliata. Questo documento verifica se MapLibre
 soddisfa i requisiti della mappa prima di adottarlo.
 
-**Stato: candidato, non ancora adottato.** Serve la tua decisione sul significato di «3D»
-(sezione 4) e un prototipo all'inizio della Fase 3.
+**Stato: approvato il 13 novembre 2026 (decisione F9).**
+
+- «3D» = inclinazione, rotazione ed edifici 3D.
+- Il rilievo del terreno si aggiunge quando MapLibre lo rilascerà ufficialmente.
+- Conferma con un prototipo all'inizio della Fase 3; se fallisce, si valuta un fornitore di
+  riserva (sezione 5).
 
 ## 1. Requisiti del piano per la mappa
 

@@ -4,7 +4,11 @@
 > d'uso e Informativa privacy. Le parti tra **[PARENTESI QUADRE]** sono decisioni ancora aperte nel
 > piano di lavoro.
 
-Nexus Social serve a conoscere persone, scambiare, vendere e scoprire le attività vicino a te.
+Nexus Social serve a socializzare, conoscere persone, organizzare incontri informali, chiedere o
+offrire aiuto, scambiare, vendere, regalare e scoprire le attività vicino a te.
+
+**Non è un'app di incontri romantici e non è una piattaforma per adulti.** Possono usarla le
+persone dai 14 anni in su.
 Queste regole valgono per profili, annunci, commenti, reazioni, recensioni, chat, gruppi e
 promozioni.
 
@@ -46,12 +50,25 @@ farmaci, prodotti contraffatti, animali, alcolici e tabacco]**
 - Avvisa una persona fidata: nell'app ci sarà «Condividi l'incontro con un amico».
 - Se qualcosa non ti convince, non andare e segnala.
 
-## 7. Segnala
+## 7. Se sei minorenne
+
+Questo avviso compare nella Mappa Social:
+
+> «Se sei minorenne, presta attenzione alle persone che non conosci. Non condividere informazioni
+> personali e non accettare incontri con sconosciuti senza le dovute precauzioni. Se qualcuno ti
+> molesta, ti minaccia o si comporta in modo inappropriato, bloccalo e segnalalo immediatamente.»
+
+È vietato a chiunque contattare minorenni con proposte sessuali, chiedere loro foto o dati
+personali, o proporre incontri non adatti. Questi comportamenti portano alla chiusura dell'account
+e, quando la legge lo prevede, alla segnalazione alle autorità. **[⚠ Formulazione da verificare
+con il consulente]**
+
+## 8. Segnala
 
 Usa **«Segnala»** su annunci, commenti, profili e chat. In una chat scegli tu quali messaggi
 allegare: solo quelli saranno visibili all'amministratore.
 
-## 8. Cosa succede se non rispetti le regole
+## 9. Cosa succede se non rispetti le regole
 
 Possiamo nascondere o eliminare i contenuti e avvisare, sospendere o chiudere l'account.
 
