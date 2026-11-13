@@ -22,7 +22,18 @@ import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc as clientDoc, getDoc } from 'firebase/firestore';
 
 import { STATUS, classify, makeAnonymizer, typedFieldsFromProto } from './audit-lib.mjs';
-import { EXIT, readOnly, runAudit } from './audit-firestore.mjs';
+import {
+  EXIT,
+  EXPECTED_SERVICE_ACCOUNT,
+  FORBIDDEN_PERMISSIONS,
+  REQUIRED_READ_PERMISSIONS,
+  checkCredentialConfig,
+  listDatabases,
+  readOnly,
+  runAudit,
+  summaryText,
+  verifyPermissions,
+} from './audit-firestore.mjs';
 
 const PROJECT = 'demo-nexus-audit';
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -412,19 +423,43 @@ describe('configurazione e sicurezza dell\'avvio', () => {
     assert.equal((await runCli(['--project', 'nexus-social-e3eee', '--verbose'], NO_EMU)).code, EXIT.CONFIG);
   });
 
-  test('progetto reale senza credenziali verificabili: rifiutato prima di connettersi', async () => {
+  test('progetto reale senza file di credenziali esplicito: rifiutato prima di connettersi', async () => {
     const res = await runCli(['--project', 'nexus-social-e3eee'], NO_EMU);
     assert.equal(res.code, EXIT.CONFIG);
-    assert.match(res.stderr, /impossibile verificare il progetto/);
+    assert.match(res.stderr, /GOOGLE_APPLICATION_CREDENTIALS obbligatorio/);
   });
 
-  test('credenziali di un altro progetto: rifiutate', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'cred-'));
-    const file = join(dir, 'sa.json');
-    writeFileSync(file, JSON.stringify({ type: 'service_account', project_id: 'altro-progetto' }));
-    const res = await runCli(['--project', 'nexus-social-e3eee'], { ...NO_EMU, GOOGLE_APPLICATION_CREDENTIALS: file });
-    assert.equal(res.code, EXIT.CONFIG);
-    assert.match(res.stderr, /progetto diverso/);
+  // D4: solo l'account di sola lettura impersonato, mai credenziali personali o chiavi.
+  const credFile = (json) => {
+    const file = join(mkdtempSync(join(tmpdir(), 'cred-')), 'adc.json');
+    writeFileSync(file, typeof json === 'string' ? json : JSON.stringify(json));
+    return file;
+  };
+  const impersonation = (email) => `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${email}:generateAccessToken`;
+  const cases = {
+    'credenziali personali (authorized_user)': [{ type: 'authorized_user', client_id: 'x', refresh_token: 'y' }, /credenziali personali rifiutate/],
+    'chiave JSON (service_account)': [{ type: 'service_account', project_id: 'nexus-social-e3eee' }, /chiave JSON/],
+    'altro account impersonato': [{ type: 'impersonated_service_account', service_account_impersonation_url: impersonation('admin@nexus-social-e3eee.iam.gserviceaccount.com') }, /account di servizio non previsto/],
+    'account di un altro progetto': [{ type: 'impersonated_service_account', service_account_impersonation_url: impersonation('firestore-audit@altro.iam.gserviceaccount.com') }, /account di servizio non previsto/],
+    'workload identity senza impersonazione': [{ type: 'external_account', audience: 'x' }, /non impersonano/],
+    'catena di delega': [{ type: 'impersonated_service_account', service_account_impersonation_url: impersonation(EXPECTED_SERVICE_ACCOUNT), delegates: ['altro@x.iam.gserviceaccount.com'] }, /delega/],
+    'tipo sconosciuto': [{ type: 'gdch_service_account' }, /tipo di credenziale non ammesso/],
+    'file non valido': ['{non json', /non leggibile/],
+  };
+  for (const [name, [json, message]] of Object.entries(cases)) {
+    test(`credenziali rifiutate: ${name}`, async () => {
+      const res = await runCli(['--project', 'nexus-social-e3eee'], { ...NO_EMU, GOOGLE_APPLICATION_CREDENTIALS: credFile(json) });
+      assert.equal(res.code, EXIT.CONFIG);
+      assert.match(res.stderr, message);
+    });
+  }
+
+  test("credenziali ammesse: impersonazione dell'account di sola lettura (Cloud Shell e Workload Identity)", () => {
+    const url = impersonation(EXPECTED_SERVICE_ACCOUNT);
+    assert.deepEqual(checkCredentialConfig({ type: 'impersonated_service_account', service_account_impersonation_url: url }),
+      { type: 'impersonated_service_account', serviceAccount: EXPECTED_SERVICE_ACCOUNT });
+    assert.deepEqual(checkCredentialConfig({ type: 'external_account', service_account_impersonation_url: url }),
+      { type: 'external_account', serviceAccount: EXPECTED_SERVICE_ACCOUNT });
   });
 
   test('progetto reale con emulatore attivo: rifiutato', async () => {
@@ -435,6 +470,196 @@ describe('configurazione e sicurezza dell\'avvio', () => {
   test('--emulator solo con progetto demo- ed emulatore attivo', async () => {
     assert.equal((await runCli(['--emulator', '--project', 'nexus-social-e3eee'])).code, EXIT.CONFIG);
     assert.equal((await runCli(['--emulator', '--project', PROJECT], NO_EMU)).code, EXIT.CONFIG);
+  });
+});
+
+// ─── D4: permessi effettivi, D5: database ────────────────────────────────────
+
+describe('verifiche preliminari (con risposte simulate, nessuna rete)', () => {
+  const fakeFetch = (handler) => async (url, init) => handler(url, init);
+  const ok = (body) => ({ ok: true, status: 200, json: async () => body });
+
+  test('permessi di sola lettura: verifica superata e tutti i permessi di scrittura controllati', async () => {
+    let asked;
+    const fetchImpl = fakeFetch((url, init) => {
+      assert.match(url, /cloudresourcemanager\.googleapis\.com\/v1\/projects\/nexus-social-e3eee:testIamPermissions$/);
+      asked = JSON.parse(init.body).permissions;
+      return ok({ permissions: [...REQUIRED_READ_PERMISSIONS, 'datastore.indexes.list'] });
+    });
+    await verifyPermissions({ project: 'nexus-social-e3eee', token: 't', fetchImpl });
+    for (const p of [...REQUIRED_READ_PERMISSIONS, ...FORBIDDEN_PERMISSIONS]) assert.ok(asked.includes(p), p);
+  });
+
+  test('anche un solo permesso di scrittura interrompe l\'audit', async () => {
+    for (const extra of ['datastore.entities.create', 'datastore.entities.delete', 'firebaserules.releases.update', 'resourcemanager.projects.setIamPolicy']) {
+      const fetchImpl = fakeFetch(() => ok({ permissions: [...REQUIRED_READ_PERMISSIONS, extra] }));
+      await assert.rejects(verifyPermissions({ project: 'nexus-social-e3eee', token: 't', fetchImpl }), /oltre la sola lettura/);
+    }
+  });
+
+  test('permessi di lettura mancanti, errore HTTP o di rete: audit interrotto', async () => {
+    await assert.rejects(verifyPermissions({ project: 'p', token: 't', fetchImpl: fakeFetch(() => ok({ permissions: ['datastore.entities.get'] })) }), /mancanti/);
+    await assert.rejects(verifyPermissions({ project: 'p', token: 't', fetchImpl: fakeFetch(() => ok({})) }), /mancanti/);
+    await assert.rejects(verifyPermissions({ project: 'p', token: 't', fetchImpl: fakeFetch(() => ({ ok: false, status: 403 })) }), /HTTP 403/);
+    await assert.rejects(verifyPermissions({ project: 'p', token: 't', fetchImpl: fakeFetch(() => { throw new Error('rete'); }) }), /richiesta non riuscita/);
+  });
+
+  test('database: (default) obbligatorio, altri database segnalati', async () => {
+    const dbs = (...ids) => fakeFetch(() => ok({ databases: ids.map((id) => ({ name: `projects/p/databases/${id}` })) }));
+    assert.deepEqual(await listDatabases({ project: 'p', token: 't', fetchImpl: dbs('(default)') }),
+      { analyzed: '(default)', others: [], verified: true });
+    assert.deepEqual((await listDatabases({ project: 'p', token: 't', fetchImpl: dbs('(default)', 'archivio') })).others, ['archivio']);
+    await assert.rejects(listDatabases({ project: 'p', token: 't', fetchImpl: dbs('archivio') }), /\(default\) non esiste/);
+    await assert.rejects(listDatabases({ project: 'p', token: 't', fetchImpl: fakeFetch(() => ({ ok: false, status: 403 })) }), /HTTP 403/);
+  });
+});
+
+describe('D5: database aggiuntivi', () => {
+  test('dati conformi ma un database non analizzato: INCOMPLETO, mai PASS', async () => {
+    await put(`profiles/${ID('carlo')}`, profile());
+    const r = await runAudit(readOnly(db), {
+      anonymizer: makeAnonymizer(),
+      databases: { analyzed: '(default)', others: ['archivio'], verified: true },
+    });
+    assert.equal(r.verdict, 'INCOMPLETO');
+    assert.equal(r.database, '(default)');
+    assert.deepEqual(r.otherDatabases, ['archivio']);
+    const text = summaryText({ mode: 'test', project: 'p', identity: null }, r);
+    assert.match(text, /Database analizzato: \(default\)/);
+    assert.match(text, /Altri database non analizzati: archivio/);
+  });
+
+  test('con anomalie bloccanti l\'esito resta BLOCKED', async () => {
+    await put(`messageRequests/${ID('r3')}`, request(ID('carlo'), ID('bob'), { phone: SENT.phone }));
+    const r = await runAudit(readOnly(db), { anonymizer: makeAnonymizer(), databases: { analyzed: '(default)', others: ['x'], verified: true } });
+    assert.equal(r.verdict, 'BLOCKED');
+  });
+});
+
+// ─── D1: members fuori da chats/{chatId} ─────────────────────────────────────
+
+describe('D1: sottocollezioni members fuori dalle chat', () => {
+  test('esposte alla query collection group: bloccanti, e la query delle regole le restituisce davvero', async () => {
+    await put(`profiles/${ID('carlo')}`, profile());
+    await put(`profiles/${ID('carlo')}/members/${ID('x')}`, { uid: 'eve', schemaVersion: 2, email: SENT.email });
+    await put(`gruppi/${ID('g')}/members/${ID('y')}`, membership('eve', 'member', MEMBER, ID('carlo')));
+    await seedValidGroup(ID('g1'));
+    await put(`chats/${ID('g1')}/messages/${ID('m1')}/members/${ID('w')}`, { uid: 'eve', schemaVersion: 2 });
+    // Non visibili alla query: schemaVersion 1, uid non testuale.
+    await put(`profiles/${ID('carlo')}/members/${ID('z')}`, { uid: 'eve', schemaVersion: 1 });
+    await put(`profiles/${ID('carlo')}/members/${ID('k')}`, { uid: 7, schemaVersion: 2 });
+
+    const r = await audit();
+    assert.equal(findingCount(r, 'bloccante:members_fuori_chat_esposto_collection_group'), 3);
+    assert.equal(r.verdict, 'BLOCKED');
+
+    // Conferma con le regole vere: la query collection group di eve restituisce i documenti
+    // fuori dalle chat, che con una lettura singola sarebbero negati.
+    const eve = env.authenticatedContext('eve').firestore();
+    const { collectionGroup, query, where, getDocs } = await import('firebase/firestore');
+    const snap = await getDocs(query(collectionGroup(eve, 'members'), where('uid', '==', 'eve'), where('schemaVersion', '==', 2)));
+    const paths = snap.docs.map((d) => d.ref.path).sort();
+    assert.deepEqual(paths, [
+      `chats/${ID('g1')}/messages/${ID('m1')}/members/${ID('w')}`,
+      `gruppi/${ID('g')}/members/${ID('y')}`,
+      `profiles/${ID('carlo')}/members/${ID('x')}`,
+    ].sort());
+    await assert.rejects(getDoc(clientDoc(eve, `profiles/${ID('carlo')}/members/${ID('x')}`)));
+  });
+
+  test('le membership nelle chat restano classificate come membership, senza doppio conteggio', async () => {
+    await seedValidGroup(ID('g1'));
+    const r = await audit();
+    assert.equal(r.byKind.member.esaminati, 2);
+    assert.equal(r.byKind.memberOutsideChats, undefined);
+    assert.equal(r.verdict, 'PASS');
+  });
+});
+
+// ─── D2: nomi di collezioni non previste ─────────────────────────────────────
+
+describe('D2: nomi delle collezioni non previste mai nel report', () => {
+  test('collezioni e sottocollezioni con nomi personali sostituite da un segnaposto', async () => {
+    await put(`mario_rossi/${ID('a')}`, { x: 1 });
+    await put(`mario_rossi/${ID('a')}/carlo_bianchi/${ID('b')}`, { x: 1 });
+    await put(`profiles/${ID('carlo')}`, profile());
+    await put(`profiles/${ID('carlo')}/anna_verdi/${ID('c')}`, { x: 1 });
+    const dir = mkdtempSync(join(tmpdir(), 'audit-'));
+    const out = join(dir, 'report.json');
+    const res = await runCli(['--emulator', '--project', PROJECT, '--out', out]);
+    const everything = `${res.stdout}\n${res.stderr}\n${readFileSync(out, 'utf8')}`;
+    for (const name of ['mario_rossi', 'carlo_bianchi', 'anna_verdi']) assert.ok(!everything.includes(name), name);
+    assert.match(everything, /<collezione_non_prevista>/);
+    assert.match(everything, /profiles\/\{[0-9a-f]{12}\}\/<collezione_non_prevista>\/\{[0-9a-f]{12}\}/);
+  });
+});
+
+// ─── Robustezza: errori, timeout, risposte incomplete, ricorsione ────────────
+
+describe('letture parziali: mai scambiate per assenza di documenti', () => {
+  const wrap = (overrides) => ({
+    listCollections: () => db.listCollections(),
+    collection: (p) => db.collection(p),
+    doc: (p) => db.doc(p),
+    getAll: (...refs) => db.getAll(...refs),
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    await put(`profiles/${ID('carlo')}`, profile());
+    await put(`profiles/${ID('anna')}`, profile());
+    await seedValidGroup(ID('g1'));
+  });
+
+  test('timeout su una chiamata: INCOMPLETO', async () => {
+    const r = await runAudit(readOnly(wrap({ listCollections: () => new Promise(() => {}) }), { timeoutMs: 50 }), { anonymizer: makeAnonymizer() });
+    assert.equal(r.verdict, 'INCOMPLETO');
+    assert.equal(r.examined, 0);
+    assert.deepEqual(r.incompleteReasons[0], { fase: 'elenco collezioni radice', codice: 'timeout' });
+  });
+
+  test('errore di accesso a metà scansione: INCOMPLETO con i documenti letti fino a quel punto', async () => {
+    const denied = Object.assign(new Error('PERMISSION_DENIED'), { code: 7 });
+    const r = await runAudit(readOnly(wrap({
+      doc: (p) => (p.startsWith('chats/') ? { listCollections: async () => { throw denied; } } : db.doc(p)),
+    })), { anonymizer: makeAnonymizer() });
+    assert.equal(r.verdict, 'INCOMPLETO');
+    assert.equal(r.incompleteReasons[0].codice, '7');
+    // La chat letta prima dell'errore resta nel conteggio; il resto non viene inventato.
+    assert.ok(r.examined >= 1);
+  });
+
+  test('risposta di getAll con documenti mancanti o in ordine diverso: INCOMPLETO', async () => {
+    for (const getAll of [
+      async (...refs) => (await db.getAll(...refs)).slice(1),
+      async (...refs) => (await db.getAll(...refs)).reverse(),
+    ]) {
+      const r = await runAudit(readOnly(wrap({ getAll })), { anonymizer: makeAnonymizer() });
+      assert.equal(r.verdict, 'INCOMPLETO');
+      assert.match(r.incompleteReasons[0].fase, /risposta incompleta/);
+    }
+  });
+
+  test('anomalie già trovate non vengono nascoste da un errore successivo', async () => {
+    await put(`chats/${ID('g1')}/messages/${ID('forged')}`, message(ID('carlo'), { email: SENT.email }));
+    const r = await runAudit(readOnly(wrap({
+      doc: (p) => (p.startsWith('profiles/') ? { listCollections: async () => { throw new Error('x'); } } : db.doc(p)),
+    })), { anonymizer: makeAnonymizer() });
+    // L'errore arriva su profiles; se chats viene prima l'anomalia resta, se no l'esito è
+    // comunque INCOMPLETO e mai PASS.
+    assert.ok(['BLOCKED', 'INCOMPLETO'].includes(r.verdict));
+  });
+});
+
+describe('scansione ricorsiva', () => {
+  test('documenti profondi sotto genitori mancanti: tutti trovati', async () => {
+    await put(`x1/${ID('a')}/x2/${ID('b')}/x3/${ID('c')}/x4/${ID('d')}`, { x: 1 });
+    await put(`chats/${ID('assente')}/messages/${ID('assente2')}/extra/${ID('e')}`, { x: 1 });
+    await put(`profiles/${ID('assente3')}/devices/fid_0123456789abcdef/storico/${ID('f')}`, { x: 1 });
+    const r = await audit();
+    assert.equal(r.examined, 3);
+    assert.equal(r.missingParents, 3 + 2 + 2);
+    assert.equal(r.byStatus.fuori_regole, 3);
   });
 });
 

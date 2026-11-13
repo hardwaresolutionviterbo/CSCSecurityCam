@@ -242,6 +242,13 @@ export function safeFieldName(k) {
 
 // ─── Anonimizzazione ──────────────────────────────────────────────────────────
 
+// Nomi di collezione che possono comparire nel report: solo quelli dello schema.
+// Qualsiasi altro nome (potrebbe essere un dato, es. una collezione per utente) diventa
+// un segnaposto.
+export const KNOWN_COLLECTIONS = new Set(['profiles', 'devices', 'chats', 'members', 'messages', 'messageRequests']);
+export const UNKNOWN_COLLECTION = '<collezione_non_prevista>';
+export const collectionLabel = (name) => (KNOWN_COLLECTIONS.has(name) ? name : UNKNOWN_COLLECTION);
+
 export function makeAnonymizer(saltHex) {
   const salt = saltHex ? Buffer.from(saltHex, 'hex') : randomBytes(32);
   const cache = { __proto__: null };
@@ -250,7 +257,7 @@ export function makeAnonymizer(saltHex) {
     return cache[raw];
   };
   // Percorso tecnico con ID anonimi: chats/{a1b2…}/messages/{c3d4…}
-  const path = (segments) => segments.map((s, i) => (i % 2 === 0 ? safeFieldName(s) : `{${id(s)}}`)).join('/');
+  const path = (segments) => segments.map((s, i) => (i % 2 === 0 ? collectionLabel(s) : `{${id(s)}}`)).join('/');
   return { id, path, saltProvided: Boolean(saltHex) };
 }
 
@@ -322,6 +329,18 @@ export function classify(kind, docId, fields) {
       }
       break;
     }
+    case 'memberOutsideChats': {
+      // Sottocollezione "members" fuori da chats/{chatId}: le regole non consentono la
+      // lettura singola, ma la regola collection group /{path=**}/members/{memberId}
+      // restituisce il documento a chi ha uid == resource.data.uid se schemaVersion == 2.
+      result.status = STATUS.OUTSIDE_RULES;
+      if (isQueryVisible(fields) && isStr(fields.uid)) {
+        add(SEVERITY.BLOCKING, 'members_fuori_chat_esposto_collection_group');
+      } else {
+        add(SEVERITY.WARNING, 'collezione_non_prevista_dalle_regole');
+      }
+      break;
+    }
     default: {
       result.status = STATUS.OUTSIDE_RULES;
       add(SEVERITY.WARNING, 'collezione_non_prevista_dalle_regole');
@@ -356,9 +375,11 @@ export function checkChatIntegrity(chat, members) {
   return findings;
 }
 
-// Esito complessivo.
-export function verdict(blocking, warnings) {
+// Esito complessivo. BLOCKED prevale sempre; un audit incompleto (letture parziali,
+// errori, database non analizzati) non può mai risultare PASS.
+export function verdict(blocking, warnings, incomplete = false) {
   if (blocking > 0) return 'BLOCKED';
+  if (incomplete) return 'INCOMPLETO';
   if (warnings > 0) return 'PASS CON AVVISI';
   return 'PASS';
 }
