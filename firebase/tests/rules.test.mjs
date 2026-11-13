@@ -63,14 +63,44 @@ beforeEach(async () => {
 const db = (uid) => env.authenticatedContext(uid).firestore();
 const anon = () => env.unauthenticatedContext().firestore();
 
-// Diniego autorizzativo pulito: l'emulatore deve rispondere permission-denied e il
-// dettaglio non deve contenere errori di valutazione. Così un test negativo non può
-// passare perché una regola va in errore (es. campo mancante) invece di valutare false.
+// Riga della regola finale "tutto il resto è negato": ogni valutazione dell'emulatore
+// termina con il suo esito, quindi delimita i passaggi nel messaggio di errore.
+const CATCH_ALL_LINE = (() => {
+  const lines = readFileSync(RULES_PATH, 'utf8').split('\n');
+  const i = lines.findLastIndex((l) => l.includes('allow read, write: if false;'));
+  assert.ok(i >= 0, 'regola finale di diniego non trovata');
+  return i + 1;
+})();
+
+// Esito decisivo nel messaggio dell'emulatore. Il dettaglio elenca un esito per regola,
+// per ogni passaggio di valutazione (es. "false for 'get' @ L110, false for 'get' @ L354");
+// l'emulatore fa un passaggio preliminare che può contenere errori e chiude con quello
+// sul documento reale. Si considera decisivo l'ultimo passaggio, che termina con la
+// regola finale di diniego.
+function decisivePass(message) {
+  const items = String(message).split(/,\s*(?=(?:evaluation error|false|true|Null value error|Property|Function|[A-Z][a-z]+ [a-z]+ error)[^,]*for ')/);
+  const passes = [];
+  let current = [];
+  for (const item of items) {
+    current.push(item.trim());
+    if (new RegExp(`@ L${CATCH_ALL_LINE}\\b`).test(item)) {
+      passes.push(current);
+      current = [];
+    }
+  }
+  if (current.length) passes.push(current);
+  return passes.at(-1) ?? [];
+}
+
+// Diniego autorizzativo pulito: permission-denied e, nel passaggio decisivo, solo esiti
+// "false". Un test negativo non può quindi passare perché una regola va in errore
+// (campo mancante, documento nullo) invece di valutare una condizione falsa.
 async function denied(promise) {
   const err = await assertFails(promise);
   assert.equal(err.code, 'permission-denied', `atteso permission-denied, ricevuto ${err.code}`);
-  assert.doesNotMatch(String(err.message), /evaluation error/i,
-    `diniego dovuto a un errore di valutazione, non a una condizione falsa:\n${err.message}`);
+  const pass = decisivePass(err.message);
+  assert.ok(pass.length > 0 && pass.every((i) => /^.*\bfalse for '/.test(i) && !/error/i.test(i)),
+    `diniego non dovuto a una condizione falsa:\n${err.message}`);
   return err;
 }
 
@@ -654,5 +684,26 @@ describe('collezioni non previste', () => {
     await seed('secrets/x', { a: 1 });
     await denied(getDoc(doc(db('alice'), 'secrets/x')));
     await denied(setDoc(doc(db('alice'), 'secrets/y'), { a: 1 }));
+  });
+});
+
+// ─── Autoverifica del controllo sui dinieghi ─────────────────────────────────
+
+describe('controllo dei dinieghi', () => {
+  const L = CATCH_ALL_LINE;
+  const clean = (pass) => pass.every((i) => /\bfalse for '/.test(i) && !/error/i.test(i));
+
+  test('passaggio decisivo con sola condizione falsa: diniego pulito', () => {
+    const msg = `PERMISSION_DENIED: \nevaluation error at L10:5 for 'get' @ L10, false for 'get' @ L${L}, `
+      + `false for 'get' @ L10, false for 'get' @ L${L}`;
+    assert.deepEqual(decisivePass(msg), ["false for 'get' @ L10", `false for 'get' @ L${L}`]);
+    assert.ok(clean(decisivePass(msg)));
+  });
+
+  test('errore nel passaggio decisivo: non accettato come diniego', () => {
+    const msg = `PERMISSION_DENIED: \nNull value error. for 'create' @ L20, false for 'create' @ L${L}`;
+    assert.ok(!clean(decisivePass(msg)));
+    const msg2 = `PERMISSION_DENIED: \nevaluation error at L20:3 for 'create' @ L20, false for 'create' @ L${L}`;
+    assert.ok(!clean(decisivePass(msg2)));
   });
 });

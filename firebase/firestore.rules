@@ -214,6 +214,7 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
+        && existsAfter(memberPath(chatId, request.auth.uid))
         && getAfter(memberPath(chatId, request.auth.uid)).data.role == 'owner';
 
       // Nome e foto del gruppo solo da owner/admin; ultimo messaggio da qualsiasi membro.
@@ -239,6 +240,7 @@ service cloud.firestore {
           && (
             // 1) Creazione della chat (stesso batch): il creatore è owner, gli altri member.
             (!exists(chatPath(chatId))
+              && existsAfter(chatPath(chatId))
               && getAfter(chatPath(chatId)).data.createdBy == request.auth.uid
               && ((memberId == request.auth.uid && request.resource.data.role == 'owner')
                 || (memberId != request.auth.uid && request.resource.data.role == 'member')))
