@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Nexus Social · verifica IAM dell'account di audit Firestore.
+#
+# SOLA LETTURA: legge configurazioni IAM, account di servizio, chiavi (solo l'elenco) e API.
+# Non modifica nulla, non crea nulla e non legge dati Firestore.
+# Non stampa email di persone. I file temporanei vengono cancellati alla fine.
+#
+# Uso (Google Cloud Shell):  bash 01-verifica.sh
+# Uscita: 0 nessun problema, 1 problemi trovati, 2 verifica impossibile.
+
+set -uo pipefail
+
+PROJECT="nexus-social-e3eee"
+SA="firestore-audit@${PROJECT}.iam.gserviceaccount.com"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+command -v gcloud >/dev/null || { echo "gcloud non trovato: usa Google Cloud Shell."; exit 2; }
+command -v python3 >/dev/null || { echo "python3 non trovato."; exit 2; }
+
+ME="$(gcloud config get-value account 2>/dev/null)"
+if [[ -z "$ME" || "$ME" == *.gserviceaccount.com ]]; then
+  echo "Serve il tuo account personale attivo in gcloud (non un account di servizio)."
+  exit 2
+fi
+
+TMP="$(mktemp -d)"
+chmod 700 "$TMP"
+trap 'rm -rf "$TMP"' EXIT
+
+# Ogni lettura salva un file JSON; se non riesce il file resta vuoto e l'analisi lo segnala.
+read_json() {
+  local file="$1"; shift
+  if ! gcloud "$@" --format=json >"$TMP/$file" 2>"$TMP/$file.err"; then
+    : >"$TMP/$file"
+  fi
+}
+
+echo "Raccolta delle configurazioni (sola lettura)..."
+read_json project.json        projects describe "$PROJECT"
+read_json project_policy.json projects get-iam-policy "$PROJECT"
+read_json ancestors.json      projects get-ancestors-iam-policy "$PROJECT"
+read_json sa_list.json        iam service-accounts list --project="$PROJECT"
+read_json sa.json             iam service-accounts describe "$SA" --project="$PROJECT"
+if [[ -s "$TMP/sa.json" ]]; then
+  read_json sa_policy.json    iam service-accounts get-iam-policy "$SA" --project="$PROJECT"
+  read_json keys.json         iam service-accounts keys list --iam-account="$SA" --project="$PROJECT" --managed-by=user
+fi
+read_json deny.json           iam policies list --kind=denypolicies \
+                                --attachment-point="cloudresourcemanager.googleapis.com%2Fprojects%2F${PROJECT}"
+read_json services.json       services list --enabled --project="$PROJECT"
+read_json role.json           iam roles describe roles/datastore.viewer
+
+PROJECT="$PROJECT" SA="$SA" ME="$ME" python3 "$HERE/analizza.py" "$TMP"

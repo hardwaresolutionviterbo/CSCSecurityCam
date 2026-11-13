@@ -87,6 +87,12 @@ jobs:
       - name: Dipendenze (npm ci)
         run: npm ci --no-audit --no-fund
 
+      - name: Script IAM (shellcheck e sintassi)
+        working-directory: firebase/audit/iam
+        run: |
+          shellcheck -S warning 01-verifica.sh 02-configura.sh 03-prova-impersonazione.sh
+          python3 -m py_compile analizza.py
+
       - name: Nomi Google verso 127.0.0.1
         run: |
           set -euo pipefail
