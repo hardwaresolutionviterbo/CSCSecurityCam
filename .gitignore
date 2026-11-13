@@ -45,3 +45,9 @@ artifacts/
 .idea/
 .vscode/
 .DS_Store
+
+# Test regole Firestore (Node + emulatore)
+node_modules/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

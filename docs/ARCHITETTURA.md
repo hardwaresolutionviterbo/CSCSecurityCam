@@ -47,14 +47,23 @@ l'indirizzo di una persona dalle coordinate o dalla distanza.
 - Trigger che impediscono al client di modificare proprietario, tipo, coordinate, data di
   creazione, media stelle e tipo di account.
 - Foto in `listing-photos/<user-id>/…`: ognuno scrive solo nella propria cartella.
-- Firestore: messaggi solo cifrati, solo membri della chat, nessuna cancellazione, default
-  negato.
+- Firestore: allowlist di campi e tipi con validazione completa sulle letture singole (`get`;
+  i documenti legacy con dati privati non sono leggibili con `get`); le query (`list`)
+  richiedono `schemaVersion == 2` ma non rivalidano l'intero documento, quindi prima del deploy
+  è obbligatorio l'audit in sola lettura; messaggi solo cifrati,
+  membership con ruoli in `chats/{chatId}/members` (valide per dare accesso, massimo 256 per
+  chat), profili allineati ai vincoli di Supabase, default negato. Test con l'emulatore in
+  `firebase/tests/`. Il merge non autorizza il deploy: servono audit in sola lettura, verifica
+  dei dati legacy, backup di Firestore, indici necessari e approvazione esplicita (vedi
+  `firebase/README.md`, «Pubblicazione delle regole»).
 - Le chiavi `anon` di Supabase sono pubbliche per definizione: la sicurezza sta nelle policy.
 
 ## Chat cifrata end-to-end (Fase 4)
 
 - Testo e media vengono cifrati **sul dispositivo**; Firestore conserva solo `ciphertext` e
-  `iv`. La copia dei profili su Firestore è minima (nome abbreviato, `@username`, avatar).
+  `iv`. La copia dei profili su Firestore è minima (nome abbreviato, `@username`, avatar) e la
+  scrive solo il server, sincronizzandola da Supabase (fonte ufficiale) nella Fase 2: i client
+  non possono crearla né modificarla.
 - Il protocollo deve essere collaudato, non inventato: in Fase 4 si valuta una libreria del
   protocollo Signal (X3DH + Double Ratchet) o MLS per i gruppi, con verifica delle chiavi di
   sicurezza e frase di recupero per il backup.

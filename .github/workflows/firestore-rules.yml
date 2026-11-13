@@ -1,0 +1,91 @@
+name: Firestore Rules
+
+# Test permanenti delle regole Firestore con il Firestore Emulator.
+# Nessun deploy e nessun accesso a progetti reali: il progetto "demo-" è solo locale.
+on:
+  push:
+    paths:
+      - 'firebase/**'
+      - 'firebase.json'
+      - '.github/workflows/firestore-rules.yml'
+  pull_request:
+    paths:
+      - 'firebase/**'
+      - 'firebase.json'
+      - '.github/workflows/firestore-rules.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rules-tests:
+    name: Regole Firestore · test emulatore
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: firebase/tests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: firebase/tests/package-lock.json
+
+      # Il Firestore Emulator richiede Java 21.
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache emulatori Firebase
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('firebase/tests/package-lock.json') }}
+
+      # Installazione riproducibile dal lockfile versionato.
+      - name: Dipendenze (npm ci)
+        run: npm ci --no-audit --no-fund
+
+      - name: Versioni
+        run: |
+          node --version
+          java -version 2>&1 | head -1
+          npx firebase --version
+          npm ls --depth=0
+
+      - name: Controllo sintassi
+        run: npm run check
+
+      # Il piano di lavoro ufficiale non deve cambiare.
+      - name: Integrità PDF ufficiale
+        working-directory: .
+        run: |
+          set -euo pipefail
+          f="Nexus_Social_Piano_di_Lavoro_COMPLETO_AGGIORNATO.pdf"
+          echo "7da25d52be13b242d9e0db3b87c740212b2d80fb7c0d4dd75d8e7e541b8561eb  $f" | sha256sum -c -
+          test "$(stat -c %s "$f")" = "48338"
+
+      - name: Test regole (Firestore Emulator)
+        env:
+          RULES_COVERAGE_FILE: ${{ github.workspace }}/rules-coverage.json
+        run: npm test
+
+      - name: Carica report di copertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firestore-rules-coverage
+          path: |
+            rules-coverage.json
+            rules-coverage.html
+          if-no-files-found: ignore
+          retention-days: 14

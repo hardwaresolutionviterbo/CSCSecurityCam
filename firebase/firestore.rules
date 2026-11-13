@@ -1,22 +1,110 @@
 rules_version = '2';
 
-// Nexus Social — regole Firestore (Fase 1, pronte per la Fase 4).
+// Nexus Social — regole Firestore (Fase A.1: rafforzamento privacy).
 //
 // Principi:
-//  • le chat contengono solo testo cifrato lato dispositivo (ciphertext + iv): nessun
-//    messaggio in chiaro viene mai scritto o letto dal server;
-//  • solo i membri della chat possono leggere o scrivere i messaggi;
-//  • i profili su Firestore sono una copia minima e pubblica (nome abbreviato, @username,
-//    avatar) usata da chat, chiamate e notifiche;
-//  • nessun client può cancellare una chat o modificare l'elenco dei membri di un'altra persona.
+//  • Firestore restituisce sempre il documento intero: per questo ogni lettura singola
+//    (get) rivalida allowlist dei campi e tipi, anche sui documenti legacy scritti con
+//    regole precedenti. Un documento con campi extra o strutture annidate non previste
+//    non è leggibile.
+//  • Le query (list) non possono rivalidare il contenuto dei documenti ("rules are not
+//    filters"): richiedono il filtro schemaVersion == 2. Un client può scrivere un
+//    documento con schemaVersion 2 solo se l'intero documento è valido.
+//  • Le regole valgono solo per i client. Admin SDK, console e import le ignorano: i dati
+//    scritti così vanno verificati con l'audit in sola lettura prima del deploy (vedi
+//    firebase/README.md). Una membership malformata non concede comunque accesso.
+//  • profiles/{uid} è una copia minima del profilo Supabase, scritta solo dal server: i
+//    client la leggono ma non la creano né la modificano.
+//  • Le chat contengono solo testo cifrato lato dispositivo (ciphertext + iv in base64).
+//  • L'appartenenza a una chat sta in chats/{chatId}/members/{uid}: owner, admin, member.
+//    Un utente rimosso perde subito l'accesso; il reinvito crea una nuova membership.
+//  • Tutto ciò che non è previsto è negato.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ─── Identità ───────────────────────────────────────────────────────────
+
     function signedIn() {
       return request.auth != null;
     }
 
-    function isOwner(uid) {
+    function isSelf(uid) {
       return signedIn() && request.auth.uid == uid;
+    }
+
+    // ─── Validatori di base ─────────────────────────────────────────────────
+
+    function isUid(v) {
+      return v is string && v.size() >= 1 && v.size() <= 128 && v.matches('^[A-Za-z0-9_-]+$');
+    }
+
+    function hasEmail(s) {
+      return s.matches('(?s).*@.*');
+    }
+
+    // Sequenza di almeno 7 caratteri che inizia e finisce con una cifra e contiene solo
+    // cifre o separatori tipici dei numeri di telefono (+39 333 123 4567, 333-1234567…).
+    function hasPhone(s) {
+      return s.matches('(?s).*[0-9][0-9 ./()+-]{5,}[0-9].*');
+    }
+
+    // Testo pubblico breve scritto in app (es. titolo di un gruppo): stringa non vuota,
+    // senza email né numeri di telefono.
+    function isSafeText(v, maxLen) {
+      return v is string
+        && v.size() >= 1
+        && v.size() <= maxLen
+        && !hasEmail(v)
+        && !hasPhone(v);
+    }
+
+    // @username: stesso vincolo di Supabase (profiles.username, citext con check
+    // '^[a-z0-9._]{3,24}$', che su citext non distingue maiuscole e minuscole).
+    // La @ non è ammessa dal formato, quindi niente email.
+    function isUsername(v) {
+      return v is string && v.matches('^[A-Za-z0-9._]{3,24}$');
+    }
+
+    // Nome pubblico: copia del public_name generato da Supabase ("Carlo C."), che può
+    // contenere @ come il nome inserito. Lunghezza massima 81 caratteri: full_name è al
+    // massimo 80, e con una prima parola di 78 caratteri il nome generato diventa
+    // 78 caratteri + spazio + iniziale + punto (es. "xxx…x Z."). Resta escluso solo ciò
+    // che somiglia a un numero di telefono.
+    function isPublicName(v) {
+      return v is string
+        && v.size() >= 1
+        && v.size() <= 81
+        && !hasPhone(v);
+    }
+
+    // URL immagine: solo https, senza spazi né @ (niente credenziali o email nell'URL).
+    function isHttpsUrl(v) {
+      return v is string && v.size() <= 2048 && v.matches('^https://[^ @]+$');
+    }
+
+    function isBase64(v, maxLen) {
+      return v is string
+        && v.size() > 0
+        && v.size() <= maxLen
+        && v.matches('^[A-Za-z0-9+/]+={0,2}$');
+    }
+
+    function isSchemaV2(d) {
+      return d.schemaVersion is int && d.schemaVersion == 2;
+    }
+
+    // ─── Profili ────────────────────────────────────────────────────────────
+
+    // Copia pubblica e minima del profilo. La fonte ufficiale è Supabase
+    // (public.profiles): questa copia la scrive solo il server (sincronizzazione
+    // Supabase → Firestore della Fase 2, con Admin SDK). In lettura resta rivalidata.
+    function isPublicProfile(d) {
+      return d.keys().hasAll(['username', 'publicName', 'updatedAt'])
+        && d.keys().hasOnly(['username', 'publicName', 'avatarUrl', 'updatedAt'])
+        && isUsername(d.username)
+        && isPublicName(d.publicName)
+        && d.updatedAt is timestamp
+        && (!('avatarUrl' in d) || isHttpsUrl(d.avatarUrl));
     }
 
     // Un dispositivo push può essere scritto solo dal proprietario del profilo.
@@ -36,74 +124,324 @@ service cloud.firestore {
         && request.resource.data.lastSeenAt is timestamp;
     }
 
-    function chatMembers(chatId) {
-      return get(/databases/$(database)/documents/chats/$(chatId)).data.members;
-    }
-
-    function isChatMember(chatId) {
-      return signedIn() && request.auth.uid in chatMembers(chatId);
-    }
-
-    // Copia pubblica e minima del profilo, usata da chat e notifiche.
     match /profiles/{uid} {
-      allow read: if signedIn();
-      allow create, update: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(['username', 'publicName', 'avatarUrl', 'updatedAt']);
-      allow delete: if false;
+      // Lettura singola rivalidata: i profili legacy con campi privati non sono leggibili.
+      allow get: if signedIn() && isPublicProfile(resource.data);
+      // Nessuna enumerazione dei profili: la ricerca utenti passa da Supabase.
+      allow list: if false;
+      // Nessuna scrittura dai client, neanche dal proprietario: username e dati
+      // pubblici non si possono falsificare. Le modifiche passano da Supabase.
+      allow create, update, delete: if false;
 
       // Dispositivi push associati all'account. Il FID è la chiave del
-      // documento e non è mai esposto agli altri utenti.
+      // documento e non è mai esposto agli altri utenti. Sotto-collezione con regole
+      // proprie: funziona anche se il documento profilo non esiste.
       match /devices/{deviceId} {
-        allow read, delete: if isOwner(uid);
-        allow create: if isOwner(uid) && validPushDevice(deviceId);
-        allow update: if isOwner(uid)
+        allow read, delete: if isSelf(uid);
+        allow create: if isSelf(uid) && validPushDevice(deviceId);
+        allow update: if isSelf(uid)
           && validPushDevice(deviceId)
           && request.resource.data.createdAt == resource.data.createdAt;
       }
     }
 
+    // ─── Chat e membership ──────────────────────────────────────────────────
+
+    function chatPath(chatId) {
+      return /databases/$(database)/documents/chats/$(chatId);
+    }
+
+    function memberPath(chatId, uid) {
+      return /databases/$(database)/documents/chats/$(chatId)/members/$(uid);
+    }
+
+    // Membro solo con una membership valida: un documento malformato (anche scritto con
+    // Admin SDK) non concede accesso alla chat.
+    function isMember(chatId) {
+      return signedIn()
+        && exists(memberPath(chatId, request.auth.uid))
+        && isMembership(get(memberPath(chatId, request.auth.uid)).data, request.auth.uid);
+    }
+
+    function myMembership(chatId) {
+      return get(memberPath(chatId, request.auth.uid)).data;
+    }
+
+    // Ultima variazione dei membri: tiene il contatore allineato alle membership.
+    function isMemberChangeField(c) {
+      return c is map
+        && c.keys().hasAll(['op', 'uid'])
+        && c.keys().hasOnly(['op', 'uid'])
+        && c.op in ['add', 'remove']
+        && isUid(c.uid);
+    }
+
+    function isChat(d) {
+      return d.keys().hasAll([
+          'type', 'createdBy', 'createdAt', 'updatedAt', 'schemaVersion',
+          'memberCount', 'lastMemberChange'
+        ])
+        && d.keys().hasOnly([
+          'type', 'createdBy', 'createdAt', 'updatedAt', 'schemaVersion',
+          'memberCount', 'lastMemberChange', 'title', 'avatarUrl', 'lastMessageAt'
+        ])
+        && d.memberCount is int
+        && d.memberCount >= 1
+        && d.memberCount <= 256
+        && isMemberChangeField(d.lastMemberChange)
+        && d.type in ['direct', 'group']
+        && isUid(d.createdBy)
+        && d.createdAt is timestamp
+        && d.updatedAt is timestamp
+        && isSchemaV2(d)
+        && (!('title' in d) || isSafeText(d.title, 80))
+        && (!('avatarUrl' in d) || isHttpsUrl(d.avatarUrl))
+        && (!('lastMessageAt' in d) || d.lastMessageAt is timestamp);
+    }
+
+    // owner: tutti i permessi; member: nessun permesso; admin: permessi a scelta dell'owner.
+    function isPermissions(p, role) {
+      return p is map
+        && p.keys().hasAll(['addMembers', 'removeMembers'])
+        && p.keys().hasOnly(['addMembers', 'removeMembers'])
+        && p.addMembers is bool
+        && p.removeMembers is bool
+        && (role != 'owner' || (p.addMembers == true && p.removeMembers == true))
+        && (role != 'member' || (p.addMembers == false && p.removeMembers == false));
+    }
+
+    function isMembership(d, memberId) {
+      return d.keys().hasAll(['uid', 'role', 'permissions', 'joinedAt', 'addedBy', 'schemaVersion'])
+        && d.keys().hasOnly(['uid', 'role', 'permissions', 'joinedAt', 'addedBy', 'schemaVersion'])
+        && d.uid == memberId
+        && isUid(d.uid)
+        && d.role in ['owner', 'admin', 'member']
+        && isPermissions(d.permissions, d.role)
+        && d.joinedAt is timestamp
+        && isUid(d.addedBy)
+        && isSchemaV2(d);
+    }
+
+    function isMessage(d) {
+      return d.keys().hasAll([
+          'senderId', 'ciphertext', 'iv', 'type', 'createdAt', 'status', 'deletedForAll',
+          'schemaVersion'
+        ])
+        && d.keys().hasOnly([
+          'senderId', 'ciphertext', 'iv', 'type', 'createdAt', 'status', 'deletedForAll',
+          'schemaVersion', 'replyTo'
+        ])
+        && isUid(d.senderId)
+        && isBase64(d.ciphertext, 65535)
+        && isBase64(d.iv, 64)
+        && d.type in ['text', 'image', 'video', 'audio', 'file']
+        && d.createdAt is timestamp
+        && d.status in ['sent', 'delivered', 'read']
+        && d.deletedForAll is bool
+        && isSchemaV2(d)
+        && (!('replyTo' in d) || d.replyTo == null || isUid(d.replyTo));
+    }
+
+    function isValidMemberChange(chatId) {
+      let change = request.resource.data.lastMemberChange;
+      let target = memberPath(chatId, change.uid);
+      return (change.op == 'add'
+          && request.resource.data.memberCount == resource.data.memberCount + 1
+          && !exists(target)
+          && existsAfter(target))
+        || (change.op == 'remove'
+          && request.resource.data.memberCount == resource.data.memberCount - 1
+          && exists(target)
+          && !existsAfter(target));
+    }
+
+    // La variazione del contatore nello stesso batch della membership.
+    function chatCountChangedBy(chatId, delta, op, memberId) {
+      return getAfter(chatPath(chatId)).data.memberCount == get(chatPath(chatId)).data.memberCount + delta
+        && getAfter(chatPath(chatId)).data.lastMemberChange == {'op': op, 'uid': memberId};
+    }
+
     match /chats/{chatId} {
-      allow read: if isChatMember(chatId);
+      allow get: if isMember(chatId) && isChat(resource.data);
+      // L'elenco delle proprie chat si ottiene dalla collection group "members".
+      allow list: if false;
+
+      // La chat nasce in un unico batch con la membership "owner" del creatore e, al più,
+      // un secondo membro (chat diretta o gruppo con il primo invitato). memberCount deve
+      // corrispondere alle membership create: gli altri membri si aggiungono dopo, uno
+      // per batch, fino a 256.
       allow create: if signedIn()
-        && request.resource.data.members is list
-        && request.auth.uid in request.resource.data.members
-        && request.resource.data.members.size() <= 256;
-      allow update: if isChatMember(chatId)
-        && request.auth.uid in request.resource.data.members
-        && request.resource.data.members.size() <= 256;
+        && isChat(request.resource.data)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && existsAfter(memberPath(chatId, request.auth.uid))
+        && isMembership(getAfter(memberPath(chatId, request.auth.uid)).data, request.auth.uid)
+        && getAfter(memberPath(chatId, request.auth.uid)).data.role == 'owner'
+        && ((request.resource.data.memberCount == 1
+            && request.resource.data.lastMemberChange == {'op': 'add', 'uid': request.auth.uid})
+          || (request.resource.data.memberCount == 2
+            && request.resource.data.lastMemberChange.op == 'add'
+            && request.resource.data.lastMemberChange.uid != request.auth.uid
+            && existsAfter(memberPath(chatId, request.resource.data.lastMemberChange.uid))));
+
+      allow update: if isMember(chatId)
+        && isChat(request.resource.data)
+        && request.resource.data.updatedAt == request.time
+        && (
+          // Nome e foto del gruppo solo da owner/admin; ultimo messaggio da qualsiasi membro.
+          (request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['title', 'avatarUrl', 'updatedAt', 'lastMessageAt'])
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['title', 'avatarUrl'])
+              || myMembership(chatId).role in ['owner', 'admin']))
+          ||
+          // Contatore dei membri: cambia di uno solo insieme alla creazione o alla
+          // rimozione effettiva di quella membership nello stesso batch. L'autorizzazione
+          // ad aggiungere o rimuovere sta nelle regole della membership.
+          (request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['memberCount', 'lastMemberChange', 'updatedAt'])
+            && isValidMemberChange(chatId))
+        );
+
       allow delete: if false;
 
+      match /members/{memberId} {
+        allow get: if isMember(chatId) && isMembership(resource.data, memberId);
+        // Query: solo membri, filtro where('schemaVersion', '==', 2) obbligatorio, come per
+        // messaggi e richieste. Le regole non possono rivalidare i documenti di una query:
+        // l'unica via client per scrivere una membership v2 è create/update validati qui sotto.
+        allow list: if isMember(chatId) && resource.data.schemaVersion == 2;
+
+        allow create: if signedIn()
+          && isMembership(request.resource.data, memberId)
+          && request.resource.data.addedBy == request.auth.uid
+          && request.resource.data.joinedAt == request.time
+          && (
+            // 1) Creazione della chat (stesso batch): il creatore è owner, gli altri member.
+            (!exists(chatPath(chatId))
+              && existsAfter(chatPath(chatId))
+              && getAfter(chatPath(chatId)).data.createdBy == request.auth.uid
+              && ((memberId == request.auth.uid && request.resource.data.role == 'owner')
+                || (memberId != request.auth.uid
+                  && request.resource.data.role == 'member'
+                  && getAfter(chatPath(chatId)).data.memberCount == 2
+                  && getAfter(chatPath(chatId)).data.lastMemberChange.uid == memberId)))
+            ||
+            // 2) Aggiunta o reinvito in un gruppo esistente: owner, oppure admin con
+            //    addMembers. Nessuno può aggiungere sé stesso; solo l'owner nomina admin.
+            (exists(chatPath(chatId))
+              && get(chatPath(chatId)).data.type == 'group'
+              && memberId != request.auth.uid
+              && isMember(chatId)
+              && myMembership(chatId).role in ['owner', 'admin']
+              && myMembership(chatId).permissions.addMembers == true
+              && (request.resource.data.role == 'member'
+                || (request.resource.data.role == 'admin' && myMembership(chatId).role == 'owner'))
+              && chatCountChangedBy(chatId, 1, 'add', memberId))
+          );
+
+        // Solo l'owner cambia ruoli e permessi; il ruolo owner non si assegna né si toglie.
+        allow update: if isMember(chatId)
+          && myMembership(chatId).role == 'owner'
+          && resource.data.role != 'owner'
+          && isMembership(request.resource.data, memberId)
+          && request.resource.data.role in ['admin', 'member']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'permissions']);
+
+        // Uscita volontaria, oppure rimozione da owner o da admin con removeMembers
+        // (un admin rimuove solo i member). L'owner non può essere rimosso. Il contatore
+        // della chat scende di uno nello stesso batch.
+        allow delete: if signedIn()
+          && resource.data.role != 'owner'
+          && chatCountChangedBy(chatId, -1, 'remove', memberId)
+          && (memberId == request.auth.uid
+            || (isMember(chatId)
+              && (myMembership(chatId).role == 'owner'
+                || (myMembership(chatId).role == 'admin'
+                  && myMembership(chatId).permissions.removeMembers == true
+                  && resource.data.role == 'member'))));
+      }
+
       match /messages/{messageId} {
-        allow read: if isChatMember(chatId);
+        allow get: if isMember(chatId) && isMessage(resource.data);
+        // Query: filtro where('schemaVersion', '==', 2) obbligatorio. Esclude i messaggi
+        // scritti con le regole precedenti, che non potevano contenere schemaVersion.
+        allow list: if isMember(chatId) && resource.data.schemaVersion == 2;
 
-        // Solo payload cifrato, del mittente autenticato, con dimensione massima.
-        allow create: if isChatMember(chatId)
+        // Solo payload cifrato, del mittente autenticato.
+        allow create: if isMember(chatId)
+          && isMessage(request.resource.data)
           && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.keys().hasOnly([
-            'senderId', 'ciphertext', 'iv', 'type', 'createdAt', 'status', 'replyTo', 'deletedForAll'
-          ])
-          && request.resource.data.ciphertext is string
-          && request.resource.data.ciphertext.size() > 0
-          && request.resource.data.ciphertext.size() < 65536;
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.status == 'sent'
+          && request.resource.data.deletedForAll == false;
 
-        // I destinatari possono aggiornare solo stato di consegna/lettura e reazioni.
-        allow update: if isChatMember(chatId)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deletedForAll']);
+        // I destinatari aggiornano solo lo stato; il mittente solo "elimina per tutti".
+        allow update: if isMember(chatId)
+          && isMessage(request.resource.data)
+          && ((resource.data.senderId != request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+            || (resource.data.senderId == request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedForAll'])
+              && request.resource.data.deletedForAll == true));
 
-        // Elimina per tutti solo dal mittente.
-        allow delete: if isChatMember(chatId) && resource.data.senderId == request.auth.uid;
+        allow delete: if isMember(chatId) && resource.data.senderId == request.auth.uid;
       }
     }
 
-    // Richieste di messaggio dagli sconosciuti: si accettano o si rifiutano.
+    // Elenco delle proprie membership in tutte le chat:
+    // collectionGroup('members').where('uid', '==', <mio uid>).where('schemaVersion', '==', 2).
+    match /{path=**}/members/{memberId} {
+      allow list: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && resource.data.schemaVersion == 2;
+    }
+
+    // ─── Richieste di messaggio ─────────────────────────────────────────────
+
+    function isMessageRequest(d) {
+      return d.keys().hasAll(['from', 'to', 'status', 'createdAt', 'schemaVersion'])
+        && d.keys().hasOnly(['from', 'to', 'status', 'createdAt', 'updatedAt', 'schemaVersion'])
+        && isUid(d.from)
+        && isUid(d.to)
+        && d.from != d.to
+        && d.status in ['pending', 'accepted', 'declined']
+        && d.createdAt is timestamp
+        && (!('updatedAt' in d) || d.updatedAt is timestamp)
+        && isSchemaV2(d);
+    }
+
+    function isRequestParty(d) {
+      return signedIn() && (d.from == request.auth.uid || d.to == request.auth.uid);
+    }
+
+    // Richieste di messaggio dagli sconosciuti: il destinatario accetta o rifiuta.
     match /messageRequests/{requestId} {
+      allow get: if isRequestParty(resource.data) && isMessageRequest(resource.data);
+      // Query: posta in arrivo (to == mio uid) o inviata (from == mio uid), sempre con
+      // schemaVersion == 2. Due regole distinte, una per ciascun filtro.
+      allow list: if signedIn()
+        && resource.data.to == request.auth.uid
+        && resource.data.schemaVersion == 2;
+      allow list: if signedIn()
+        && resource.data.from == request.auth.uid
+        && resource.data.schemaVersion == 2;
+
       allow create: if signedIn()
+        && isMessageRequest(request.resource.data)
         && request.resource.data.from == request.auth.uid
-        && request.resource.data.to is string
-        && request.resource.data.to != request.auth.uid
-        && request.resource.data.keys().hasOnly(['from', 'to', 'status', 'createdAt']);
-      allow read, update: if signedIn()
-        && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && !('updatedAt' in request.resource.data);
+
+      allow update: if signedIn()
+        && resource.data.to == request.auth.uid
+        && resource.data.status == 'pending'
+        && isMessageRequest(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status in ['accepted', 'declined']
+        && request.resource.data.updatedAt == request.time;
+
       allow delete: if false;
     }
 
