@@ -1,0 +1,98 @@
+# BOZZA · Termini d'uso di Nexus Social
+
+> **BOZZA DI LAVORO, NON VALIDATA.** Testo preparato come base di discussione: **non è stato
+> rivisto da un avvocato** e non va pubblicato né accettato dagli utenti in questa forma. Il piano
+> di lavoro prevede la revisione di un professionista in Fase 9.
+>
+> - Le parti tra **[PARENTESI QUADRE]** sono dati mancanti o decisioni da prendere.
+> - Le parti segnate **⚠ Da verificare** richiedono una valutazione legale (in particolare le
+>   norme a tutela dei consumatori).
+
+## 1. Chi siamo e cosa offre l'app
+
+Nexus Social è gestita da **[NOME O RAGIONE SOCIALE, SEDE, PARTITA IVA, CONTATTI]**. L'app
+permette di:
+
+- chattare e chiamare con crittografia end-to-end;
+- vedere sulla mappa annunci e promozioni vicini;
+- scambiare e vendere oggetti;
+- per le attività, pubblicare promozioni con abbonamento.
+
+## 2. Chi può usare l'app
+
+- Devi avere almeno **[14 / 18 · DECISIONE]** anni.
+- Ti registri con un numero di telefono valido, come **Privato** o come **Azienda**.
+- Le informazioni che fornisci devono essere vere. Sei responsabile della sicurezza del tuo
+  telefono e del tuo account.
+
+## 3. Profilo e contenuti
+
+- Sei responsabile di ciò che pubblichi: profilo, annunci, foto, commenti, recensioni, messaggi.
+- Ci concedi solo il permesso necessario a mostrare i tuoi contenuti nell'app agli utenti a cui
+  sono destinati. **[⚠ Da verificare: formulazione della licenza]**
+- Devi rispettare le **Regole della community**, che fanno parte di questi termini.
+
+## 4. Annunci, Scambia e Vendita
+
+- Pubblicare annunci normali, Scambia e Vendita è **gratuito**.
+- Vendita: la consegna è solo con ritiro a mano o spedizione. **Nexus Social non gestisce soldi né
+  pagamenti tra utenti**: gli accordi si prendono in chat, direttamente tra le parti.
+- Nexus Social non è parte delle compravendite o degli scambi e non garantisce gli oggetti né il
+  comportamento degli utenti. **[⚠ Da verificare: limiti di responsabilità ammessi]**
+- Il feedback si può lasciare solo dopo che l'annuncio è segnato come concluso, e deve essere
+  onesto.
+- Usa l'**avviso antitruffa** e il tasto **«Segnala annuncio»**.
+
+## 5. Aziende, promozioni e abbonamento
+
+- Per registrarsi come Azienda servono partita IVA, ragione sociale e indirizzo; il documento è
+  facoltativo.
+- L'abbonamento costa **9,99 € al mese**, con **prova gratuita di 7 giorni**, e si acquista
+  tramite Google Play o App Store.
+  - Rinnovo, disdetta e rimborsi seguono le regole dello store usato.
+  - **[⚠ Da verificare: informazioni obbligatorie per i consumatori, diritto di recesso]**
+- Si possono pubblicare al massimo **5 promozioni al giorno**; il contatore si azzera ogni 24 ore.
+  Ogni promozione dura al massimo **7 giorni**.
+- Il **badge «Verificato»**:
+  - è solo per le aziende;
+  - lo assegna l'amministratore dopo aver controllato partita IVA e dati;
+  - richiede un abbonamento attivo e sparisce se l'abbonamento scade.
+- La sede aziendale è un indirizzo fisso, distinto dalla posizione personale del titolare.
+
+## 6. Sicurezza negli incontri
+
+- Quando incontri una persona conosciuta nell'app, scegli luoghi pubblici.
+- Usa la funzione «Condividi l'incontro con un amico», quando sarà disponibile.
+- Nexus Social non verifica l'identità degli utenti privati. **[⚠ Da verificare: formulazione]**
+
+## 7. Moderazione e sanzioni
+
+- Possiamo nascondere o eliminare contenuti e avvisare, sospendere o chiudere gli account che
+  violano questi termini o le Regole della community.
+- **[DECISIONE APERTA nel piano: motivi di ban, durata dei ban temporanei e testi degli avvisi]**
+- Proposta della checklist della Fase 0: avviso → ban 24 ore → ban 7 giorni → ban permanente.
+- **[⚠ Da verificare: obblighi del Digital Services Act, per esempio motivazione delle decisioni
+  e possibilità di reclamo]**
+
+## 8. Cancellazione dell'account
+
+Puoi cancellare l'account in qualsiasi momento dall'app. I dati vengono trattati come descritto
+nell'Informativa sulla privacy.
+
+## 9. Responsabilità
+
+**[⚠ Da scrivere con il consulente legale: limitazioni di responsabilità, disponibilità del
+servizio, forza maggiore, compatibilmente con il Codice del consumo]**
+
+## 10. Modifiche dei termini
+
+Ti avviseremo nell'app delle modifiche importanti prima che entrino in vigore.
+
+## 11. Legge applicabile e controversie
+
+**[⚠ Da verificare: legge italiana, foro del consumatore, risoluzione alternativa delle
+controversie]**
+
+## 12. Contatti
+
+**[EMAIL DI SUPPORTO]**; canale ufficiale nell'app «Team Nexus».
