@@ -8,11 +8,12 @@
 # Cosa fa, e nient'altro (dopo il riepilogo e la tua conferma esplicita):
 #   1. crea il ruolo personalizzato firestoreAuditReader con ESATTAMENTE 3 permessi
 #      (datastore.databases.list, datastore.entities.get, datastore.entities.list), se non esiste;
-#      se esiste con una definizione diversa, eliminato o disattivato si ferma senza modificarlo;
+#      se esiste con una definizione diversa, eliminato o non in stage GA si ferma senza modificarlo;
 #   2. crea firestore-audit, se non esiste;
 #   3. gli assegna il ruolo personalizzato sul progetto, senza condizioni;
 #   4. permette SOLO al tuo account di impersonarlo (Token Creator sull'account, non sul progetto).
-# Non attiva API: se mancano si ferma e spiega. Non crea chiavi, non tocca altri account o ruoli,
+# Non attiva API (comprese iamcredentials, cloudresourcemanager e cloudasset): se mancano si
+# ferma prima di qualsiasi modifica e spiega. Non crea chiavi, non tocca altri account o ruoli,
 # non legge né modifica dati Firestore, non fa rollback automatici.
 #
 # Uso (Google Cloud Shell):  bash 02-configura.sh
@@ -101,7 +102,7 @@ ME_VISIBILE="${ME_LOCALE:0:2}•••@${ME#*@}"   # mai l'email intera sullo sc
 echo "== API necessarie (sola lettura)"
 enabled="$(gc services list --enabled --project="$PROJECT" --format="value(config.name)")"
 mancanti=()
-for api in iamcredentials.googleapis.com cloudresourcemanager.googleapis.com; do
+for api in iamcredentials.googleapis.com cloudresourcemanager.googleapis.com cloudasset.googleapis.com; do
   if grep -qx "$api" <<<"$enabled"; then echo "  attiva: $api"; else mancanti+=("$api"); fi
 done
 if ((${#mancanti[@]})); then
@@ -115,6 +116,10 @@ if ((${#mancanti[@]})); then
       cloudresourcemanager.googleapis.com)
         echo "  - $api: serve per leggere i criteri IAM del progetto e controllare i permessi"
         echo "    effettivi dell'account (01-verifica.sh e 03-prova-impersonazione.sh).";;
+      cloudasset.googleapis.com)
+        echo "  - $api: serve a 01-verifica.sh per cercare, in sola lettura, i permessi concessi"
+        echo "    su singole risorse (bucket, secret, altri account). Senza, la verifica finale"
+        echo "    risulterebbe INCOMPLETA dopo aver già modificato IAM: per questo mi fermo prima.";;
     esac
   done
   echo "Se e quando le autorizzi, il comando da eseguire a parte è:"
@@ -127,7 +132,7 @@ echo
 echo "== Verifica preliminare (sola lettura)"
 if ! bash "$HERE/01-verifica.sh"; then
   echo
-  echo "Mi fermo: la verifica ha trovato problemi o non è riuscita. Nessuna modifica eseguita."
+  echo "Mi fermo: la verifica ha trovato problemi, è INCOMPLETA o non è riuscita. Nessuna modifica eseguita."
   exit 1
 fi
 
@@ -164,7 +169,7 @@ echo "    permessi, esattamente: ${ROLE_PERMISSIONS//,/, }"
 echo "  Binding IAM da aggiungere (se ci sono già, nessun doppione):"
 echo "    1. progetto ${PROJECT}: serviceAccount:${SA} → ${ROLE}, senza condizioni"
 echo "    2. account ${SA}: user:${ME_VISIBILE} → ${TOKEN_CREATOR}, senza condizioni"
-echo "  API da attivare:       nessuna (iamcredentials e cloudresourcemanager sono già attive)"
+echo "  API da attivare:       nessuna (iamcredentials, cloudresourcemanager e cloudasset sono già attive)"
 echo "  Non verranno creati chiavi né assegnati altri ruoli; nessun dato Firestore viene letto."
 echo
 printf 'Per confermare scrivi esattamente il nome del progetto (%s): ' "$PROJECT"
@@ -184,10 +189,10 @@ if role_json="$(gcloud iam roles describe "$ROLE_ID" --project="$PROJECT" --form
 import json, sys
 role = json.loads(sys.stdin.read())
 expected = set(sys.argv[1].split(","))
-ok = not role.get("deleted") and role.get("stage") != "DISABLED" and set(role.get("includedPermissions", [])) == expected
+ok = not role.get("deleted") and role.get("stage") == "GA" and set(role.get("includedPermissions", [])) == expected
 sys.exit(0 if ok else 1)
 ' "$ROLE_PERMISSIONS" <<<"$role_json"; then
-    echo "  ERRORE: il ruolo esiste ma è eliminato, disattivato o non contiene esattamente i 3 permessi. Mi fermo."
+    echo "  ERRORE: il ruolo esiste ma è eliminato, non è in stage GA o non contiene esattamente i 3 permessi. Mi fermo."
     exit 1
   fi
   echo "  esiste già con la definizione esatta"
@@ -249,7 +254,7 @@ echo "== Verifica finale (sola lettura, modalità rigorosa)"
 IN_CORSO="verifica finale (01-verifica.sh --finale)"
 if ! bash "$HERE/01-verifica.sh" --finale; then
   echo
-  echo "CONFIGURAZIONE NON VERIFICATA: la verifica finale ha trovato problemi o non è riuscita."
+  echo "CONFIGURAZIONE NON VERIFICATA: la verifica finale ha trovato problemi, è INCOMPLETA o non è riuscita."
   echo "Non eseguire l'audit. Se hai appena creato l'account, riprova 01-verifica.sh --finale tra qualche minuto."
   exit 1
 fi

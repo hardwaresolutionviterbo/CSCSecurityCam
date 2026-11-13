@@ -5,10 +5,15 @@
 # Altre leve dei test:
 #   $FAKE/flip_at_role_describe  N: alla N-esima "iam roles describe firestoreAuditReader" lo
 #                                scenario passa ad "after" (stato cambiato durante l'esecuzione)
+#   asset search-all-iam-policies risponde con asset.json (assente = NOT_FOUND, come un errore)
+#   get-iam-policy / keys list di altri account rispondono con sapol_<email>.json / keys_<email>.json
 #   $FAKE/fail.<operazione>      fa fallire una modifica: roles-create, sa-create,
 #                                project-binding, sa-binding (messaggio = contenuto del file)
 echo "$*" >> "$FAKE/calls.log"
 [ "${CLOUDSDK_CORE_DISABLE_PROMPTS:-}" = 1 ] || echo "PROMPTS_ENABLED $*" >> "$FAKE/calls.log"
+
+# Nome di file sicuro per un'email (come safe() in analizza.py).
+safe() { printf '%s' "$1" | tr -c 'A-Za-z0-9' '_'; }
 
 fail_op() {
   if [ -f "$FAKE/fail.$1" ]; then cat "$FAKE/fail.$1" >&2; exit 1; fi
@@ -21,8 +26,12 @@ case "$1 $2 $3" in
   "projects get-ancestors-iam-policy "*) k=ancestors;;
   "iam service-accounts list") k=sa_list;;
   "iam service-accounts describe") k=sa;;
-  "iam service-accounts get-iam-policy") k=sa_policy;;
-  "iam service-accounts keys") k=keys;;
+  "iam service-accounts get-iam-policy")
+    case "$4" in firestore-audit@*) k=sa_policy;; *) k="sapol_$(safe "$4")";; esac;;
+  "iam service-accounts keys")
+    acct="${5#--iam-account=}"
+    case "$acct" in firestore-audit@*) k=keys;; *) k="keys_$(safe "$acct")";; esac;;
+  "asset search-all-iam-policies "*) k=asset;;
   "iam policies list") k=deny;;
   "services list --enabled") k=services;;
   "iam roles describe")

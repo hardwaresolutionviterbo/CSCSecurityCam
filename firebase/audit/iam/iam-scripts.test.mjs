@@ -52,7 +52,7 @@ const ROLE_DB = {
   'roles/firebase.admin': ['firebase.projects.update'],
 };
 
-const SERVICES = ['iamcredentials.googleapis.com', 'cloudresourcemanager.googleapis.com', 'firestore.googleapis.com'].map((name) => ({ config: { name } }));
+const SERVICES = ['iamcredentials.googleapis.com', 'cloudresourcemanager.googleapis.com', 'firestore.googleapis.com', 'cloudasset.googleapis.com'].map((name) => ({ config: { name } }));
 const PROJECT = { projectId: P, projectNumber: '123', lifecycleState: 'ACTIVE' };
 const BASE_POLICY = { bindings: [
   { role: 'roles/owner', members: [ME] },
@@ -66,13 +66,13 @@ const MY_TOKEN_CREATOR = { bindings: [{ role: 'roles/iam.serviceAccountTokenCrea
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const before = () => clone({
   project: PROJECT, project_policy: BASE_POLICY, ancestors: ancestors(BASE_POLICY), sa_list: [],
-  deny: [], services: SERVICES, testable: TESTABLE,
+  deny: [], services: SERVICES, testable: TESTABLE, asset: [],
 });
 const configured = () => clone({
   project: PROJECT, project_policy: CONFIGURED_POLICY, ancestors: ancestors(CONFIGURED_POLICY),
   sa_list: [{ email: SA }], sa: { email: SA, disabled: false },
   sa_policy: MY_TOKEN_CREATOR,
-  keys: [], deny: [], services: SERVICES, testable: TESTABLE, custom_role: customRole(),
+  keys: [], deny: [], services: SERVICES, testable: TESTABLE, custom_role: customRole(), asset: [],
 });
 const withPolicy = (state, policy) => ({ ...state, project_policy: policy, ancestors: ancestors(policy) });
 const addBinding = (state, binding) => withPolicy(state, { bindings: [...state.project_policy.bindings, binding] });
@@ -81,14 +81,15 @@ const withoutServices = (state, ...names) => ({ ...state, services: SERVICES.fil
 const DENIED = (perm) => `ERROR: (gcloud) PERMISSION_DENIED: Permission '${perm}' denied for ${ME_RAW} on resource (or it may not exist).`;
 const safe = (s) => s.replace(/[^A-Za-z0-9]/g, '_');
 
-// Ruoli assegnati in uno stato (progetto e gerarchia), per scrivere le loro descrizioni simulate.
+// Ruoli assegnati in uno stato (gerarchia e account di servizio), per scriverne le descrizioni simulate.
 function boundRoles(st) {
   const levels = st.ancestors ?? (st.project_policy ? [{ policy: st.project_policy }] : []);
-  return [...new Set(levels.flatMap((l) => (l.policy?.bindings ?? []).map((b) => b.role)))];
+  const policies = [...levels.map((l) => l.policy), ...Object.values(st.sapol ?? {})];
+  return [...new Set(policies.flatMap((p) => (p?.bindings ?? []).map((b) => b.role)))];
 }
 
 function scenario(state, { after, fails = {}, prompts = [], token = TOKEN, granted, invalid, curlError, curlRaw, curlFail,
-  roles = {}, approvate = ['agenti-google-del-progetto'], failOps = {}, flipAtRoleDescribe } = {}) {
+  roles = {}, approvate = [AGENT], failOps = {}, flipAtRoleDescribe } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'iam-'));
   const bin = join(dir, 'bin');
   mkdirSync(bin);
@@ -99,8 +100,17 @@ function scenario(state, { after, fails = {}, prompts = [], token = TOKEN, grant
   }
   const write = (name, files) => {
     mkdirSync(join(dir, name));
-    for (const [k, v] of Object.entries(files)) {
+    const { sapol = {}, saKeys = {}, ...plain } = files;
+    for (const [k, v] of Object.entries(plain)) {
       if (v !== undefined) writeFileSync(join(dir, name, `${k}.json`), JSON.stringify(v));
+    }
+    // Criteri IAM degli altri account del progetto: {} se non indicati, null = non leggibile.
+    for (const a of plain.sa_list ?? []) {
+      if (a.email === SA) continue;
+      const p = a.email in sapol ? sapol[a.email] : {};
+      if (p !== null) writeFileSync(join(dir, name, `sapol_${safe(a.email)}.json`), JSON.stringify(p));
+      const k = a.email in saKeys ? saKeys[a.email] : [];
+      if (k !== null) writeFileSync(join(dir, name, `keys_${safe(a.email)}.json`), JSON.stringify(k));
     }
     for (const r of boundRoles(files)) {
       if (r === ROLE) continue; // il ruolo di audit lo descrive custom_role
@@ -138,7 +148,7 @@ function run(dir, script, input = '', args = []) {
 const finale = (dir) => run(dir, '01-verifica.sh', '', ['--finale']);
 
 const MODIFYING = /^(services enable|iam roles (create|update|delete|undelete)|iam service-accounts (create|delete|add-iam|remove-iam|keys create|keys delete|enable|disable)|projects (add|remove|set)-iam|.*set-iam-policy)/;
-const READ_ONLY = /^(config get-value account|projects describe|projects get-iam-policy|projects get-ancestors-iam-policy|iam service-accounts (list|describe|get-iam-policy|keys list)|iam policies list|services list|iam roles describe|iam list-testable-permissions)( |$)/;
+const READ_ONLY = /^(config get-value account|projects describe|projects get-iam-policy|projects get-ancestors-iam-policy|iam service-accounts (list|describe|get-iam-policy|keys list)|iam policies list|services list|iam roles describe|iam list-testable-permissions|asset search-all-iam-policies)( |$)/;
 
 function assertReadOnly(calls) {
   for (const c of calls) {
@@ -250,7 +260,7 @@ describe('01-verifica.sh (preliminare)', () => {
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /contiene esattamente i 3 permessi previsti/);
     assert.ok(r.out.includes(`progetto: ${ROLE}, senza condizioni`), r.out);
-    assert.match(r.out, /Riepilogo: 0 problemi, 0 avvisi/);
+    assert.match(r.out, /Riepilogo: 0 problemi, 0 non verificabili, 0 avvisi/);
     assertReadOnly(r.calls);
   });
 
@@ -421,7 +431,7 @@ describe('01-verifica.sh --finale', () => {
     const r = finale(scenario(configured()));
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /Modalità: finale/);
-    assert.match(r.out, /Riepilogo: 0 problemi, 0 avvisi/);
+    assert.match(r.out, /Riepilogo: 0 problemi, 0 non verificabili, 0 avvisi/);
     assert.match(r.out, /Configurazione FINALE verificata/);
     assertReadOnly(r.calls);
     assertNoPersonalData(r.out);
@@ -484,34 +494,150 @@ describe('01-verifica.sh --finale', () => {
     }
   });
 
-  test('gruppo con un ruolo qualsiasi → non verificabile, uscita 1 (anche in preliminare)', () => {
-    const s = addBinding(configured(), { role: 'roles/viewer', members: [GROUP] });
-    for (const r of [run(scenario(s), '01-verifica.sh'), finale(scenario(s))]) {
-      assert.equal(r.code, 1, r.out);
-      assert.match(r.out, /PROBLEMA progetto: roles\/viewer concesso a gruppo: non posso verificare se comprende l'account di audit/);
+  test('gruppo, dominio o identità federata con un ruolo qualsiasi → INCOMPLETO (uscita 3), anche in preliminare', () => {
+    for (const member of [GROUP, 'domain:example.com', 'principalSet://iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/p/*',
+      'principal://iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/p/subject/x']) {
+      const s = addBinding(configured(), { role: 'roles/viewer', members: [member] });
+      for (const r of [run(scenario(s), '01-verifica.sh'), finale(scenario(s))]) {
+        assert.equal(r.code, 3, `${member}: ${r.out}`);
+        assert.match(r.out, /INCOMPLETO progetto: roles\/viewer concesso a (gruppo|dominio|insieme di identità federate|identità federata): non posso verificare se comprende l'account di audit/);
+        assert.match(r.out, /Esito: INCOMPLETO/);
+        assert.doesNotMatch(r.out, /FINALE verificata/);
+        assertNoPersonalData(r.out);
+      }
+    }
+  });
+
+  test('identità approvate esplicitamente: persona → INCOMPLETO; account del progetto → accettato; nessuna email stampata', () => {
+    const appspot = `${P}@appspot.gserviceaccount.com`;
+    let s = addBinding(configured(), { role: 'roles/iam.roleAdmin', members: [OTHER] });
+    s = addBinding(s, { role: 'roles/editor', members: [`serviceAccount:${appspot}`] });
+    s.sa_list.push({ email: appspot });
+    const r = finale(scenario(s, { approvate: [AGENT, OTHER, `serviceAccount:${appspot}`] }));
+    assert.equal(r.code, 3, r.out);
+    assert.match(r.out, /INCOMPLETO progetto: altro utente — roles\/iam\.roleAdmin .*approvata da te, ma è una persona/);
+    const r2 = finale(scenario(addBinding(configured(), { role: 'roles/editor', members: [`serviceAccount:${appspot}`] }), { approvate: [AGENT, `serviceAccount:${appspot}`] }));
+    assert.equal(r2.code, 1, 'account approvato ma inesistente nel progetto → voce rifiutata');
+    assert.match(r2.out, /voce NON approvabile, ignorata: account di servizio del progetto .*non esiste/);
+    assert.match(r.out, /account di servizio del progetto \(nexus-social-e3eee@appspot\.gserviceaccount\.com\) — roles\/editor .*approvata da te/);
+    assert.match(r.out, /nexus-social-e3eee@appspot\.gserviceaccount\.com \(approvato, con privilegi pericolosi\): nessuna chiave/);
+    assertNoPersonalData(r.out);
+  });
+
+  test('FALSO PASS 4-6: gruppo, dominio o principalSet nel file delle approvazioni → non approvabili', () => {
+    const cases = [
+      [GROUP, 'roles/datastore.user', 3],
+      ['domain:example.com', 'roles/owner', 1],
+      ['principalSet://iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/p/*', 'roles/datastore.owner', 3],
+    ];
+    for (const [member, role, code] of cases) {
+      const r = finale(scenario(addBinding(configured(), { role, members: [member] }), { approvate: [AGENT, member] }));
+      assert.equal(r.code, 1, `${member}: ${r.out}`); // la voce rifiutata è sempre un PROBLEMA
+      assert.match(r.out, /PROBLEMA voce NON approvabile, ignorata: (gruppo|dominio|insieme di identità federate)/);
+      assert.match(r.out, code === 1 ? /PROBLEMA progetto: dominio — roles\/owner .*identità non approvata/ : /INCOMPLETO progetto: /);
+      assert.doesNotMatch(r.out, /FINALE verificata/);
       assertNoPersonalData(r.out);
     }
   });
 
-  test('identità approvata esplicitamente → accettata, senza stampare l\'email', () => {
-    const s = addBinding(addBinding(configured(), { role: 'roles/iam.roleAdmin', members: [OTHER] }), { role: 'roles/viewer', members: [GROUP] });
-    const r = finale(scenario(s, { approvate: ['agenti-google-del-progetto', OTHER, GROUP] }));
-    assert.equal(r.code, 0, r.out);
-    assert.match(r.out, /altro utente — roles\/iam\.roleAdmin .*approvata da te/);
-    assert.match(r.out, /identità approvate: 2 dal file, più gli agenti Google del progetto/);
-    assertNoPersonalData(r.out);
+  test('FALSO PASS: allUsers e allAuthenticatedUsers mai approvabili, nemmeno dal file', () => {
+    for (const m of ['allUsers', 'allAuthenticatedUsers']) {
+      const r = finale(scenario(addBinding(configured(), { role: 'roles/datastore.user', members: [m] }), { approvate: [AGENT, m] }));
+      assert.equal(r.code, 1, r.out);
+      assert.match(r.out, /PROBLEMA voce NON approvabile, ignorata: .*membro pubblico/);
+      assert.ok(r.out.includes(`PROBLEMA progetto: roles/datastore.user concesso a ${m}: vale per chiunque`), r.out);
+    }
   });
 
-  test('agente Google con Token Creator sul progetto: bloccato se non approvato, accettato se approvato', () => {
+  test('FALSO PASS 7: utente approvato con roles/owner → INCOMPLETO, mai PASS (l\'approvazione non lo rende sicuro)', () => {
+    const r = finale(scenario(addBinding(configured(), { role: 'roles/owner', members: [OTHER] }), { approvate: [AGENT, OTHER] }));
+    assert.equal(r.code, 3, r.out);
+    assert.match(r.out, /INCOMPLETO progetto: altro utente — roles\/owner .*approvata da te, ma è una persona/);
+    assert.doesNotMatch(r.out, /FINALE verificata/);
+    assertNoPersonalData(r.out);
+    const r2 = finale(scenario(addBinding(configured(), { role: 'roles/owner', members: [OTHER] })));
+    assert.equal(r2.code, 1, 'senza approvazione è un PROBLEMA');
+  });
+
+  test('agenti Google: nessuna approvazione generica; solo indirizzo esatto, legato al numero del progetto', () => {
+    // senza approvazione: bloccato
     const r1 = finale(scenario(configured(), { approvate: [] }));
     assert.equal(r1.code, 1, r1.out);
-    assert.ok(r1.out.includes('PROBLEMA progetto: agente Google (service-123@gcp-sa-firebase.iam.gserviceaccount.com)'), r1.out);
-    const r2 = finale(scenario(configured()));
+    assert.ok(r1.out.includes('PROBLEMA progetto: agente Google del progetto (service-123@gcp-sa-firebase.iam.gserviceaccount.com)'), r1.out);
+    // la vecchia riga generica non approva più nulla
+    const r2 = finale(scenario(configured(), { approvate: ['agenti-google-del-progetto'] }));
+    assert.equal(r2.code, 1, r2.out);
+    assert.match(r2.out, /AVVISO +la riga 'agenti-google-del-progetto' non approva più nulla/);
+    // approvato per indirizzo esatto: accettato
+    const r3 = finale(scenario(configured()));
+    assert.equal(r3.code, 0, r3.out);
+    assert.match(r3.out, /approvata: agente Google del progetto \(service-123@gcp-sa-firebase/);
+    // un account di servizio qualsiasi (non agente Google) non diventa agente
+    const r4 = finale(scenario(addBinding(configured(), { role: 'roles/editor', members: [`serviceAccount:${P}@appspot.gserviceaccount.com`] })));
+    assert.equal(r4.code, 1, r4.out);
+    assert.match(r4.out, /account di servizio del progetto \(nexus-social-e3eee@appspot\.gserviceaccount\.com\) — roles\/editor/);
+  });
+
+  test('FALSI PASS 1-3: agenti falsi, di altri progetti o di domini condivisi con Owner/Editor → PROBLEMA', () => {
+    const cases = [
+      ['serviceAccount:service-123@progetto-estraneo.iam.gserviceaccount.com', 'roles/owner'],
+      ['serviceAccount:service-999@gcp-sa-firebase.iam.gserviceaccount.com', 'roles/owner'], // numero di un altro progetto
+      ['serviceAccount:qualunque@firebase-sa-management.iam.gserviceaccount.com', 'roles/owner'],
+      ['serviceAccount:firebase-service-account@firebase-sa-management.iam.gserviceaccount.com', 'roles/editor'],
+      ['serviceAccount:123@cloudbuild.gserviceaccount.com', 'roles/editor'],
+      ['serviceAccount:altro@progetto-estraneo.iam.gserviceaccount.com', 'roles/iam.serviceAccountTokenCreator'],
+    ];
+    for (const [member, role] of cases) {
+      for (const approvate of [[AGENT, 'agenti-google-del-progetto'], [AGENT, member]]) {
+        const r = finale(scenario(addBinding(configured(), { role, members: [member] }), { approvate }));
+        assert.equal(r.code, 1, `${member} ${approvate}: ${r.out}`);
+        assert.ok(r.out.includes(`account di servizio esterno (${member.split(':')[1]}) — ${role}`), r.out);
+        assert.match(r.out, /identità non approvata/);
+        if (approvate.includes(member)) assert.match(r.out, /voce NON approvabile, ignorata: account di servizio esterno/);
+      }
+    }
+  });
+
+  test('FALSO PASS 2: agente Google APIs (cloudservices) con Editor → mai approvato in automatico', () => {
+    const cs = 'serviceAccount:123@cloudservices.gserviceaccount.com';
+    const s = addBinding(configured(), { role: 'roles/editor', members: [cs] });
+    const r1 = finale(scenario(s, { approvate: [AGENT, 'agenti-google-del-progetto'] }));
+    assert.equal(r1.code, 1, r1.out);
+    assert.ok(r1.out.includes('PROBLEMA progetto: agente Google del progetto (123@cloudservices.gserviceaccount.com) — roles/editor'), r1.out);
+    const r2 = finale(scenario(s, { approvate: [AGENT, cs] })); // approvazione esplicita e consapevole
     assert.equal(r2.code, 0, r2.out);
-    // un account di servizio qualsiasi (non agente Google) non viene approvato dalla riga speciale
-    const r3 = finale(scenario(addBinding(configured(), { role: 'roles/editor', members: [`serviceAccount:${P}@appspot.gserviceaccount.com`] })));
-    assert.equal(r3.code, 1, r3.out);
-    assert.match(r3.out, /account di servizio \(nexus-social-e3eee@appspot\.gserviceaccount\.com\) — roles\/editor/);
+    assert.match(r2.out, /123@cloudservices\.gserviceaccount\.com\) — roles\/editor .*approvata da te/);
+  });
+
+  test('FALSO PASS 8: membro eliminato (deleted:) con privilegi pericolosi → PROBLEMA', () => {
+    for (const m of ['deleted:user:ex@example.com?uid=1', 'deleted:serviceAccount:vecchio@nexus-social-e3eee.iam.gserviceaccount.com?uid=2']) {
+      const r = finale(scenario(addBinding(configured(), { role: 'roles/owner', members: [m] }), { approvate: [AGENT, m] }));
+      assert.equal(r.code, 1, r.out);
+      assert.match(r.out, /PROBLEMA progetto: membro eliminato — roles\/owner .*se viene ripristinato li riottiene/);
+      assert.match(r.out, /voce NON approvabile, ignorata: membro eliminato/);
+      assert.doesNotMatch(r.out, /ex@example\.com/);
+    }
+  });
+
+  test('FALSI PASS 9-12: ruoli personalizzati con permessi di escalation o amministrazione → PROBLEMA', () => {
+    const perms = [
+      ['iam.serviceAccountKeys.upload'],
+      ['iam.serviceAccounts.create'], ['iam.serviceAccounts.delete'], ['iam.serviceAccounts.undelete'],
+      ['iam.serviceAccounts.disable'], ['iam.serviceAccounts.enable'],
+      ['iam.denypolicies.create'], ['iam.denypolicies.update'], ['iam.denypolicies.delete'],
+      ['orgpolicy.policy.set'], ['orgpolicy.policies.create'], ['iam.roles.delete'], ['iam.roles.undelete'],
+      ['deploymentmanager.deployments.create'],
+    ];
+    for (const p of perms) {
+      const custom = `projects/${P}/roles/r${safe(p[0])}`;
+      const r = finale(scenario(addBinding(configured(), { role: custom, members: [OTHER] }), { roles: { [custom]: [...p, 'resourcemanager.projects.get'] } }));
+      assert.equal(r.code, 1, `${p}: ${r.out}`);
+      assert.ok(r.out.includes(`PROBLEMA progetto: altro utente — ${custom} (${p[0]})`), `${p}: ${r.out}`);
+    }
+    // permessi di sola lettura delle stesse famiglie: non pericolosi
+    const reader = `projects/${P}/roles/lettoreDivieti`;
+    const r = finale(scenario(addBinding(configured(), { role: reader, members: [OTHER] }), { roles: { [reader]: ['iam.denypolicies.get', 'iam.denypolicies.list', 'orgpolicy.policies.list'] } }));
+    assert.equal(r.code, 0, r.out);
   });
 
   test('altri ruoli personalizzati: pericolosi → uscita 1; solo lettura → accettati', () => {
@@ -547,9 +673,15 @@ describe('01-verifica.sh --finale', () => {
     assert.equal(r3.code, 1, r3.out);
     assert.match(r3.out, /PROBLEMA organization 55: gruppo — organizations\/55\/roles\/impersonatore \(iam\.serviceAccounts\.getAccessToken\)/);
     assert.ok(r3.calls.includes('iam roles describe impersonatore --organization=55 --format=json'), r3.calls.join('\n'));
-    const r4 = finale(scenario(withOrg([{ role: orgRole, members: [GROUP] }]), { roles: { [orgRole]: ['iam.serviceAccounts.getAccessToken'] }, approvate: ['agenti-google-del-progetto', GROUP] }));
-    assert.equal(r4.code, 0, r4.out);
+    // un gruppo approvato nel file non diventa sicuro
+    const r4 = finale(scenario(withOrg([{ role: orgRole, members: [GROUP] }]), { roles: { [orgRole]: ['iam.serviceAccounts.getAccessToken'] }, approvate: [AGENT, GROUP] }));
+    assert.equal(r4.code, 1, r4.out);
+    assert.match(r4.out, /voce NON approvabile, ignorata: gruppo/);
     assertNoPersonalData(r4.out);
+    // gruppo con un ruolo non pericoloso sopra il progetto → INCOMPLETO
+    const r5 = finale(scenario(withOrg([{ role: 'roles/datastore.user', members: [GROUP] }])));
+    assert.equal(r5.code, 3, r5.out);
+    assert.match(r5.out, /INCOMPLETO organization 55: roles\/datastore\.user concesso a gruppo/);
   });
 
   test('gerarchia presente ma non leggibile → verifica interrotta (uscita 2)', () => {
@@ -566,6 +698,185 @@ describe('01-verifica.sh --finale', () => {
     assert.equal(r.code, 0, r.out);
   });
 });
+// ---------------------------------------------------------------------------------------------
+describe('01-verifica.sh: singole risorse, altri account, Cloud Asset (V1)', () => {
+  const BUCKET = '//storage.googleapis.com/bucket-segreto';
+  const assetHit = (resource, assetType, bindings, project = 'projects/123') => ({ resource, assetType, project, policy: { bindings } });
+  const withAsset = (state, ...hits) => ({ ...state, asset: hits });
+  const assetCalls = (r) => r.calls.filter((c) => c.startsWith('asset '));
+
+  test('ricerca Cloud Asset solo in lettura, sul progetto, con quota sul progetto; nessun risultato → uscita 0', () => {
+    const r = finale(scenario(configured()));
+    assert.equal(r.code, 0, r.out);
+    assert.deepEqual(assetCalls(r), [`asset search-all-iam-policies --scope=projects/${P} --billing-project=${P} --format=json`]);
+    assert.match(r.out, /copertura: il progetto, che non ha cartelle né organizzazione/);
+    assert.match(r.out, /NON coperti: progetti fuori da questa gerarchia/);
+    assertReadOnly(r.calls);
+  });
+
+  test('FALSO PASS: Cloud Asset API disattivata → INCOMPLETO, nessuna ricerca, nessuna attivazione', () => {
+    const s = withoutServices(configured(), 'cloudasset.googleapis.com');
+    for (const r of [finale(scenario(s, { prompts: ['asset'] })), run(scenario(s), '01-verifica.sh', 'y\ny\n')]) {
+      assert.equal(r.code, 3, r.out);
+      assert.match(r.out, /INCOMPLETO cloudasset\.googleapis\.com NON attiva: .*Non viene attivata da questi script/);
+      assert.match(r.out, /Esito: INCOMPLETO/);
+      assert.deepEqual(assetCalls(r), []);
+      assert.ok(!r.calls.some((c) => /^services enable|da prompt/.test(c)));
+      assertReadOnly(r.calls);
+    }
+    // prima della creazione dell'account la ricerca non è ancora indispensabile
+    const r = run(scenario(withoutServices(before(), 'cloudasset.googleapis.com')), '01-verifica.sh');
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /INFO +cloudasset\.googleapis\.com NON attiva.*servirà per la verifica finale/);
+  });
+
+  test('ricerca Cloud Asset negata (permessi insufficienti) → INCOMPLETO, mai "nessun permesso"', () => {
+    const r = finale(scenario(configured(), { fails: { asset: DENIED('cloudasset.assets.searchAllIamPolicies') } }));
+    assert.equal(r.code, 3, r.out);
+    assert.match(r.out, /INCOMPLETO ricerca Cloud Asset su projects\/nexus-social-e3eee non riuscita \(.*PERMISSION_DENIED/);
+    assert.doesNotMatch(r.out, /nessun permesso diretto all'account di audit/);
+    assertNoPersonalData(r.out);
+  });
+
+  test('FALSO PASS: permesso diretto dell\'account di audit su una singola risorsa (bucket) → PROBLEMA', () => {
+    const r = finale(scenario(withAsset(configured(), assetHit(BUCKET, 'storage.googleapis.com/Bucket', [{ role: 'roles/storage.objectAdmin', members: [`serviceAccount:${SA}`] }]))));
+    assert.equal(r.code, 1, r.out);
+    assert.ok(r.out.includes(`PROBLEMA storage.googleapis.com/Bucket ${BUCKET}: l'account di audit ha roles/storage.objectAdmin`), r.out);
+  });
+
+  test('FALSO PASS: Token Creator dell\'account di audit su un account di un ALTRO progetto → PROBLEMA (escalation)', () => {
+    const hit = assetHit('//iam.googleapis.com/projects/altro/serviceAccounts/111', 'iam.googleapis.com/ServiceAccount',
+      [{ role: 'roles/iam.serviceAccountTokenCreator', members: [`serviceAccount:${SA}`] }], 'projects/999');
+    const r = finale(scenario(withAsset(configured(), hit)));
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /PROBLEMA account di servizio \/\/iam\.googleapis\.com\/projects\/altro\/serviceAccounts\/111: l'account di audit ha roles\/iam\.serviceAccountTokenCreator.*ESCALATION/);
+  });
+
+  test('FALSO PASS: ruolo dell\'account di audit su un altro progetto della gerarchia → PROBLEMA', () => {
+    const hit = assetHit('//cloudresourcemanager.googleapis.com/projects/888', 'cloudresourcemanager.googleapis.com/Project',
+      [{ role: 'roles/owner', members: [`serviceAccount:${SA}`] }], 'projects/888');
+    const r = finale(scenario(withAsset(configured(), hit)));
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /PROBLEMA cloudresourcemanager\.googleapis\.com\/Project \/\/cloudresourcemanager\.googleapis\.com\/projects\/888: l'account di audit ha roles\/owner/);
+  });
+
+  test('singole risorse: gruppo → INCOMPLETO; allUsers/allAuthenticatedUsers → PROBLEMA', () => {
+    const r1 = finale(scenario(withAsset(configured(), assetHit(BUCKET, 'storage.googleapis.com/Bucket', [{ role: 'roles/storage.objectViewer', members: [GROUP] }]))));
+    assert.equal(r1.code, 3, r1.out);
+    assert.match(r1.out, /INCOMPLETO storage\.googleapis\.com\/Bucket .*roles\/storage\.objectViewer concesso a gruppo: non posso verificare/);
+    assertNoPersonalData(r1.out);
+    for (const m of ['allUsers', 'allAuthenticatedUsers', 'principalSet://goog/public:all']) {
+      const r = finale(scenario(withAsset(configured(), assetHit(BUCKET, 'storage.googleapis.com/Bucket', [{ role: 'roles/storage.objectAdmin', members: [m] }]))));
+      assert.equal(r.code, 1, `${m}: ${r.out}`);
+      assert.ok(r.out.includes(`roles/storage.objectAdmin concesso a ${m}: vale per chiunque, account di audit compreso`), r.out);
+    }
+  });
+
+  test('i criteri del progetto e della gerarchia restituiti da Cloud Asset non vengono contati due volte', () => {
+    const own = assetHit(`//cloudresourcemanager.googleapis.com/projects/123`, 'cloudresourcemanager.googleapis.com/Project', CONFIGURED_POLICY.bindings);
+    const r = finale(scenario(withAsset(configured(), own)));
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /1 criteri IAM trovati, 0 su singole risorse controllati/);
+  });
+
+  test('progetto in un\'organizzazione → ricerca su tutta l\'organizzazione; organizzazione non individuabile → INCOMPLETO', () => {
+    const s = configured();
+    s.project.parent = { type: 'folder', id: '77' };
+    s.ancestors = [{ id: P, type: 'project', policy: CONFIGURED_POLICY }, { id: '77', type: 'folder', policy: { bindings: [] } }, { id: '55', type: 'organization', policy: { bindings: [] } }];
+    const r1 = finale(scenario(s));
+    assert.equal(r1.code, 0, r1.out);
+    assert.deepEqual(assetCalls(r1), [`asset search-all-iam-policies --scope=organizations/55 --billing-project=${P} --format=json`]);
+    assert.match(r1.out, /copertura: tutta l'organizzazione 55/);
+    s.ancestors = s.ancestors.slice(0, 2); // gerarchia letta ma senza organizzazione
+    const r2 = finale(scenario(s));
+    assert.equal(r2.code, 3, r2.out);
+    assert.deepEqual(assetCalls(r2), []);
+    assert.match(r2.out, /INCOMPLETO organizzazione non individuata nella gerarchia/);
+  });
+
+  test('FALSO PASS: l\'account di audit può impersonare un altro account del progetto → PROBLEMA (senza dipendere da Cloud Asset)', () => {
+    const dep = `deployer@${P}.iam.gserviceaccount.com`;
+    const s = configured();
+    s.sa_list.push({ email: dep });
+    s.sapol = { [dep]: { bindings: [{ role: 'roles/iam.serviceAccountTokenCreator', members: [`serviceAccount:${SA}`] }] } };
+    for (const st of [s, withoutServices(s, 'cloudasset.googleapis.com')]) {
+      const r = finale(scenario(st));
+      assert.equal(r.code, 1, r.out);
+      assert.ok(r.out.includes(`PROBLEMA account di servizio ${dep}: l'account di audit ha roles/iam.serviceAccountTokenCreator`), r.out);
+      assert.match(r.out, /ESCALATION/);
+      assert.ok(r.calls.includes(`iam service-accounts get-iam-policy ${dep} --project=${P} --format=json`));
+    }
+  });
+
+  test('criterio di un altro account del progetto non leggibile → INCOMPLETO', () => {
+    const dep = `deployer@${P}.iam.gserviceaccount.com`;
+    const s = configured();
+    s.sa_list.push({ email: dep });
+    s.sapol = { [dep]: null };
+    const r = finale(scenario(s));
+    assert.equal(r.code, 3, r.out);
+    assert.ok(r.out.includes(`INCOMPLETO permessi sull'account ${dep} non leggibili`), r.out);
+  });
+
+  test('account approvato: chi può impersonarlo deve essere approvato; con chiavi → INCOMPLETO', () => {
+    const appspot = `${P}@appspot.gserviceaccount.com`;
+    const base = () => {
+      const s = addBinding(configured(), { role: 'roles/iam.serviceAccountTokenCreator', members: [`serviceAccount:${appspot}`] });
+      s.sa_list.push({ email: appspot });
+      return s;
+    };
+    const approvate = [AGENT, `serviceAccount:${appspot}`];
+    const s1 = base();
+    s1.sapol = { [appspot]: { bindings: [{ role: 'roles/iam.serviceAccountUser', members: [OTHER] }] } };
+    const r1 = finale(scenario(s1, { approvate, roles: { 'roles/iam.serviceAccountUser': ['iam.serviceAccounts.actAs'] } }));
+    assert.equal(r1.code, 1, r1.out);
+    assert.ok(r1.out.includes(`PROBLEMA account di servizio ${appspot}: altro utente ha roles/iam.serviceAccountUser`), r1.out);
+    assertNoPersonalData(r1.out);
+    const s2 = base();
+    s2.saKeys = { [appspot]: [{ name: 'k1' }] };
+    const r2 = finale(scenario(s2, { approvate }));
+    assert.equal(r2.code, 3, r2.out);
+    assert.match(r2.out, /INCOMPLETO l'account approvato .* ha privilegi pericolosi e chiavi create a mano/);
+    assert.ok(r2.calls.includes(`iam service-accounts keys list --iam-account=${appspot} --project=${P} --managed-by=user --format=json`));
+    const r3 = finale(scenario(base(), { approvate }));
+    assert.equal(r3.code, 0, r3.out);
+  });
+
+  test('FALSO PASS: regole di divieto non usate come garanzia; se non leggibili lo dice, e un ruolo in più resta PROBLEMA', () => {
+    const s = addBinding(configured(), { role: 'roles/datastore.user', members: [`serviceAccount:${SA}`] });
+    s.deny = [{ name: 'nega-scrittura', rules: [{ denyRule: { deniedPrincipals: [`principal://iam.googleapis.com/projects/-/serviceAccounts/${SA}`], deniedPermissions: ['datastore.googleapis.com/entities.update'] } }] }];
+    const r1 = finale(scenario(s));
+    assert.equal(r1.code, 1, r1.out);
+    assert.match(r1.out, /PROBLEMA progetto: ruolo NON previsto roles\/datastore\.user/);
+    assert.match(r1.out, /NON vengono usate come garanzia/);
+    const r2 = finale(scenario(configured(), { fails: { deny: DENIED('iam.denypolicies.list') } }));
+    assert.equal(r2.code, 0, r2.out);
+    assert.match(r2.out, /LIMITE: regole di divieto non leggibili\. Non cambiano l'esito/);
+  });
+
+  test('account gcloud attivo mostrato mascherato', () => {
+    const r = finale(scenario(configured()));
+    assert.ok(r.out.includes(`account gcloud attivo: ${ME_MASKED}`), r.out);
+    assertNoPersonalData(r.out);
+  });
+
+  test('stato effettivo: stage del ruolo diverso da GA o omesso → PROBLEMA; elenco account incoerente → PROBLEMA', () => {
+    for (const [extra, re] of [[{ stage: 'ALPHA' }, /stage del ruolo ALPHA: previsto GA/], [{ stage: 'DEPRECATED' }, /stage del ruolo DEPRECATED/], [{ stage: undefined }, /stage del ruolo omesso, cioè ALPHA/]]) {
+      const s = configured();
+      s.custom_role = { ...customRole(), ...extra };
+      if (extra.stage === undefined) delete s.custom_role.stage;
+      const r = finale(scenario(s));
+      assert.equal(r.code, 1, r.out);
+      assert.match(r.out, re);
+    }
+    const s = configured();
+    s.sa_list = [];
+    const r = finale(scenario(s));
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /dati incoerenti: l'account esiste ma non compare nell'elenco/);
+  });
+});
+
 // ---------------------------------------------------------------------------------------------
 describe('02-configura.sh', () => {
   const modifications = (calls) => calls.filter((c) => MODIFYING.test(c));
@@ -613,6 +924,15 @@ describe('02-configura.sh', () => {
     }
   });
 
+  test('Cloud Asset API disattivata → si ferma prima della conferma e di ogni modifica (uscita 3), nessuna attivazione', () => {
+    const r = run(scenario(withoutServices(before(), 'cloudasset.googleapis.com'), { after: configured() }), '02-configura.sh', CONFIRM);
+    assert.equal(r.code, 3, r.out);
+    assert.match(r.out, /cloudasset\.googleapis\.com: serve a 01-verifica\.sh per cercare/);
+    assert.match(r.out, /gcloud services enable cloudasset\.googleapis\.com --project=nexus-social-e3eee/);
+    assert.doesNotMatch(r.out, /Per confermare/);
+    assert.deepEqual(modifications(r.calls), []);
+  });
+
   test('conferma corretta → esattamente 4 modifiche nell\'ordine previsto, nessuna chiave, verifica finale rigorosa superata', () => {
     const r = run(scenario(before(), { after: configured() }), '02-configura.sh', CONFIRM);
     assert.equal(r.code, 0, r.out);
@@ -658,14 +978,14 @@ describe('02-configura.sh', () => {
   });
 
   test('ruolo che diventa diverso o disattivato dopo la conferma → si ferma, resoconto senza operazioni completate', () => {
-    for (const extra of [{ includedPermissions: [...ROLE_PERMS, 'datastore.entities.update'] }, { stage: 'DISABLED' }]) {
+    for (const extra of [{ includedPermissions: [...ROLE_PERMS, 'datastore.entities.update'] }, { stage: 'DISABLED' }, { stage: 'ALPHA' }]) {
       const state = before();
       state.custom_role = customRole();
       const after = configured();
       after.custom_role = { ...customRole(), ...extra };
       const r = run(scenario(state, { after, flipAtRoleDescribe: 3 }), '02-configura.sh', CONFIRM);
       assert.equal(r.code, 1, r.out);
-      assert.match(r.out, /il ruolo esiste ma è eliminato, disattivato o non contiene esattamente i 3 permessi/);
+      assert.match(r.out, /il ruolo esiste ma è eliminato, non è in stage GA o non contiene esattamente i 3 permessi/);
       assert.match(r.out, /Esecuzione interrotta: stato delle modifiche[\s\S]*Completate: nessuna[\s\S]*Non riuscita: ruolo personalizzato firestoreAuditReader/);
       assert.deepEqual(modifications(r.calls), []);
       assertTmpClean(r.dir);

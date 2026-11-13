@@ -142,8 +142,11 @@ def main():
         return 3
     print(f"\nEsito: l'account ha ESATTAMENTE i {len(ROLE_PERMISSIONS)} permessi previsti "
           f"su {len(names)} verificabili sul progetto.")
-    print("Limite: sono i permessi sul progetto; quelli su singole risorse o altri progetti li")
-    print("controlla 01-verifica.sh (ruoli sull'account e nella gerarchia).")
+    print("Limite: sono SOLO i permessi sul progetto. Questa prova non vede i permessi su singole")
+    print("risorse (bucket, secret, altri account di servizio) né su altri progetti. 01-verifica.sh")
+    print("li cerca con Cloud Asset Inventory solo se l'API è già attiva e solo nella gerarchia del")
+    print("progetto; i progetti fuori dalla gerarchia non li controlla nessuno dei due script.")
+    print("Un permesso tolto da una regola di divieto può non comparire qui pur essendo concesso.")
     return 0
 
 

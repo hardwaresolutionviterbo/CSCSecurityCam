@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Nexus Social · verifica IAM dell'account di audit Firestore.
 #
-# SOLA LETTURA: legge configurazioni IAM, account di servizio, chiavi (solo l'elenco), API e la
-# descrizione di ogni ruolo assegnato nel progetto e sopra. Non modifica nulla, non crea nulla e
-# non legge dati Firestore. Non stampa email di persone. I file temporanei vengono cancellati
-# alla fine, anche se lo script viene interrotto.
+# SOLA LETTURA: legge configurazioni IAM (progetto, cartelle, organizzazione), account di servizio
+# e i loro criteri, chiavi (solo l'elenco), API, la descrizione di ogni ruolo assegnato e, se l'API
+# Cloud Asset è GIÀ attiva, i criteri IAM delle singole risorse della gerarchia. Non modifica
+# nulla, non crea nulla, non attiva API e non legge dati Firestore. Non stampa email di persone.
+# I file temporanei vengono cancellati alla fine, anche se lo script viene interrotto.
 #
 # Uso (Google Cloud Shell):
 #   bash 01-verifica.sh            verifica preliminare (prima di 02-configura.sh)
 #   bash 01-verifica.sh --finale   verifica finale: tutto deve essere presente ed esatto
-# Uscita: 0 nessun problema, 1 problemi trovati, 2 verifica impossibile.
+# Uscita: 0 nessun problema · 1 problemi trovati · 2 verifica impossibile (interrotta)
+#         3 INCOMPLETO: nessun problema trovato, ma qualcosa non è verificabile (per esempio
+#           Cloud Asset non attiva, un gruppo con un ruolo, un criterio non leggibile)
 #
 # Identità approvate: file identita-approvate.txt accanto allo script (o APPROVATI_FILE),
 # vedi identita-approvate.esempio.txt. Non va messo su GitHub (contiene email).
@@ -74,9 +77,29 @@ read_json custom_role.json    iam roles describe firestoreAuditReader --project=
 read_json testable.json       iam list-testable-permissions \
                                 "//cloudresourcemanager.googleapis.com/projects/${PROJECT}" --filter='name~^datastore\.'
 
-# Permessi di OGNI ruolo assegnato nel progetto e sopra (predefinito o personalizzato). Un ruolo
-# che non si riesce a leggere blocca l'esito positivo (lo controlla analizza.py).
 export PROJECT SA ME MODO APPROVATI_FILE
+
+# Permessi concessi su singole risorse: ricerca Cloud Asset Inventory su tutta la gerarchia
+# (organizzazione, oppure il solo progetto se non ne ha). Solo se cloudasset.googleapis.com è GIÀ
+# attiva: altrimenti nessuna chiamata e l'analisi segnala INCOMPLETO. Nessuna API viene attivata
+# (CLOUDSDK_CORE_DISABLE_PROMPTS=1); la quota è addebitata a questo progetto (--billing-project).
+AMBITO="$(python3 "$HERE/analizza.py" "$TMP" --ambito)"
+if [[ -n "$AMBITO" ]]; then
+  read_json asset.json        asset search-all-iam-policies --scope="$AMBITO" --billing-project="$PROJECT"
+fi
+
+# Criteri IAM di ogni altro account di servizio del progetto (escalation tramite un altro account)
+# e chiavi degli account approvati. Un criterio non leggibile rende l'esito INCOMPLETO.
+while IFS=$'\t' read -r name email chiavi; do
+  [[ -n "$name" ]] || continue
+  read_json "sapol_${name}.json" iam service-accounts get-iam-policy "$email" --project="$PROJECT"
+  if [[ "$chiavi" == chiavi ]]; then
+    read_json "keys_${name}.json" iam service-accounts keys list --iam-account="$email" --project="$PROJECT" --managed-by=user
+  fi
+done < <(python3 "$HERE/analizza.py" "$TMP" --account)
+
+# Permessi di OGNI ruolo assegnato nel progetto, sopra e sugli account di servizio del progetto
+# (predefinito o personalizzato). Un ruolo che non si riesce a leggere blocca l'esito positivo.
 while IFS=$'\t' read -r name a1 a2; do
   [[ -n "$name" ]] || continue
   if [[ -n "${a2:-}" ]]; then

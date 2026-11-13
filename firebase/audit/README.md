@@ -96,9 +96,12 @@ Nessuna chiave: Google rilascia token temporanei per l'account di sola lettura.
 Ruolo, account, autorizzazioni e verifiche si preparano con gli script di
 [`iam/`](iam/README.md):
 
-1. `bash 01-verifica.sh`: sola lettura;
+1. `bash 01-verifica.sh`: sola lettura; esce con 0 (pulito), 1 (problemi), 2 (interrotta) o
+   3 (INCOMPLETO: qualcosa non è verificabile, per esempio Cloud Asset non attiva o un gruppo con
+   un ruolo). Solo 0 è un esito positivo;
 2. `bash 02-configura.sh`: modifica IAM, solo dopo una verifica senza problemi, un riepilogo e la
-   tua conferma; non attiva API e termina con la verifica finale rigorosa;
+   tua conferma; non attiva API (si ferma prima di modificare se manca anche `cloudasset`) e
+   termina con la verifica finale rigorosa;
 3. `bash 03-prova-impersonazione.sh`: permessi effettivi su **tutti** i permessi verificabili
    del progetto; deve risultare che l'account ha esattamente i 3 permessi previsti.
 
@@ -106,13 +109,14 @@ Prima di ogni audit ripeti `01-verifica.sh --finale` e `03-prova-impersonazione.
 
 ### Limiti del controllo dei permessi
 
-Anche il controllo più completo vede i permessi **sul progetto**, compresi quelli ereditati da
-cartella e organizzazione. Non vede:
+`03-prova-impersonazione.sh` vede i permessi **sul progetto**, compresi quelli ereditati da
+cartella e organizzazione. `01-verifica.sh` controlla in più i criteri degli altri account di
+servizio del progetto e, se l'API Cloud Asset è già attiva, i permessi concessi su singole risorse
+in tutta la gerarchia (organizzazione, oppure il solo progetto). Restano fuori:
 
-- permessi concessi su singole risorse (per esempio il ruolo Token Creator su un *altro* account di
-  servizio);
-- permessi su altri progetti;
-- ruoli ricevuti tramite gruppi Google.
+- permessi su progetti fuori dalla gerarchia;
+- risorse non indicizzate da Cloud Asset e modifiche degli ultimi minuti;
+- chi appartiene ai gruppi e alle identità federate (ogni loro ruolo rende l'esito INCOMPLETO).
 
 Per questo la sola lettura si basa su più controlli insieme:
 

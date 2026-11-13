@@ -7,6 +7,9 @@
 # 3. Chiede a Google, con testIamPermissions e a blocchi di 100, quali di quei permessi l'account
 #    ha davvero. Deve averne ESATTAMENTE 3: datastore.databases.list, datastore.entities.get,
 #    datastore.entities.list.
+# Vede SOLO i permessi sul progetto: non quelli su singole risorse (bucket, secret, altri account
+# di servizio) né su altri progetti. 01-verifica.sh cerca i primi con Cloud Asset Inventory, solo se
+# l'API è già attiva e solo nella gerarchia del progetto.
 # NON legge dati Firestore e non modifica nulla. Il token non viene mai stampato né passato come
 # argomento di un processo.
 #
