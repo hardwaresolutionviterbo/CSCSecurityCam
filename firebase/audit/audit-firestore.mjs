@@ -161,6 +161,7 @@ export const FORBIDDEN_PERMISSIONS = [
   'datastore.backupSchedules.delete',
   // Indici Firestore
   'datastore.schemas.create',
+  'datastore.schemas.update',
   'datastore.schemas.delete',
   // Regole di sicurezza Firebase (deploy)
   'firebaserules.releases.create',

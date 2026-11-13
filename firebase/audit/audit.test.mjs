@@ -497,6 +497,22 @@ describe('verifiche preliminari (con risposte simulate, nessuna rete)', () => {
     }
   });
 
+  test('indici: datastore.schemas.create, update e delete sono vietati e ciascuno interrompe l\'audit', async () => {
+    for (const p of ['datastore.schemas.create', 'datastore.schemas.update', 'datastore.schemas.delete']) {
+      assert.ok(FORBIDDEN_PERMISSIONS.includes(p), p);
+      let asked;
+      const fetchImpl = fakeFetch((url, init) => {
+        asked = JSON.parse(init.body).permissions;
+        return ok({ permissions: [...REQUIRED_READ_PERMISSIONS, p] });
+      });
+      await assert.rejects(verifyPermissions({ project: 'nexus-social-e3eee', token: 't', fetchImpl }), new RegExp(`oltre la sola lettura.*${p.replace(/\./g, '\\.')}`));
+      assert.ok(asked.includes(p), `${p} chiesto a testIamPermissions`);
+    }
+    // Nessun duplicato e nessun carattere jolly nell'elenco inviato a Google.
+    assert.equal(new Set(FORBIDDEN_PERMISSIONS).size, FORBIDDEN_PERMISSIONS.length);
+    assert.ok(FORBIDDEN_PERMISSIONS.every((p) => /^[a-z]+\.[A-Za-z]+\.[A-Za-z]+$/.test(p)));
+  });
+
   test('permessi di lettura mancanti, errore HTTP o di rete: audit interrotto', async () => {
     await assert.rejects(verifyPermissions({ project: 'p', token: 't', fetchImpl: fakeFetch(() => ok({ permissions: ['datastore.entities.get'] })) }), /mancanti/);
     await assert.rejects(verifyPermissions({ project: 'p', token: 't', fetchImpl: fakeFetch(() => ok({})) }), /mancanti/);

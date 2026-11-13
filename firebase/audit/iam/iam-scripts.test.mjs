@@ -28,13 +28,14 @@ const CRITICAL = [
   'datastore.entities.create', 'datastore.entities.update', 'datastore.entities.delete',
   'datastore.databases.create', 'datastore.databases.update', 'datastore.databases.delete',
   'datastore.databases.export', 'datastore.databases.import',
-  'datastore.schemas.create', 'datastore.schemas.delete',
+  'datastore.schemas.create', 'datastore.schemas.update', 'datastore.schemas.delete',
   'firebaserules.releases.create', 'firebaserules.releases.update', 'firebaserules.rulesets.create',
   'resourcemanager.projects.setIamPolicy', 'iam.serviceAccountKeys.create',
   'iam.serviceAccounts.actAs', 'iam.serviceAccounts.getAccessToken',
 ];
 const FILLER = Array.from({ length: 230 }, (_, i) => `servizio${Math.floor(i / 10)}.risorse${i % 10}.get`);
-const TESTABLE = [...new Set([...ROLE_PERMS, ...CRITICAL, 'datastore.schemas.get', 'datastore.schemas.list', 'datastore.databases.listTagBindings', ...FILLER])]
+const INDEX_ALIASES = ['datastore.indexes.create', 'datastore.indexes.update', 'datastore.indexes.delete', 'datastore.indexes.get', 'datastore.indexes.list'];
+const TESTABLE = [...new Set([...ROLE_PERMS, ...CRITICAL, 'datastore.schemas.get', 'datastore.schemas.list', 'datastore.databases.listTagBindings', ...INDEX_ALIASES, ...FILLER])]
   .map((name) => ({ name, stage: 'GA' })); // customRolesSupportLevel omesso = SUPPORTED
 
 // Permessi (ridotti) dei ruoli predefiniti usati nei test: quelli che contano per i controlli.
@@ -201,6 +202,15 @@ print(json.dumps({p: classify(p) for p in json.loads(sys.argv[1])}))
     for (const [p, kind] of Object.entries(r)) assert.equal(kind, 'scrittura', p);
   });
 
+  test('indici: datastore.schemas.* e alias datastore.indexes.* classificati correttamente', () => {
+    const r = classify(['datastore.schemas.create', 'datastore.schemas.update', 'datastore.schemas.delete',
+      'datastore.indexes.create', 'datastore.indexes.update', 'datastore.indexes.delete',
+      'datastore.schemas.get', 'datastore.schemas.list', 'datastore.indexes.get', 'datastore.indexes.list']);
+    for (const p of ['datastore.schemas.create', 'datastore.schemas.update', 'datastore.schemas.delete',
+      'datastore.indexes.create', 'datastore.indexes.update', 'datastore.indexes.delete']) assert.equal(r[p], 'scrittura', p);
+    for (const p of ['datastore.schemas.get', 'datastore.schemas.list', 'datastore.indexes.get', 'datastore.indexes.list']) assert.equal(r[p], 'lettura', p);
+  });
+
   test('azioni sconosciute: mai scrittura né lettura', () => {
     const r = classify(['servizio.risorse.frobnicate', 'compute.instances.use', 'datastore.databases.queryPlan', 'x.y.getSomethingElse']);
     for (const [p, kind] of Object.entries(r)) assert.equal(kind, 'sconosciuto', p);
@@ -247,7 +257,7 @@ describe('01-verifica.sh (preliminare)', () => {
     assert.match(r.out, /il ruolo non esiste ancora: lo crea 02-configura\.sh/);
     assert.match(r.out, /INFO +non esiste ancora: lo crea 02-configura\.sh/);
     for (const p of ROLE_PERMS) assert.match(r.out, new RegExp(`OK +${p.replace(/\./g, '\\.')}: stage GA, ruoli personalizzati SUPPORTED \\(campo omesso`));
-    assert.match(r.out, /datastore\.schemas\.\* esistenti: datastore\.schemas\.create, datastore\.schemas\.delete, datastore\.schemas\.get, datastore\.schemas\.list/);
+    assert.match(r.out, /datastore\.schemas\.\* esistenti: datastore\.schemas\.create, datastore\.schemas\.delete, datastore\.schemas\.get, datastore\.schemas\.list, datastore\.schemas\.update/);
     assert.ok(r.calls.includes('iam roles describe roles/owner --format=json'), 'ogni ruolo assegnato viene letto');
     assertReadOnly(r.calls);
     assertProjectAlwaysExpected(r.calls);
@@ -1127,6 +1137,27 @@ describe('03-prova-impersonazione.sh', () => {
       assert.equal(r.code, 1, r.out);
       assert.match(r.out, new RegExp(`PROBLEMA permesso NON previsto \\(scrittura\\): ${extra.replace(/\./g, '\\.')}`));
     }
+  });
+
+  test('indici: schemas.create/update/delete e alias indexes.create/update/delete → PROBLEMA (scrittura), uscita 1', () => {
+    for (const extra of ['datastore.schemas.create', 'datastore.schemas.update', 'datastore.schemas.delete',
+      'datastore.indexes.create', 'datastore.indexes.update', 'datastore.indexes.delete']) {
+      const dir = scenario(configured(), { granted: [...ROLE_PERMS, extra] });
+      const r = run(dir, '03-prova-impersonazione.sh');
+      assert.equal(r.code, 1, `${extra}: ${r.out}`);
+      assert.match(r.out, new RegExp(`PROBLEMA permesso NON previsto \\(scrittura\\): ${extra.replace(/\./g, '\\.')}`));
+      const asked = readFileSync(join(dir, 'curl.requests'), 'utf8').trim().split('\n').flatMap((l) => JSON.parse(l));
+      assert.ok(asked.includes(extra), `${extra} chiesto a testIamPermissions`);
+    }
+  });
+
+  test('datastore.schemas.update assente dall\'elenco verificabile → segnalato, esito INCOMPLETO (uscita 3)', () => {
+    const s = configured();
+    s.testable = TESTABLE.filter((e) => e.name !== 'datastore.schemas.update');
+    const r = run(scenario(s, { granted: ROLE_PERMS }), '03-prova-impersonazione.sh');
+    assert.equal(r.code, 3, r.out);
+    assert.match(r.out, /AVVISO +datastore\.schemas\.update: non presente tra i permessi verificabili/);
+    assert.doesNotMatch(r.out, /ESATTAMENTE/);
   });
 
   test('permesso in più non di scrittura → AVVISO sul permesso ma esito NON conforme (uscita 1)', () => {

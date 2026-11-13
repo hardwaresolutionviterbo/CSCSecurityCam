@@ -33,7 +33,7 @@ CRITICAL = (
     "datastore.entities.create", "datastore.entities.update", "datastore.entities.delete",
     "datastore.databases.create", "datastore.databases.update", "datastore.databases.delete",
     "datastore.databases.export", "datastore.databases.import",
-    "datastore.schemas.create", "datastore.schemas.delete",
+    "datastore.schemas.create", "datastore.schemas.update", "datastore.schemas.delete",
     "firebaserules.releases.create", "firebaserules.releases.update", "firebaserules.rulesets.create",
     "resourcemanager.projects.setIamPolicy", "iam.serviceAccountKeys.create",
     "iam.serviceAccounts.actAs", "iam.serviceAccounts.getAccessToken",
