@@ -55,3 +55,7 @@ ui-debug.log
 # Report dell'audit Firestore (contengono solo dati anonimi, ma restano locali)
 firebase/audit/reports/
 firebase/audit/*.report.json
+
+# Python
+__pycache__/
+*.pyc
