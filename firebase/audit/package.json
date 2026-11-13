@@ -1,0 +1,22 @@
+{
+  "name": "nexus-social-firestore-audit",
+  "private": true,
+  "description": "Audit in sola lettura dei dati Firestore di Nexus Social rispetto a firebase/firestore.rules.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "audit": "node audit-firestore.mjs",
+    "check": "node --check audit-firestore.mjs && node --check audit-lib.mjs && node --check audit.test.mjs",
+    "test": "firebase emulators:exec --config ../../firebase.json --only firestore --project demo-nexus-audit \"node --test --test-reporter=spec audit.test.mjs\""
+  },
+  "dependencies": {
+    "firebase-admin": "latest"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
+    "firebase": "13.3.0",
+    "firebase-tools": "15.36.0"
+  }
+}
