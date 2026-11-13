@@ -47,8 +47,10 @@ l'indirizzo di una persona dalle coordinate o dalla distanza.
 - Trigger che impediscono al client di modificare proprietario, tipo, coordinate, data di
   creazione, media stelle e tipo di account.
 - Foto in `listing-photos/<user-id>/…`: ognuno scrive solo nella propria cartella.
-- Firestore: allowlist di campi e tipi anche in lettura (i documenti legacy con dati privati
-  non sono leggibili), query solo su documenti `schemaVersion == 2`, messaggi solo cifrati,
+- Firestore: allowlist di campi e tipi con validazione completa sulle letture singole (`get`;
+  i documenti legacy con dati privati non sono leggibili con `get`); le query (`list`)
+  richiedono `schemaVersion == 2` ma non rivalidano l'intero documento, quindi prima del deploy
+  è obbligatorio l'audit in sola lettura; messaggi solo cifrati,
   membership con ruoli in `chats/{chatId}/members` (valide per dare accesso, massimo 256 per
   chat), profili allineati ai vincoli di Supabase, default negato. Test con l'emulatore in
   `firebase/tests/`; deploy solo dopo l'audit in sola lettura (vedi `firebase/README.md`).

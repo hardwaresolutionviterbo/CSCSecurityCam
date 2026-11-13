@@ -291,13 +291,16 @@ describe('profiles: lettura', () => {
     }
   });
 
-  test('public_name generati da Supabase sono leggibili (anche con @, fino a 80 caratteri)', async () => {
+  test('public_name generati da Supabase sono leggibili (anche con @, fino a 81 caratteri)', async () => {
     const ok = {
       base: 'Carlo C.',
       chiocciola: 'carlo@studio.it R.',
       ottanta: 'x'.repeat(80),
       ottantaParole: `${'y'.repeat(77)} Z.`,
       accentati: 'é'.repeat(80),
+      // Caso limite di Supabase: full_name di 80 caratteri ('x'×78 + ' Z') → 81 caratteri.
+      ottantuno: `${'x'.repeat(78)} Z.`,
+      ottantunoAccentati: `${'é'.repeat(78)} Z.`,
       emoji: 'Luca 😀.',
       aCapo: 'Ann\na R.',
       tab: 'Mario\tRossi',
@@ -312,9 +315,11 @@ describe('profiles: lettura', () => {
     }
   });
 
-  test('public_name oltre 80 caratteri, vuoto o con un numero di telefono non leggibile', async () => {
+  test('public_name oltre 81 caratteri, vuoto o con un numero di telefono non leggibile', async () => {
     const bad = {
-      lungo: 'x'.repeat(81),
+      lungo: 'x'.repeat(82),
+      lungoParole: `${'x'.repeat(79)} Z.`,
+      lungoAccentati: 'é'.repeat(82),
       vuoto: '',
       telefono: 'Carlo +39 333 123 4567',
       telefono2: 'Carlo 333-1234567',

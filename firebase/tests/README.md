@@ -38,7 +38,7 @@ copertura delle regole (JSON e HTML), caricato come artifact dalla CI.
 
 | Percorso | Campi (obbligatori · *facoltativi*) | Lettura |
 | --- | --- | --- |
-| `profiles/{uid}` | `username` (A-Z a-z 0-9 . _, 3-24, come Supabase), `publicName` (1-80 caratteri, come `public_name` di Supabase, @ ammessa, niente numeri di telefono), `updatedAt` timestamp · *`avatarUrl`* (https, senza spazi né @) | `get` da utenti autenticati, rivalidato; nessuna `list`; **nessuna scrittura dai client** (copia scritta solo dal server, Fase 2) |
+| `profiles/{uid}` | `username` (A-Z a-z 0-9 . _, 3-24, come Supabase), `publicName` (1-81 caratteri, come `public_name` di Supabase, @ ammessa, niente numeri di telefono), `updatedAt` timestamp · *`avatarUrl`* (https, senza spazi né @) | `get` da utenti autenticati, rivalidato; nessuna `list`; **nessuna scrittura dai client** (copia scritta solo dal server, Fase 2) |
 | `profiles/{uid}/devices/{fid}` | invariato | solo il proprietario |
 | `chats/{chatId}` | `type` direct/group, `createdBy`, `createdAt`, `updatedAt`, `schemaVersion` 2, `memberCount` (1-256), `lastMemberChange` {`op` add/remove, `uid`} · *`title`* (≤ 80, senza email/telefono), *`avatarUrl`*, *`lastMessageAt`* | `get` dai membri, rivalidato; nessuna `list` |
 | `chats/{chatId}/members/{uid}` | `uid` = id documento, `role` owner/admin/member, `permissions` {`addMembers`, `removeMembers`} booleani, `joinedAt`, `addedBy`, `schemaVersion` 2 | `get` dai membri, rivalidato; `list` dai membri con `where('schemaVersion', '==', 2)`; collection group con `where('uid', '==', mio uid)` e `schemaVersion` 2 |
@@ -69,8 +69,10 @@ davvero nello stesso batch: nessuno può gonfiarlo per bloccare le aggiunte.
 I casi dei test sui profili vengono da `supabase/migrations/0001_init.sql` eseguito su
 PostgreSQL 16: `username` di tipo `citext` con check `^[a-z0-9._]{3,24}$` (che su `citext`
 accetta anche le maiuscole) e `public_name` generato da `full_name` (2-80 caratteri),
-quindi fino a 80 caratteri, con `@`, cifre, emoji, tabulazioni e a capo. In Firestore
-`size()` conta i caratteri come `char_length` (verificato con 80 caratteri accentati).
+quindi fino a **81** caratteri: con un `full_name` di 80 caratteri come `'x'×78 + ' Z'`
+Supabase genera `xxx…x Z.`, cioè 78 caratteri + spazio + iniziale + punto. Il nome pubblico
+può contenere `@`, cifre, emoji, tabulazioni e a capo. In Firestore `size()` conta i caratteri
+come `char_length` (verificato con 81 caratteri accentati); 82 caratteri sono rifiutati.
 
 ## Sicurezza delle query (list)
 

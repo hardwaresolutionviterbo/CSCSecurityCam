@@ -100,8 +100,11 @@ scrittura sia la lettura**. Il dettaglio dei campi ammessi è in
   non ancora implementata). Finché manca, i profili Firestore restano vuoti.
 - **Profili: lettura rivalidata con i vincoli di Supabase**: `username` come
   `profiles.username` (3-24 caratteri tra lettere, cifre, punto e trattino basso, maiuscole
-  comprese perché il campo è `citext`); `publicName` come il `public_name` generato, fino a 80
-  caratteri, `@` compresa. Resta escluso un `publicName` che somiglia a un numero di telefono.
+  comprese perché il campo è `citext`); `publicName` come il `public_name` generato, fino a 81
+  caratteri, `@` compresa. Il limite è 81 e non 80 perché Supabase genera il nome pubblico da un
+  `full_name` di massimo 80 caratteri aggiungendo il punto dopo l'iniziale: una prima parola di
+  78 caratteri + spazio + iniziale + punto fa 81. Resta escluso un `publicName` che somiglia a un
+  numero di telefono.
   Le regole di prodotto (es. vietare username di sole cifre o simili a un telefono) vanno in
   Supabase nella Fase 2.
 - **Query (list)**: le regole valutano i filtri, non i documenti restituiti, quindi le query

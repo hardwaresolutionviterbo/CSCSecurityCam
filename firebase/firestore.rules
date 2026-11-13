@@ -65,13 +65,15 @@ service cloud.firestore {
       return v is string && v.matches('^[A-Za-z0-9._]{3,24}$');
     }
 
-    // Nome pubblico: copia del public_name generato da Supabase ("Carlo C."), lungo
-    // fino a 80 caratteri e che può contenere @ come il nome inserito. Resta escluso
-    // solo ciò che somiglia a un numero di telefono.
+    // Nome pubblico: copia del public_name generato da Supabase ("Carlo C."), che può
+    // contenere @ come il nome inserito. Lunghezza massima 81 caratteri: full_name è al
+    // massimo 80, e con una prima parola di 78 caratteri il nome generato diventa
+    // 78 caratteri + spazio + iniziale + punto (es. "xxx…x Z."). Resta escluso solo ciò
+    // che somiglia a un numero di telefono.
     function isPublicName(v) {
       return v is string
         && v.size() >= 1
-        && v.size() <= 80
+        && v.size() <= 81
         && !hasPhone(v);
     }
 
