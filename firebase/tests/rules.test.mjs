@@ -63,10 +63,14 @@ beforeEach(async () => {
 const db = (uid) => env.authenticatedContext(uid).firestore();
 const anon = () => env.unauthenticatedContext().firestore();
 
-// Diniego autorizzativo: l'emulatore deve rispondere permission-denied.
+// Diniego autorizzativo pulito: l'emulatore deve rispondere permission-denied e il
+// dettaglio non deve contenere errori di valutazione. Così un test negativo non può
+// passare perché una regola va in errore (es. campo mancante) invece di valutare false.
 async function denied(promise) {
   const err = await assertFails(promise);
   assert.equal(err.code, 'permission-denied', `atteso permission-denied, ricevuto ${err.code}`);
+  assert.doesNotMatch(String(err.message), /evaluation error/i,
+    `diniego dovuto a un errore di valutazione, non a una condizione falsa:\n${err.message}`);
   return err;
 }
 
