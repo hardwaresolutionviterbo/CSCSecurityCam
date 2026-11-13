@@ -458,7 +458,22 @@ if not mine:
 
 print("  Ruoli di progetto o superiori che permettono di impersonare l'account, crearne o caricarne")
 print("  chiavi, eliminarlo o ricrearlo, cambiarne i permessi o modificare il ruolo personalizzato:")
+
+
+def already_has_audit_access(member):
+    """True se il membro ha GIÀ, con binding senza condizioni nel progetto o sopra, tutti i permessi
+    dell'account di audit: impersonarlo non gli darebbe nulla in più (privilegi equivalenti o
+    superiori). Si contano solo i binding senza condizioni: una condizione può restringerli."""
+    perms = set()
+    for _, _, bs in levels:
+        for b in bs:
+            if not b.get("condition") and member.lower() in [x.lower() for x in b.get("members", [])]:
+                perms |= role_perms.get(b["role"], set())
+    return set(ROLE_PERMISSIONS) <= perms
+
+
 risky = 0
+equivalent = 0
 powerful_approved = set()
 for t, i, bindings in levels:
     for b in bindings:
@@ -471,6 +486,22 @@ for t, i, bindings in levels:
             line = f"{label(t, i)}: {desc} — {b['role']} ({what}){condition_text(b)}"
             if desc == "tu":
                 info(line)
+            elif m in PUBLIC:
+                risky += 1
+                bad(line + " → membro pubblico: vale per chiunque")
+            elif already_has_audit_access(m):
+                # Rischio documentato, non bloccante: chi ha già tutti i permessi dell'account di audit
+                # (e di norma molti di più) può impersonarlo, ma così non ottiene nulla di nuovo. Il
+                # rischio residuo è che modifichi l'account o il ruolo: lo rilevano 01-verifica.sh
+                # (definizione esatta), 03-prova-impersonazione.sh e il controllo dei permessi
+                # dell'audit prima di ogni lettura.
+                equivalent += 1
+                if is_approved(m):
+                    powerful_approved.add(m.lower())
+                warn(line + " → può impersonare firestore-audit, ma ha GIÀ privilegi equivalenti o superiori "
+                     "(tutti i permessi di lettura dell'audit): non ottiene nulla in più. Rischio residuo: "
+                     "potrebbe modificare account o ruolo; lo rilevano le verifiche prima di ogni audit"
+                     + (" (membro eliminato: li riottiene se ripristinato)" if m.lower().startswith("deleted:") else ""))
             elif m.lower().startswith("deleted:"):
                 risky += 1
                 bad(line + " → membro eliminato con privilegi pericolosi: se viene ripristinato li riottiene")
@@ -485,7 +516,8 @@ for t, i, bindings in levels:
                 risky += 1
                 bad(line + " → identità non approvata: può agire come firestore-audit o cambiarne i permessi")
 if not risky:
-    ok("nessuna identità non approvata con privilegi pericolosi, a parte te")
+    ok("nessuna identità con privilegi pericolosi che potrebbe ottenere, tramite l'account di audit, "
+       "permessi che non ha già" + (f" ({equivalent} con privilegi equivalenti o superiori: AVVISO)" if equivalent else ""))
 
 # --- 7. Chiavi -------------------------------------------------------------------------------
 title("7. Chiavi dell'account")
@@ -561,8 +593,13 @@ for email in approved_sas:
     if st != "ok":
         incomplete(f"chiavi dell'account approvato {email} non leggibili ({reason(f'keys_{safe(email)}.json')})")
     elif load(f"keys_{safe(email)}.json", []):
-        incomplete(f"l'account approvato {email} ha privilegi pericolosi e chiavi create a mano: chi possiede "
-                   "una chiave può agire come lui, e questo non è verificabile")
+        if already_has_audit_access(f"serviceAccount:{email}"):
+            warn(f"l'account {email} ha chiavi create a mano: chi le possiede agisce come lui, che ha già "
+                 "privilegi equivalenti o superiori all'account di audit (rischio di sicurezza generale "
+                 "del progetto, non della sola lettura dell'audit)")
+        else:
+            incomplete(f"l'account approvato {email} ha privilegi pericolosi e chiavi create a mano: chi possiede "
+                       "una chiave può agire come lui, e questo non è verificabile")
     else:
         ok(f"{email} (approvato, con privilegi pericolosi): nessuna chiave creata a mano")
 
@@ -570,7 +607,7 @@ for email in approved_sas:
 title("9. Permessi su singole risorse (Cloud Asset Inventory)")
 require("services.json", "elenco delle API attive")
 scope = asset_scope()
-asset_needed = FINAL or sa is not None
+asset_needed = FINAL  # nella verifica preliminare la sua assenza è solo informativa
 asset_ok = False
 if CLOUDASSET not in services:
     msg = (f"{CLOUDASSET} NON attiva: non posso cercare i permessi concessi su singole risorse (bucket, "

@@ -559,6 +559,68 @@ describe('01-verifica.sh --finale', () => {
     }
   });
 
+  test('privilegi EQUIVALENTI O SUPERIORI (ha già tutti i permessi dell\'audit) → AVVISO con rischio documentato, non bloccante', () => {
+    const REAL = { roles: {
+      'roles/owner': [...ROLE_DB['roles/owner'], ...ROLE_PERMS],
+      'roles/editor': [...ROLE_DB['roles/editor'], ...ROLE_PERMS],
+      'roles/firebase.sdkAdminServiceAgent': ['datastore.entities.update', ...ROLE_PERMS],
+    } };
+    const adm = `firebase-adminsdk-abcde@${P}.iam.gserviceaccount.com`;
+    let s = addBinding(configured(), { role: 'roles/owner', members: [OTHER] });
+    s = addBinding(s, { role: 'roles/editor', members: ['serviceAccount:123@cloudservices.gserviceaccount.com'] });
+    s = addBinding(s, { role: 'roles/firebase.sdkAdminServiceAgent', members: [`serviceAccount:${adm}`] });
+    s = addBinding(s, { role: 'roles/iam.serviceAccountTokenCreator', members: [`serviceAccount:${adm}`] });
+    s.sa_list.push({ email: adm });
+    // L'agente del progetto di base ha solo Token Creator (nessun permesso di lettura): resta da approvare.
+    // Owner, Editor e firebase-adminsdk hanno già i permessi di lettura: nessuna approvazione necessaria.
+    for (const r of [finale(scenario(s, { ...REAL, approvate: [AGENT] })), run(scenario(s, { ...REAL, approvate: [AGENT] }), '01-verifica.sh')]) {
+      assert.equal(r.code, 0, r.out);
+      assert.match(r.out, /AVVISO +progetto: altro utente — roles\/owner .*ha GIÀ privilegi equivalenti o superiori/);
+      assert.match(r.out, /AVVISO +progetto: agente Google del progetto \(123@cloudservices\.gserviceaccount\.com\) — roles\/editor .*equivalenti o superiori/);
+      assert.ok(r.out.includes(`AVVISO   progetto: account di servizio del progetto (${adm}) — roles/iam.serviceAccountTokenCreator`), r.out);
+      assert.match(r.out, /Rischio residuo: potrebbe modificare account o ruolo; lo rilevano le verifiche prima di ogni audit/);
+      assert.doesNotMatch(r.out, /identità non approvata/);
+      assertNoPersonalData(r.out);
+    }
+    // chiavi create a mano su un account approvato con privilegi equivalenti: AVVISO, non INCOMPLETO
+    const r2 = finale(scenario({ ...s, saKeys: { [adm]: [{ name: 'k1' }] } }, { ...REAL, approvate: [AGENT, `serviceAccount:${adm}`] }));
+    assert.equal(r2.code, 0, r2.out);
+    assert.match(r2.out, /AVVISO +l'account firebase-adminsdk-abcde@.* ha chiavi create a mano: chi le possiede agisce come lui, che ha già privilegi equivalenti/);
+  });
+
+  test('privilegi NON equivalenti (impersonazione senza i permessi di lettura dell\'audit) → resta PROBLEMA', () => {
+    for (const role of ['roles/iam.serviceAccountTokenCreator', 'roles/iam.roleAdmin', 'roles/iam.serviceAccountKeyAdmin']) {
+      const r = finale(scenario(addBinding(configured(), { role, members: [OTHER] }), { approvate: [] }));
+      assert.equal(r.code, 1, `${role}: ${r.out}`);
+      assert.ok(r.out.includes(`PROBLEMA progetto: altro utente — ${role}`), r.out);
+    }
+    // permessi di lettura concessi solo con una condizione: non contano come "già posseduti"
+    let s = addBinding(configured(), { role: 'roles/iam.serviceAccountTokenCreator', members: [OTHER] });
+    s = addBinding(s, { role: 'roles/datastore.viewer', members: [OTHER], condition: { title: 'orario', expression: 'request.time < timestamp("2030-01-01T00:00:00Z")' } });
+    const r = finale(scenario(s, { roles: { 'roles/datastore.viewer': ROLE_PERMS }, approvate: [] }));
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /PROBLEMA progetto: altro utente — roles\/iam\.serviceAccountTokenCreator .*identità non approvata/);
+    // membro pubblico con privilegi pericolosi: sempre PROBLEMA, anche se avesse ogni permesso
+    const r3 = finale(scenario(addBinding(configured(), { role: 'roles/owner', members: ['allUsers'] }),
+      { roles: { 'roles/owner': [...ROLE_DB['roles/owner'], ...ROLE_PERMS] }, approvate: [] }));
+    assert.equal(r3.code, 1, r3.out);
+    assert.match(r3.out, /PROBLEMA progetto: allUsers \(PUBBLICO\) — roles\/owner/);
+  });
+
+  test('restano BLOCCANTI i privilegi in più assegnati all\'account di audit', () => {
+    const REAL = { roles: { 'roles/owner': [...ROLE_DB['roles/owner'], ...ROLE_PERMS] } };
+    for (const role of ['roles/datastore.viewer', 'roles/datastore.user', 'roles/owner', 'roles/iam.serviceAccountTokenCreator']) {
+      const r = finale(scenario(addBinding(configured(), { role, members: [`serviceAccount:${SA}`] }), REAL));
+      assert.equal(r.code, 1, `${role}: ${r.out}`);
+      assert.ok(r.out.includes(`PROBLEMA progetto: ruolo NON previsto ${role}`), r.out);
+    }
+    const s = configured();
+    s.custom_role = customRole([...ROLE_PERMS, 'datastore.entities.update']);
+    const r = finale(scenario(s));
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /PROBLEMA in più, di scrittura: datastore\.entities\.update/);
+  });
+
   test('FALSO PASS 7: utente approvato con roles/owner → INCOMPLETO, mai PASS (l\'approvazione non lo rende sicuro)', () => {
     const r = finale(scenario(addBinding(configured(), { role: 'roles/owner', members: [OTHER] }), { approvate: [AGENT, OTHER] }));
     assert.equal(r.code, 3, r.out);
@@ -726,7 +788,7 @@ describe('01-verifica.sh: singole risorse, altri account, Cloud Asset (V1)', () 
 
   test('FALSO PASS: Cloud Asset API disattivata → INCOMPLETO, nessuna ricerca, nessuna attivazione', () => {
     const s = withoutServices(configured(), 'cloudasset.googleapis.com');
-    for (const r of [finale(scenario(s, { prompts: ['asset'] })), run(scenario(s), '01-verifica.sh', 'y\ny\n')]) {
+    for (const r of [finale(scenario(s, { prompts: ['asset'] })), finale(scenario(s, { prompts: ['services'] }))]) {
       assert.equal(r.code, 3, r.out);
       assert.match(r.out, /INCOMPLETO cloudasset\.googleapis\.com NON attiva: .*Non viene attivata da questi script/);
       assert.match(r.out, /Esito: INCOMPLETO/);
@@ -734,10 +796,14 @@ describe('01-verifica.sh: singole risorse, altri account, Cloud Asset (V1)', () 
       assert.ok(!r.calls.some((c) => /^services enable|da prompt/.test(c)));
       assertReadOnly(r.calls);
     }
-    // prima della creazione dell'account la ricerca non è ancora indispensabile
-    const r = run(scenario(withoutServices(before(), 'cloudasset.googleapis.com')), '01-verifica.sh');
-    assert.equal(r.code, 0, r.out);
-    assert.match(r.out, /INFO +cloudasset\.googleapis\.com NON attiva.*servirà per la verifica finale/);
+    // verifica preliminare: Cloud Asset facoltativa, solo informativa (anche con l'account già creato)
+    for (const st of [before(), configured()]) {
+      const r = run(scenario(withoutServices(st, 'cloudasset.googleapis.com')), '01-verifica.sh', 'y\ny\n');
+      assert.equal(r.code, 0, r.out);
+      assert.match(r.out, /INFO +cloudasset\.googleapis\.com NON attiva.*servirà per la verifica finale/);
+      assert.deepEqual(assetCalls(r), []);
+      assert.ok(!r.calls.some((c) => /^services enable|da prompt/.test(c)));
+    }
   });
 
   test('ricerca Cloud Asset negata (permessi insufficienti) → INCOMPLETO, mai "nessun permesso"', () => {
@@ -934,13 +1000,27 @@ describe('02-configura.sh', () => {
     }
   });
 
-  test('Cloud Asset API disattivata → si ferma prima della conferma e di ogni modifica (uscita 3), nessuna attivazione', () => {
-    const r = run(scenario(withoutServices(before(), 'cloudasset.googleapis.com'), { after: configured() }), '02-configura.sh', CONFIRM);
+  test('Cloud Asset API spenta → facoltativa: nessuna attivazione, configurazione applicata, verifica finale INCOMPLETA (uscita 3)', () => {
+    const r = run(scenario(withoutServices(before(), 'cloudasset.googleapis.com'),
+      { after: withoutServices(configured(), 'cloudasset.googleapis.com') }), '02-configura.sh', CONFIRM);
     assert.equal(r.code, 3, r.out);
-    assert.match(r.out, /cloudasset\.googleapis\.com: serve a 01-verifica\.sh per cercare/);
-    assert.match(r.out, /gcloud services enable cloudasset\.googleapis\.com --project=nexus-social-e3eee/);
-    assert.doesNotMatch(r.out, /Per confermare/);
-    assert.deepEqual(modifications(r.calls), []);
+    assert.match(r.out, /spenta: cloudasset\.googleapis\.com \(facoltativa, non viene attivata/);
+    assert.match(r.out, /API da attivare: +nessuna \(cloudasset spenta: facoltativa, mai attivata/);
+    assert.match(r.out, /INCOMPLETO cloudasset\.googleapis\.com NON attiva/);
+    assert.match(r.out, /CONFIGURAZIONE APPLICATA, VERIFICA FINALE INCOMPLETA/);
+    assert.doesNotMatch(r.out, /Configurazione verificata\.|Esecuzione interrotta/);
+    assert.equal(modifications(r.calls).length, 4);
+    assert.ok(!r.calls.some((c) => /^services enable|^asset /.test(c)));
+  });
+
+  test('API obbligatorie spente (iamcredentials o cloudresourcemanager) → si ferma prima di ogni modifica (uscita 3)', () => {
+    for (const api of ['iamcredentials.googleapis.com', 'cloudresourcemanager.googleapis.com']) {
+      const r = run(scenario(withoutServices(before(), api), { after: configured() }), '02-configura.sh', CONFIRM);
+      assert.equal(r.code, 3, `${api}: ${r.out}`);
+      assert.ok(r.out.includes(`gcloud services enable ${api} --project=nexus-social-e3eee`), r.out);
+      assert.doesNotMatch(r.out, /Per confermare/);
+      assert.deepEqual(modifications(r.calls), []);
+    }
   });
 
   test('conferma corretta → esattamente 4 modifiche nell\'ordine previsto, nessuna chiave, verifica finale rigorosa superata', () => {

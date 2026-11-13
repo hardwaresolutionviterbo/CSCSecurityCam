@@ -64,9 +64,25 @@ Sono pericolosi comunque, anche senza leggerne i permessi, tra gli altri: `roles
 `roles/iam.roleAdmin`, `roles/iam.denyAdmin`, `roles/orgpolicy.policyAdmin`,
 `roles/deploymentmanager.editor`, `roles/resourcemanager.projectIamAdmin`, `roles/firebase.admin`.
 
-Chiunque abbia un ruolo pericoloso, a parte te, è un **PROBLEMA**, salvo che tu lo abbia approvato.
-Anche un **membro eliminato** (`deleted:`) con un ruolo pericoloso è un PROBLEMA: se venisse
-ripristinato riotterrebbe i privilegi.
+Per chi ha un ruolo pericoloso, a parte te, conta **se ha già i permessi dell'account di audit**:
+
+- **privilegi equivalenti o superiori: AVVISO, non bloccante.** Vale se, con binding senza
+  condizioni nel progetto o sopra, ha già tutti e 3 i permessi di lettura dell'audit. Esempi tipici:
+  Owner, Editor, l'account `firebase-adminsdk-…` creato da Firebase. Impersonando l'account di
+  audit non ottiene nulla in più.
+  **Rischio residuo documentato:** potrebbe modificare l'account o il ruolo personalizzato. Lo
+  rilevano `01-verifica.sh` (definizione esatta), `03-prova-impersonazione.sh` e il controllo dei
+  permessi che l'audit fa prima di ogni lettura. Se un account così ha chiavi create a mano è un
+  AVVISO: rischio di sicurezza del progetto, non della sola lettura dell'audit.
+- **privilegi NON equivalenti: PROBLEMA**, salvo approvazione. Esempio: Token Creator senza permessi
+  di lettura su Firestore. Impersonando l'account di audit otterrebbe una lettura che non ha.
+- **membri pubblici** (`allUsers`, `allAuthenticatedUsers`): sempre PROBLEMA.
+- **membro eliminato** (`deleted:`) senza privilegi equivalenti: PROBLEMA, perché se venisse
+  ripristinato riotterrebbe i privilegi.
+
+Restano sempre **bloccanti** i privilegi assegnati all'account di audit stesso: qualsiasi ruolo
+diverso da `firestoreAuditReader`, una definizione del ruolo diversa dai 3 permessi, permessi su
+altri account di servizio o su singole risorse.
 
 ### Gruppi, domini e identità federate
 
@@ -112,16 +128,17 @@ Le approvazioni non valgono mai sull'account di audit: lì è ammesso solo Token
    progetto se non ha organizzazione. Ogni permesso dell'account di audit su una risorsa (bucket,
    secret, account di altri progetti, altri progetti dell'organizzazione) è un PROBLEMA.
 
-L'esito è **INCOMPLETO** (`CODICE: 3`), mai positivo, se:
+Cloud Asset è **facoltativa** in questa fase: gli script non la attivano mai.
 
-- l'API Cloud Asset non è attiva (gli script non la attivano e non modificano IAM per aggirare il
-  problema: l'attivazione è una tua decisione separata, con
-  `gcloud services enable cloudasset.googleapis.com --project=nexus-social-e3eee`);
+L'esito della verifica finale è **INCOMPLETO** (`CODICE: 3`), mai positivo, se:
+
+- l'API Cloud Asset non è attiva. L'attivazione è una tua decisione separata, con
+  `gcloud services enable cloudasset.googleapis.com --project=nexus-social-e3eee`;
 - la ricerca non riesce (per esempio permessi di ricerca insufficienti sull'organizzazione);
 - il progetto ha una cartella ma l'organizzazione non compare nella gerarchia letta;
 - il criterio di un altro account di servizio del progetto non è leggibile.
 
-Prima che l'account di audit esista (verifica preliminare) l'API spenta è solo un'INFO.
+Nella verifica preliminare l'API spenta è solo un'INFO, anche se l'account esiste già.
 
 La ricerca **non** copre: progetti fuori dalla gerarchia (per esempio altri tuoi progetti senza
 organizzazione), risorse o tipi non indicizzati da Cloud Asset e modifiche degli ultimi minuti
@@ -181,11 +198,12 @@ Solo dopo un passo 1 senza PROBLEMA:
 bash 02-configura.sh; echo "CODICE: $?"
 ```
 
-1. Controlla che `iamcredentials.googleapis.com`, `cloudresourcemanager.googleapis.com` e
-   `cloudasset.googleapis.com` siano attive. **Non le attiva**: se ne manca una si ferma con
-   `CODICE: 3`, prima di qualsiasi modifica, spiega a cosa serve e indica il comando da eseguire a
-   parte, solo dopo una tua autorizzazione separata. Senza Cloud Asset la verifica finale sarebbe
-   INCOMPLETA dopo aver già modificato IAM: per questo si ferma prima.
+1. Controlla che `iamcredentials.googleapis.com` e `cloudresourcemanager.googleapis.com` siano
+   attive. **Non le attiva**: se ne manca una si ferma con `CODICE: 3`, prima di qualsiasi
+   modifica, spiega a cosa serve e indica il comando da eseguire a parte, solo dopo una tua
+   autorizzazione separata. `cloudasset.googleapis.com` è facoltativa: se è spenta la
+   configurazione procede, ma la verifica finale risulta INCOMPLETA (`CODICE: 3`, messaggio
+   "CONFIGURAZIONE APPLICATA, VERIFICA FINALE INCOMPLETA").
 2. Ripete la verifica preliminare.
 3. Mostra il riepilogo: progetto, il tuo account (mascherato, per esempio `ma•••@gmail.com`),
    l'account di servizio e il ruolo (da creare o già esistenti), i 3 permessi, i 2 binding che
@@ -233,9 +251,9 @@ Esce con codice 0 **solo se** valgono tutte queste condizioni:
 - l'account ha esattamente quel ruolo sul progetto, senza condizioni, e nessun altro ruolo nel
   progetto, nelle cartelle o nell'organizzazione;
 - sull'account c'è solo Token Creator per te, senza condizioni;
-- nessun'altra identità, nel progetto o sopra, ha privilegi pericolosi, salvo quelle approvate
-  (che a loro volta superano i controlli descritti sopra); nessun membro eliminato con privilegi
-  pericolosi;
+- nessun'altra identità, nel progetto o sopra, ha privilegi pericolosi **senza** avere già
+  privilegi equivalenti o superiori, salvo quelle approvate (che a loro volta superano i controlli
+  descritti sopra). Quelle con privilegi equivalenti o superiori sono AVVISO;
 - nessuna voce non approvabile nel file delle approvazioni;
 - nessun gruppo, dominio o identità federata con ruoli nel progetto, sopra o su singole risorse;
 - nessun permesso dell'account di audit su altri account di servizio o su singole risorse

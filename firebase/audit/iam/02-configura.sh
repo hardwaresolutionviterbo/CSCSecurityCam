@@ -12,12 +12,15 @@
 #   2. crea firestore-audit, se non esiste;
 #   3. gli assegna il ruolo personalizzato sul progetto, senza condizioni;
 #   4. permette SOLO al tuo account di impersonarlo (Token Creator sull'account, non sul progetto).
-# Non attiva API (comprese iamcredentials, cloudresourcemanager e cloudasset): se mancano si
-# ferma prima di qualsiasi modifica e spiega. Non crea chiavi, non tocca altri account o ruoli,
-# non legge né modifica dati Firestore, non fa rollback automatici.
+# Non attiva API: se iamcredentials o cloudresourcemanager mancano si ferma prima di qualsiasi
+# modifica e spiega. Cloud Asset (cloudasset) NON è obbligatoria: se è spenta la configurazione
+# procede, ma la verifica finale risulta INCOMPLETA (permessi su singole risorse non controllati).
+# Non crea chiavi, non tocca altri account o ruoli, non legge né modifica dati Firestore, non fa
+# rollback automatici.
 #
 # Uso (Google Cloud Shell):  bash 02-configura.sh
 # Uscita: 0 configurato e verificato · 1 fermato o non verificato · 3 API da autorizzare a parte
+#         (nessuna modifica) oppure configurato ma verifica finale INCOMPLETA
 
 set -Eeuo pipefail
 # Nessuna domanda interattiva di gcloud: l'unica conferma è quella esplicita qui sotto.
@@ -38,6 +41,7 @@ export APPROVATI_FILE="${APPROVATI_FILE:-$HERE/identita-approvate.txt}"
 TMP="$(mktemp -d)"
 chmod 700 "$TMP"
 CONFERMATO=0
+SOLO_VERIFICA_INCOMPLETA=0   # 1: tutte le modifiche riuscite, verifica finale INCOMPLETA
 FATTI=()          # operazioni completate
 IN_CORSO=""       # operazione in corso
 DA_FARE=()        # operazioni previste e non ancora iniziate
@@ -63,7 +67,7 @@ resoconto() {
 fine() {
   local rc=$?
   rm -rf "$TMP"
-  if ((rc != 0 && CONFERMATO)); then resoconto; fi
+  if ((rc != 0 && CONFERMATO && ! SOLO_VERIFICA_INCOMPLETA)); then resoconto; fi
   exit "$rc"
 }
 trap fine EXIT
@@ -102,9 +106,16 @@ ME_VISIBILE="${ME_LOCALE:0:2}•••@${ME#*@}"   # mai l'email intera sullo sc
 echo "== API necessarie (sola lettura)"
 enabled="$(gc services list --enabled --project="$PROJECT" --format="value(config.name)")"
 mancanti=()
-for api in iamcredentials.googleapis.com cloudresourcemanager.googleapis.com cloudasset.googleapis.com; do
+for api in iamcredentials.googleapis.com cloudresourcemanager.googleapis.com; do
   if grep -qx "$api" <<<"$enabled"; then echo "  attiva: $api"; else mancanti+=("$api"); fi
 done
+if grep -qx "cloudasset.googleapis.com" <<<"$enabled"; then
+  ASSET="attiva"
+  echo "  attiva: cloudasset.googleapis.com (facoltativa)"
+else
+  ASSET="spenta"
+  echo "  spenta: cloudasset.googleapis.com (facoltativa, non viene attivata: la verifica finale sarà INCOMPLETA)"
+fi
 if ((${#mancanti[@]})); then
   echo
   echo "Mi fermo: queste API sono disattivate e lo script NON le attiva da solo."
@@ -116,10 +127,6 @@ if ((${#mancanti[@]})); then
       cloudresourcemanager.googleapis.com)
         echo "  - $api: serve per leggere i criteri IAM del progetto e controllare i permessi"
         echo "    effettivi dell'account (01-verifica.sh e 03-prova-impersonazione.sh).";;
-      cloudasset.googleapis.com)
-        echo "  - $api: serve a 01-verifica.sh per cercare, in sola lettura, i permessi concessi"
-        echo "    su singole risorse (bucket, secret, altri account). Senza, la verifica finale"
-        echo "    risulterebbe INCOMPLETA dopo aver già modificato IAM: per questo mi fermo prima.";;
     esac
   done
   echo "Se e quando le autorizzi, il comando da eseguire a parte è:"
@@ -169,7 +176,7 @@ echo "    permessi, esattamente: ${ROLE_PERMISSIONS//,/, }"
 echo "  Binding IAM da aggiungere (se ci sono già, nessun doppione):"
 echo "    1. progetto ${PROJECT}: serviceAccount:${SA} → ${ROLE}, senza condizioni"
 echo "    2. account ${SA}: user:${ME_VISIBILE} → ${TOKEN_CREATOR}, senza condizioni"
-echo "  API da attivare:       nessuna (iamcredentials, cloudresourcemanager e cloudasset sono già attive)"
+echo "  API da attivare:       nessuna (cloudasset ${ASSET}: facoltativa, mai attivata da questo script)"
 echo "  Non verranno creati chiavi né assegnati altri ruoli; nessun dato Firestore viene letto."
 echo
 printf 'Per confermare scrivi esattamente il nome del progetto (%s): ' "$PROJECT"
@@ -252,9 +259,19 @@ fatto "binding sull'account: user:${ME_VISIBILE} → ${TOKEN_CREATOR}"
 echo
 echo "== Verifica finale (sola lettura, modalità rigorosa)"
 IN_CORSO="verifica finale (01-verifica.sh --finale)"
-if ! bash "$HERE/01-verifica.sh" --finale; then
+finale=0
+bash "$HERE/01-verifica.sh" --finale || finale=$?
+if ((finale == 3)); then
+  IN_CORSO=""
+  SOLO_VERIFICA_INCOMPLETA=1
   echo
-  echo "CONFIGURAZIONE NON VERIFICATA: la verifica finale ha trovato problemi, è INCOMPLETA o non è riuscita."
+  echo "CONFIGURAZIONE APPLICATA, VERIFICA FINALE INCOMPLETA: nessun problema trovato, ma alcuni"
+  echo "elementi non sono verificabili (per esempio Cloud Asset spenta: permessi su singole risorse"
+  echo "non controllati). Non è un esito positivo: leggi le righe INCOMPLETO qui sopra."
+  exit 3
+elif ((finale != 0)); then
+  echo
+  echo "CONFIGURAZIONE NON VERIFICATA: la verifica finale ha trovato problemi o non è riuscita."
   echo "Non eseguire l'audit. Se hai appena creato l'account, riprova 01-verifica.sh --finale tra qualche minuto."
   exit 1
 fi

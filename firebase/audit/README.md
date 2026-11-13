@@ -100,8 +100,8 @@ Ruolo, account, autorizzazioni e verifiche si preparano con gli script di
    3 (INCOMPLETO: qualcosa non è verificabile, per esempio Cloud Asset non attiva o un gruppo con
    un ruolo). Solo 0 è un esito positivo;
 2. `bash 02-configura.sh`: modifica IAM, solo dopo una verifica senza problemi, un riepilogo e la
-   tua conferma; non attiva API (si ferma prima di modificare se manca anche `cloudasset`) e
-   termina con la verifica finale rigorosa;
+   tua conferma; non attiva API (Cloud Asset è facoltativa: se è spenta la verifica finale è
+   INCOMPLETA) e termina con la verifica finale rigorosa;
 3. `bash 03-prova-impersonazione.sh`: permessi effettivi su **tutti** i permessi verificabili
    del progetto; deve risultare che l'account ha esattamente i 3 permessi previsti.
 
