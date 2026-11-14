@@ -74,6 +74,19 @@ Authentication.
 | D2 | Posizione degli annunci: rispettata la modalità scelta per ciascun annuncio (P9) | Vedi sezione 3-bis |
 | D3 | Le segnalazioni di un utente non sono leggibili da altri utenti | Verificato |
 
+**E · Nessun accesso amministrativo per percorsi alternativi (regola F10)**
+
+| N. | Caso | Esito atteso |
+|---|---|---|
+| E1 | Un utente normale si inserisce nella tabella degli admin | Rifiutato |
+| E2 | Un utente normale legge l'elenco degli admin | Vede al massimo sé stesso; nessun altro admin |
+| E3 | Un utente normale crea o modifica sanzioni (sospensioni, ban) per sé o per altri | Rifiutato |
+| E4 | Un utente normale legge o gestisce le segnalazioni di altri | Rifiutato |
+| E5 | Un utente normale modifica campi protetti di profili o annunci altrui sfruttando l'eccezione prevista per gli admin | Rifiutato; dati invariati |
+| E6 | Token di prova con ruoli falsificati (`admin`, `service_role`, `supabase_admin`) o permessi aggiuntivi | Nessun privilegio: rifiutato o trattato come utente normale |
+| E7 | Chiave pubblica (`anon`) senza token | Nessun accesso a tabelle e funzioni amministrative |
+| E8 | Funzioni del database con permessi elevati (`security definer`), chiamate da un utente normale | Non consentono azioni da admin né la lettura di dati riservati |
+
 ## 3-bis. Posizione degli annunci (decisione P9)
 
 P9:
@@ -102,7 +115,7 @@ Note:
 
 ## 4. Criterio di superamento
 
-- Tutti i casi A, B, C, D e D2.1-D2.8 superati in GitHub Actions.
+- Tutti i casi A, B, C, D, D2.1-D2.8 ed E1-E8 superati in GitHub Actions.
 - Se anche un solo caso fallisce, il passaggio 1.7 non è concluso e la migrazione non viene
   proposta per il database reale.
 - L'applicazione al database reale resta comunque soggetta all'autorizzazione esplicita del

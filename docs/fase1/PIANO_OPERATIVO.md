@@ -125,7 +125,7 @@ Ogni APK prodotto riporta **versione, numero di build, commit e ramo** in tre pu
 | F7 | Riga Informazioni: versione, fase, privacy | Test di interfaccia sul Profilo (unito alla verifica di R1) | Compaiono «Versione» (con build, commit e ramo), «Fase» e «Privacy: Posizione approssimata» |
 | F8 | **Registrazione del dispositivo per le notifiche push** | Test della logica di `PushDeviceRegistry` con Firebase simulato, più i test esistenti delle regole Firestore sui dispositivi (emulatore) | Vedi «Dettaglio F8» |
 | F9 | **Avvio dell'app senza chiavi** | Test che avvia `BackendBootstrap` e l'app senza nessuna chiave (`--dart-define` assenti), più il test esistente «senza dart-define i servizi restano spenti» | Nessun errore o crash; Supabase e Firebase risultano «Non configurato»; la barra e tutte e 5 le schede funzionano; la registrazione push non parte |
-| F10 | **Anteprima del gestionale admin** | Test di interfaccia che apre `AdminScreen` | Mostra l'anteprima «Gestionale Admin» senza azioni attive; resta **non raggiungibile** dalla barra e dal Profilo, come oggi (il gestionale arriva in Fase 7) |
+| F10 | **Anteprima del gestionale admin** | Test di interfaccia che apre `AdminScreen`, più i controlli sui percorsi alternativi | Vedi «Dettaglio F10» |
 
 **Dettaglio F8 · Registrazione del dispositivo push**
 
@@ -142,6 +142,46 @@ Per F8 serve poter sostituire Firebase con una versione simulata nei test.
 
 - Se oggi il codice non lo permette, si fa una modifica minima, **senza cambiare il comportamento**.
 - La modifica è dichiarata nel commit e coperta dai test qui sopra.
+
+**Isolamento di F8 (vincolante): i test non si collegano mai a Firebase reale e non vi scrivono
+mai.**
+
+| Misura | Criterio di superamento |
+|---|---|
+| Test della logica (Flutter) solo con oggetti simulati in memoria: utente, identificativo del dispositivo, database | Nessuna inizializzazione di Firebase reale nei test; nessuna connessione di rete |
+| Test delle regole solo sull'**emulatore locale** di Firestore, con il progetto fittizio `demo-nexus-social` (già usato oggi) | Il prefisso `demo-` impedisce all'emulatore di raggiungere servizi reali; nessun altro identificativo di progetto ammesso |
+| I job di test non ricevono i Secrets di Firebase (`GOOGLE_SERVICES_JSON` o altri) né `google-services.json` | Un controllo nel job verifica che le chiavi siano assenti; se ne trova una, il test si ferma con errore |
+| Blocco di rete nei test Flutter: qualunque tentativo di connessione esterna fa fallire il test | Zero connessioni uscenti durante i test |
+| Le chiavi reali servono solo al job che compila l'APK, separato dai test | Verificato nella configurazione della build |
+
+Lo script `firebase/verify_android_runtime.sh` usa invece Firebase reale.
+
+- Non fa parte dei test automatici e non viene eseguito da me.
+- Il titolare può usarlo sul telefono, solo per sua scelta.
+
+**Dettaglio F10 · Anteprima admin e accessi privilegiati**
+
+La verifica copre la schermata e **qualunque percorso alternativo** per eseguire azioni
+amministrative o ottenere accessi privilegiati.
+
+*Nell'app:*
+
+| Caso | Criterio di superamento |
+|---|---|
+| Anteprima | `AdminScreen` mostra solo «Gestionale Admin» in anteprima, senza pulsanti o azioni attive |
+| Barra e Profilo | Nessuna voce porta all'anteprima admin |
+| Altri punti dell'app | Un controllo automatico sul codice verifica che `AdminScreen` non sia aperta da nessun altro punto (rotte, menu, gesti nascosti, notifiche) |
+| Link esterni all'app (deep link) | Un controllo sull'APK prodotto verifica che il manifesto Android abbia solo l'avvio normale (`MAIN`/`LAUNCHER`) e nessun link che apra schermate interne |
+| Notifiche push | L'apertura di una notifica non può portare all'anteprima admin |
+| Chiavi privilegiate | Un controllo sull'APK verifica che non contenga la chiave `service_role` di Supabase né altre credenziali amministrative |
+
+*Sui server (database temporaneo ed emulatore, mai servizi reali):*
+
+| Caso | Criterio di superamento |
+|---|---|
+| Supabase: un utente normale tenta di diventare admin, di moderare, di gestire segnalazioni o di modificare dati altrui sfruttando le eccezioni previste per gli admin | Tutto rifiutato: casi E1-E8 di `TEST_SUPABASE_RLS.md` |
+| Token con ruoli o permessi falsificati (`admin`, `service_role`) | Rifiutati o trattati come utente normale |
+| Firestore: un utente si nomina admin o owner di una chat altrui, o si aggiunge da solo a un gruppo | Rifiutato: test esistenti delle regole, più eventuali nuovi |
 
 Resta anche la verifica già presente nel repository `firebase/verify_android_runtime.sh`, che il
 titolare può usare sul telefono reale.
