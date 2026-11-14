@@ -1,8 +1,9 @@
 # Fase 1 · Checklist finale (passaggio 1.10)
 
 Stato al 14 novembre 2026:
-- tutti i passaggi 1.1-1.10 sono completati sui rami di lavoro;
-- **`main` invariato a `5e32045`**: il merge richiede l'autorizzazione esplicita del titolare;
+- **Fase 1 completata**: tutti i passaggi 1.1-1.10 sono fatti;
+- Blocco 3 approvato dal titolare;
+- **`main` portato a `7bfc835`** su autorizzazione del titolare, con un avanzamento diretto;
 - **lo schema Supabase 0002 non è applicato al database reale**: anche questo richiede
   l'autorizzazione esplicita.
 
@@ -12,7 +13,7 @@ Rami (ognuno contiene il precedente):
 |---|---|---|
 | `fase1/blocco1` | 1.1 documentazione, 1.2 APK identificabile | Approvato (14/11/2026) |
 | `fase1/blocco2` | 1.3 test di non regressione, 1.4 barra A1 e apertura su Chat, 1.5 grafica | Approvato (14/11/2026) |
-| `fase1/blocco3` | 1.6 servizi verificati dai log, 1.7 schema 0002 e test Supabase, 1.8 regole Firestore, 1.9 Codemagic solo iPhone, 1.10 questa checklist | **In attesa di verifica** |
+| `fase1/blocco3` | 1.6 servizi verificati dai log, 1.7 schema 0002 e test Supabase, 1.8 regole Firestore, 1.9 Codemagic solo iPhone, 1.10 questa checklist | Approvato (14/11/2026); portato su `main` |
 
 ## 1. Requisiti del PDF (Fase 1)
 
@@ -57,7 +58,7 @@ Rami (ognuno contiene il precedente):
 
 ## 4. Punti aperti (decisioni del titolare)
 
-1. **Merge su `main`** dei rami della Fase 1.
+1. ~~Merge su `main` dei rami della Fase 1~~ — **fatto** il 14/11/2026 (`main` a `7bfc835`).
 2. **Applicazione dello schema 0002 al database Supabase reale.** Prima di applicarlo:
    - verificare in sola lettura se il database reale contiene già dati, perché lo schema
      converte gli identificativi;
@@ -80,3 +81,15 @@ Rami (ognuno contiene il precedente):
    Google la fa Supabase e non si può riprodurre senza token reali: sarà provata in Fase 2 con
    un account di prova (dettagli in `TEST_SUPABASE_RLS.md`).
 5. **Collegamento di Codemagic** al repository (F11), quando il titolare lo autorizza.
+6. **Tipo di account Azienda (regola M6).**
+   - **Oggi:** alla creazione del profilo un utente può indicare da solo il tipo «Azienda»
+     (`account_type = business`). Era così già nello schema `0001` e lo schema `0002` non lo
+     cambia: non è una regressione.
+   - **Regola da applicare:** la registrazione come Azienda deve essere accompagnata da
+     verifiche adeguate. Tra queste, il controllo della **maggiore età**: per la regola M6
+     Azienda e abbonamento sono solo per i maggiorenni.
+   - **Altre verifiche** (partita IVA, abbonamento, badge assegnato solo dall'admin) seguono il
+     PDF e le decisioni P4 e M6.
+   - **Quando:** il tipo Azienda va reso modificabile solo dal server dopo le verifiche. Da
+     progettare con la registrazione (Fase 2) e l'abbonamento Azienda (Fase 6), con i
+     relativi test.

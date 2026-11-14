@@ -11,7 +11,7 @@ Sviluppo a fasi: alla fine di ogni fase c'è qualcosa da installare e provare su
 | Fase | Contenuto | Stato |
 | --- | --- | --- |
 | 0 | Account, chiavi, grafica, costi, regole | **Completata** (14/11/2026): [`docs/FASE_0_CHECKLIST.md`](docs/FASE_0_CHECKLIST.md) |
-| 1 | Fondamenta tecniche: app installabile, servizi collegati, tema, navigazione | **In corso**: base già presente, completamento secondo [`docs/fase1/PIANO_OPERATIVO.md`](docs/fase1/PIANO_OPERATIVO.md) |
+| 1 | Fondamenta tecniche: app installabile, servizi collegati, tema, navigazione | **Fase 1 completata** (14/11/2026): [`docs/fase1/CHECKLIST.md`](docs/fase1/CHECKLIST.md). Punti aperti nella sezione 4 della checklist |
 | 2 | Account e profili (SMS, profilo, 2FA, blocchi) | Da iniziare |
 | 3 | Mappa Sociale 3D, annunci, raggio fino a 30 km | Da iniziare |
 | 4 | Chat cifrata, gruppi, chiamate, notifiche | Da iniziare |
@@ -30,16 +30,16 @@ Documenti da leggere insieme al piano:
 - corrispondenza tra le cartelle del codice e quelle del piano:
   [`docs/fase1/STRUTTURA_CARTELLE.md`](docs/fase1/STRUTTURA_CARTELLE.md).
 
-## Base già presente per la Fase 1
+## Cosa contiene la Fase 1 (completata)
 
-Questa base esiste già nel codice, ma **la Fase 1 non è conclusa**. Restano da fare:
-- la barra nell'ordine approvato e l'apertura su Chat;
-- lo stile grafico del mockup;
-- la separazione dei dati privati su Supabase;
-- la build per iPhone;
-- i test di non regressione e di sicurezza.
+**Fase 1 completata** il 14 novembre 2026: esito e prove in
+[`docs/fase1/CHECKLIST.md`](docs/fase1/CHECKLIST.md), piano in
+[`docs/fase1/PIANO_OPERATIVO.md`](docs/fase1/PIANO_OPERATIVO.md).
 
-Il dettaglio è in [`docs/fase1/PIANO_OPERATIVO.md`](docs/fase1/PIANO_OPERATIVO.md).
+Restano fuori, come decisioni del titolare elencate nei punti aperti della checklist:
+- l'applicazione dello schema Supabase `0002` al database reale;
+- il collegamento di Codemagic;
+- la questione del tipo di account Azienda (regola M6).
 
 - Progetto Flutter unico per Android e iPhone (`android/`, `ios/`).
 - Barra di navigazione in basso con **Mappa, Chat, Scambia, Vendita, Profilo** e campanella
