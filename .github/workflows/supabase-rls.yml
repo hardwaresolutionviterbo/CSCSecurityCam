@@ -74,3 +74,60 @@ jobs:
           export JWT_SECRET="$(read_env JWT_SECRET)"
           export DB_URL="$(read_env DB_URL)"
           python3 supabase/tests/rls_test.py
+
+  # Controprova: con un difetto introdotto apposta, i test devono accorgersene.
+  controprova:
+    name: Supabase · controprova (${{ matrix.difetto }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - difetto: dati_privati_aperti
+            caso: B1
+          - difetto: altro_progetto_accettato
+            caso: C4
+          - difetto: posizione_esatta_esposta
+            caso: D2.1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Database temporaneo con difetto di prova
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/supabase-controprova"
+          mkdir -p "${work}" && cd "${work}"
+          supabase init < /dev/null
+          mkdir -p supabase/migrations
+          cp "${GITHUB_WORKSPACE}/supabase/migrations/0001_init.sql" supabase/migrations/0001_init.sql
+          cp "${GITHUB_WORKSPACE}/supabase/proposte/0002_identita_firebase_e_dati_privati.sql" \
+            supabase/migrations/0002_identita_firebase_e_dati_privati.sql
+          cp "${GITHUB_WORKSPACE}/supabase/tests/controprove/${{ matrix.difetto }}.sql" \
+            supabase/migrations/0003_difetto_di_prova.sql
+          supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,realtime,mailpit
+          supabase status -o env > "${RUNNER_TEMP}/sb.env"
+          for k in API_URL ANON_KEY JWT_SECRET DB_URL SERVICE_ROLE_KEY; do
+            v=$(grep -E "^${k}=" "${RUNNER_TEMP}/sb.env" | head -1 | cut -d= -f2- | tr -d '"')
+            [ -n "${v}" ] && echo "::add-mask::${v}"
+          done
+          echo "Database con difetto di prova pronto."
+
+      - name: I test devono rilevare il difetto (${{ matrix.caso }})
+        env:
+          EXPECT_FAIL: ${{ matrix.caso }}
+        run: |
+          set -euo pipefail
+          read_env() { grep -E "^$1=" "${RUNNER_TEMP}/sb.env" | head -1 | cut -d= -f2- | tr -d '"'; }
+          export API_URL="$(read_env API_URL)"
+          export ANON_KEY="$(read_env ANON_KEY)"
+          export JWT_SECRET="$(read_env JWT_SECRET)"
+          export DB_URL="$(read_env DB_URL)"
+          python3 supabase/tests/rls_test.py

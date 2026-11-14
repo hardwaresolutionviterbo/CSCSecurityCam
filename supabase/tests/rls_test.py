@@ -370,6 +370,13 @@ def main() -> int:
     for case, desc, ok, detail in results:
         print(f"{case:6} {'superato' if ok else 'FALLITO':9} {desc}" + (f"  [{detail}]" if detail else ""))
     print(f"\n{len(results) - len(failed)} superati su {len(results)}")
+    expected = os.environ.get("EXPECT_FAIL")
+    if expected:
+        # Controprova: con un difetto introdotto apposta il caso indicato DEVE fallire.
+        caught = any(case == expected and not ok for case, _, ok, _ in results)
+        print(f"Controprova: il caso {expected} " + ("ha rilevato il difetto." if caught
+              else "NON ha rilevato il difetto."))
+        return 0 if caught else 1
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as fh:
