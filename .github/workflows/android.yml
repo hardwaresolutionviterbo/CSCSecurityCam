@@ -264,15 +264,40 @@ jobs:
           set -euo pipefail
           apk=build/app/outputs/flutter-apk/app-debug.apk
           aapt2=$(ls -d "${ANDROID_HOME}"/build-tools/*/ | sort -V | tail -1)aapt2
-          manifest=$("${aapt2}" dump xmltree --file AndroidManifest.xml "${apk}")
-          if printf '%s' "${manifest}" | grep -q 'android.intent.action.VIEW'; then
-            echo "::error::Il manifesto contiene link esterni (VIEW) verso l'app."
-            exit 1
-          fi
-          if printf '%s' "${manifest}" | grep -qE 'E: data'; then
-            echo "::error::Il manifesto dichiara schemi o indirizzi (deep link)."
-            exit 1
-          fi
+          "${aapt2}" dump xmltree --file AndroidManifest.xml "${apk}" > manifest.txt
+          python3 - manifest.txt <<'PY'
+          import re, sys
+          # Un deep link è un intent-filter di una schermata (activity) con azione VIEW o
+          # con un elemento <data>. Le <queries> delle librerie non aprono l'app: sono ammesse.
+          stack, problems, allowed = [], [], []
+          current_action = None
+          for line in open(sys.argv[1], encoding="utf-8", errors="replace"):
+              depth = len(line) - len(line.lstrip(" "))
+              text = line.strip()
+              while stack and stack[-1][0] >= depth:
+                  stack.pop()
+              if text.startswith("E: "):
+                  name = text[3:].split(" ")[0]
+                  stack.append((depth, name))
+                  path = [n for _, n in stack]
+                  in_screen = "intent-filter" in path and ("activity" in path or "activity-alias" in path)
+                  if name == "data" and in_screen:
+                      problems.append(" > ".join(path))
+              elif text.startswith("A: ") and 'android.intent.action.VIEW"' in text:
+                  path = " > ".join(n for _, n in stack)
+                  names = [n for _, n in stack]
+                  if "intent-filter" in names and ("activity" in names or "activity-alias" in names):
+                      problems.append(path + " (VIEW)")
+                  else:
+                      allowed.append(path)
+          for path in sorted(set(allowed)):
+              print(f"Ammesso (non apre l'app): {path}")
+          if problems:
+              for path in problems:
+                  print(f"::error::Deep link in una schermata dell'app: {path}")
+              sys.exit(1)
+          PY
+          rm -f manifest.txt
           echo "Manifesto: solo avvio normale, nessun deep link."
           python3 - "${apk}" <<'PY'
           import base64, json, re, sys, zipfile
