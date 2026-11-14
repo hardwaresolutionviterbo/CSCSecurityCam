@@ -1,0 +1,75 @@
+name: Supabase RLS
+
+# Test di sicurezza dello schema Supabase (regola R3) su un database TEMPORANEO creato qui
+# con la Supabase CLI. Nessun secret, nessun collegamento al progetto reale, nessun deploy.
+# La migrazione proposta (supabase/proposte/) viene copiata solo nel progetto temporaneo.
+on:
+  push:
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/supabase-rls.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rls-tests:
+    name: Supabase · test RLS su database temporaneo
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # La 0002 non deve finire nella cartella delle migrazioni applicabili senza autorizzazione.
+      - name: Migrazioni applicabili invariate
+        run: |
+          set -euo pipefail
+          found=$(ls supabase/migrations)
+          echo "Migrazioni applicabili: ${found}"
+          if [ "${found}" != "0001_init.sql" ]; then
+            echo "::error::supabase/migrations deve contenere solo 0001_init.sql finché il titolare non autorizza la 0002."
+            exit 1
+          fi
+
+      - name: Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Progetto temporaneo con 0001 e 0002
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/supabase-temporaneo"
+          mkdir -p "${work}"
+          cd "${work}"
+          supabase init < /dev/null
+          cp "${GITHUB_WORKSPACE}/supabase/migrations/0001_init.sql" supabase/migrations/0001_init.sql
+          cp "${GITHUB_WORKSPACE}/supabase/proposte/0002_identita_firebase_e_dati_privati.sql" \
+            supabase/migrations/0002_identita_firebase_e_dati_privati.sql
+          ls supabase/migrations
+          echo "SB_WORKDIR=${work}" >> "${GITHUB_ENV}"
+
+      - name: Avvia Supabase temporaneo e applica le migrazioni
+        run: |
+          set -euo pipefail
+          cd "${SB_WORKDIR}"
+          supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,realtime,mailpit
+          supabase status -o env > "${RUNNER_TEMP}/sb.env"
+          for k in API_URL ANON_KEY JWT_SECRET DB_URL SERVICE_ROLE_KEY; do
+            v=$(grep -E "^${k}=" "${RUNNER_TEMP}/sb.env" | head -1 | cut -d= -f2- | tr -d '"')
+            [ -n "${v}" ] && echo "::add-mask::${v}"
+          done
+          echo "Supabase temporaneo pronto."
+
+      - name: Test di sicurezza (A, B, C, D, D2, E)
+        run: |
+          set -euo pipefail
+          read_env() { grep -E "^$1=" "${RUNNER_TEMP}/sb.env" | head -1 | cut -d= -f2- | tr -d '"'; }
+          export API_URL="$(read_env API_URL)"
+          export ANON_KEY="$(read_env ANON_KEY)"
+          export JWT_SECRET="$(read_env JWT_SECRET)"
+          export DB_URL="$(read_env DB_URL)"
+          python3 supabase/tests/rls_test.py

@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""Test di sicurezza Supabase (regola R3, docs/fase1/TEST_SUPABASE_RLS.md).
+
+Gira SOLO contro il Supabase temporaneo avviato in GitHub Actions (supabase start).
+- Utenti e dati inventati.
+- Token di prova firmati con la chiave locale del database temporaneo, con le stesse
+  informazioni di un token Firebase (emittente, destinatario, soggetto, ruolo).
+- Nei log solo nome del caso ed esito: mai token, chiavi o contenuti.
+
+Variabili richieste: API_URL, ANON_KEY, JWT_SECRET, DB_URL (da `supabase status -o env`).
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
+API = os.environ["API_URL"].rstrip("/")
+ANON = os.environ["ANON_KEY"]
+SECRET = os.environ["JWT_SECRET"].encode()
+DB_URL = os.environ["DB_URL"]
+
+PROJECT = "demo-nexus-social"
+OTHER_PROJECT = "altro-progetto-firebase"
+UID_A = "utenteAprova0000000000000001"
+UID_B = "utenteBprova0000000000000002"
+UID_C = "utenteCprova0000000000000003"
+
+PUBLIC_PROFILE_KEYS = {
+    "id", "account_type", "username", "public_name", "avatar_url", "bio",
+    "social_links", "rating_avg", "rating_count", "created_at", "updated_at",
+}
+
+results: list[tuple[str, str, bool, str]] = []
+
+
+# ---------------------------------------------------------------- strumenti
+
+def b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def token(sub: str | None = UID_A, *, project: str = PROJECT, role: str = "authenticated",
+          iat_offset: int = -10, exp_offset: int = 3600, secret: bytes | None = None,
+          extra: dict | None = None) -> str:
+    now = int(time.time())
+    claims = {
+        "iss": f"https://securetoken.google.com/{project}",
+        "aud": project,
+        "role": role,
+        "iat": now + iat_offset,
+        "auth_time": now + iat_offset,
+        "exp": now + exp_offset,
+    }
+    if sub is not None:
+        claims["sub"] = sub
+        claims["user_id"] = sub
+    if extra:
+        claims.update(extra)
+    header = b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    payload = b64(json.dumps(claims).encode())
+    signing = f"{header}.{payload}".encode()
+    sig = b64(hmac.new(secret or SECRET, signing, hashlib.sha256).digest())
+    return f"{header}.{payload}.{sig}"
+
+
+def request(method: str, path: str, *, jwt: str | None = None, body=None,
+            prefer: str | None = None) -> tuple[int, object]:
+    headers = {"apikey": ANON, "Content-Type": "application/json"}
+    if jwt is not None:
+        headers["Authorization"] = f"Bearer {jwt}"
+    if prefer:
+        headers["Prefer"] = prefer
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(f"{API}{path}", data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read()
+            return resp.status, (json.loads(raw) if raw else None)
+    except urllib.error.HTTPError as err:
+        raw = err.read()
+        try:
+            return err.code, json.loads(raw) if raw else None
+        except ValueError:
+            return err.code, raw.decode(errors="replace")
+
+
+def get(path, jwt=None):
+    return request("GET", path, jwt=jwt)
+
+
+def rpc(name, args, jwt=None):
+    return request("POST", f"/rest/v1/rpc/{name}", jwt=jwt, body=args)
+
+
+def sql(statement: str) -> str:
+    out = subprocess.run(
+        ["psql", DB_URL, "-v", "ON_ERROR_STOP=1", "-At", "-c", statement],
+        check=True, capture_output=True, text=True,
+    )
+    return out.stdout.strip()
+
+
+def check(case: str, description: str, condition: bool, detail: str = "") -> None:
+    results.append((case, description, bool(condition), detail if not condition else ""))
+
+
+def rows(resp) -> list:
+    status, body = resp
+    return body if status == 200 and isinstance(body, list) else []
+
+
+def denied(resp) -> bool:
+    """Accesso negato: errore HTTP, oppure nessuna riga restituita o toccata."""
+    status, body = resp
+    if status >= 400:
+        return True
+    return isinstance(body, list) and len(body) == 0
+
+
+# ---------------------------------------------------------------- preparazione
+
+def setup() -> dict:
+    sql(
+        "insert into private.settings (key, value) values "
+        f"('firebase_project_id', '{PROJECT}') "
+        "on conflict (key) do update set value = excluded.value;"
+    )
+    ta, tb = token(UID_A), token(UID_B)
+    ids = {}
+    for uid, tok, username, full_name, birth in (
+        (UID_A, ta, "utente_a", "Mario Rossi", "1990-05-01"),
+        (UID_B, tb, "utente_b", "Laura Bianchi", "1985-11-20"),
+    ):
+        s, _ = request("POST", "/rest/v1/profiles", jwt=tok,
+                       body={"id": uid, "username": username})
+        assert s == 201, f"creazione profilo: HTTP {s}"
+        s, _ = request("POST", "/rest/v1/profile_private", jwt=tok,
+                       body={"id": uid, "full_name": full_name, "birth_date": birth})
+        assert s == 201, f"creazione dati privati: HTTP {s}"
+    # Annunci di A: uno senza modalità (predefinita), uno preciso.
+    s, ids["a_default"] = rpc("create_listing", {
+        "p_kind": "social", "p_title": "Annuncio predefinito", "p_description": "",
+        "p_lat": 41.9028, "p_lon": 12.4964}, ta)
+    assert s == 200, f"create_listing predefinito: HTTP {s}"
+    s, ids["a_precise"] = rpc("create_listing", {
+        "p_kind": "social", "p_title": "Annuncio preciso", "p_description": "",
+        "p_lat": 41.8902, "p_lon": 12.4922, "p_location_mode": "precise"}, ta)
+    assert s == 200, f"create_listing preciso: HTTP {s}"
+    s, ids["b_listing"] = rpc("create_listing", {
+        "p_kind": "sale", "p_title": "Vendita di B", "p_description": "",
+        "p_lat": 45.4642, "p_lon": 9.19, "p_price_cents": 1000}, tb)
+    assert s == 200, f"create_listing di B: HTTP {s}"
+    s, body = request("POST", "/rest/v1/reports", jwt=ta, prefer="return=representation",
+                      body={"reporter_id": UID_A, "target": "listing",
+                            "target_id": ids["b_listing"], "reason": "Prova"})
+    assert s == 201, f"segnalazione di A: HTTP {s}"
+    ids["a_report"] = body[0]["id"]
+    return ids
+
+
+# ---------------------------------------------------------------- casi
+
+def near(lat, lon, jwt, radius=5000):
+    return rows(rpc("nearby_listings", {"p_lat": lat, "p_lon": lon, "p_radius_m": radius}, jwt))
+
+
+def by_id(items, listing_id):
+    return next((x for x in items if x.get("id") == listing_id), None)
+
+
+def run(ids: dict) -> None:
+    ta, tb, tc = token(UID_A), token(UID_B), token(UID_C)
+
+    # Compatibilità con il controllo di avvio dell'app (Profilo → «Collegato»).
+    s, body = get("/rest/v1/profiles?select=id&limit=1")
+    check("APP", "Il controllo di avvio dell'app risponde HTTP 200 senza dati",
+          s == 200 and body == [], f"HTTP {s}")
+
+    # A · Separazione tra dati pubblici e privati
+    mine = rows(get(f"/rest/v1/profile_private?id=eq.{UID_A}", ta))
+    check("A1", "A legge i propri dati privati",
+          len(mine) == 1 and mine[0]["full_name"] == "Mario Rossi")
+    pub_b = rows(get(f"/rest/v1/profiles?id=eq.{UID_B}", ta))
+    check("A2", "A legge il profilo pubblico di B, solo campi pubblici",
+          len(pub_b) == 1 and set(pub_b[0]) <= PUBLIC_PROFILE_KEYS, str(pub_b and sorted(pub_b[0])))
+    text = json.dumps(pub_b)
+    check("A3", "Il profilo pubblico non contiene nome completo né data di nascita",
+          "Bianchi" not in text and "1985" not in text and "full_name" not in text
+          and "birth" not in text)
+    check("A4", "Il nome pubblico è abbreviato («Laura B.»)",
+          bool(pub_b) and pub_b[0]["public_name"] == "Laura B.")
+
+    # B · Nessuna lettura dei dati privati altrui
+    check("B1", "A legge i dati privati di B direttamente: nessuna riga",
+          denied(get(f"/rest/v1/profile_private?id=eq.{UID_B}", ta)))
+    all_rows = rows(get("/rest/v1/profile_private?select=id", ta))
+    filt1 = get("/rest/v1/profile_private?full_name=eq.Laura%20Bianchi", ta)
+    filt2 = rows(get("/rest/v1/profile_private?birth_date=gte.1900-01-01&order=birth_date", ta))
+    check("B2", "Filtri, ordinamenti e ricerche non rivelano i dati privati di B",
+          [r["id"] for r in all_rows] == [UID_A] and denied(filt1)
+          and [r["id"] for r in filt2] == [UID_A])
+    upd = request("PATCH", f"/rest/v1/profile_private?id=eq.{UID_B}", jwt=ta,
+                  prefer="return=representation", body={"full_name": "Hacker X"})
+    dele = request("DELETE", f"/rest/v1/profiles?id=eq.{UID_B}", jwt=ta,
+                   prefer="return=representation")
+    b_after = rows(get(f"/rest/v1/profile_private?id=eq.{UID_B}", tb))
+    check("B3", "A non può modificare né cancellare i dati di B",
+          denied(upd) and denied(dele) and b_after and b_after[0]["full_name"] == "Laura Bianchi")
+    ins1 = request("POST", "/rest/v1/profiles", jwt=ta, body={"id": UID_C, "username": "finto_c"})
+    ins2 = request("POST", "/rest/v1/profile_private", jwt=ta,
+                   body={"id": UID_B, "full_name": "Furto Identita"})
+    check("B4", "A non può creare un profilo o dati privati con l'identità di altri",
+          ins1[0] >= 400 and ins2[0] >= 400, f"HTTP {ins1[0]}, {ins2[0]}")
+    sw = request("PATCH", f"/rest/v1/profiles?id=eq.{UID_A}", jwt=ta,
+                 prefer="return=representation", body={"id": UID_B})
+    still = rows(get(f"/rest/v1/profiles?id=eq.{UID_A}", ta))
+    check("B5", "A non può cambiare il proprio identificativo in quello di B",
+          sw[0] >= 400 and len(still) == 1, f"HTTP {sw[0]}")
+    near_items = near(41.9028, 12.4964, tb)
+    keys = set().union(*(set(x) for x in near_items)) if near_items else set()
+    check("B6", "nearby_listings non restituisce dati privati",
+          bool(near_items) and not ({"full_name", "birth_date", "exact_location"} & keys)
+          and "Rossi" not in json.dumps(near_items))
+    check("B7", "Senza token: nessun dato dei profili, pubblici o privati",
+          rows(get("/rest/v1/profiles")) == [] and denied(get("/rest/v1/profile_private")))
+
+    # C · Token non validi o di altri utenti
+    check("C1", "Nessun token: trattato come non autenticato",
+          rows(get("/rest/v1/profiles")) == [])
+    s, _ = get("/rest/v1/profiles", token(UID_A, iat_offset=-7200, exp_offset=-3600))
+    check("C2", "Token scaduto: rifiutato", s == 401, f"HTTP {s}")
+    s, _ = get("/rest/v1/profiles", token(UID_A, secret=b"chiave-sbagliata-" * 4))
+    check("C3", "Token firmato con una chiave sconosciuta: rifiutato", s == 401, f"HTTP {s}")
+    other = token(UID_A, project=OTHER_PROJECT)
+    check("C4", "Token di un altro progetto Firebase: nessun accesso",
+          denied(get("/rest/v1/profiles", other)) and denied(get("/rest/v1/profile_private", other))
+          and rpc("create_listing", {"p_kind": "social", "p_title": "Intruso", "p_description": "",
+                                     "p_lat": 41.9, "p_lon": 12.5}, other)[0] >= 400)
+    check("C5", "Token valido di B: vede i propri dati privati, mai quelli di A",
+          [r["id"] for r in rows(get("/rest/v1/profile_private", tb))] == [UID_B])
+    h, p, sgn = ta.split(".")
+    claims = json.loads(base64.urlsafe_b64decode(p + "=" * (-len(p) % 4)))
+    claims["sub"] = UID_B
+    forged = f"{h}.{b64(json.dumps(claims).encode())}.{sgn}"
+    s, _ = get("/rest/v1/profile_private", forged)
+    check("C6", "Token di A modificato per fingersi B: rifiutato", s == 401, f"HTTP {s}")
+    s, body = get("/rest/v1/profiles", "abc.def")
+    leak = json.dumps(body) if body is not None else ""
+    check("C7", "Token malformato: rifiutato, senza dettagli sensibili",
+          s == 401 and SECRET.decode() not in leak, f"HTTP {s}")
+    future = token(UID_A, iat_offset=3600, exp_offset=7200)
+    s, _ = get("/rest/v1/profile_private", future)
+    check("C8", "Token emesso nel futuro: rifiutato o senza accesso",
+          s == 401 or denied((s, rows(get("/rest/v1/profile_private", future)))), f"HTTP {s}")
+
+    # D · Regole dello schema
+    ins = request("POST", "/rest/v1/admin_users", jwt=ta, body={"user_id": UID_A})
+    check("D1", "Un utente non diventa admin da solo", ins[0] >= 400, f"HTTP {ins[0]}")
+    check("D3", "Le segnalazioni di A non sono leggibili da B",
+          denied(get(f"/rest/v1/reports?id=eq.{ids['a_report']}", tb)))
+
+    # D2 · Posizione degli annunci (P9)
+    items = near(41.9028, 12.4964, tb)
+    d = by_id(items, ids["a_default"])
+    check("D2.1", "Senza modalità: approssimata; altri vedono solo zona e fascia di distanza",
+          d is not None and d["location_mode"] == "approximate"
+          and (abs(d["approx_lat"] - 41.9028) > 1e-4 or abs(d["approx_lon"] - 12.4964) > 1e-4)
+          and d["distance_band_m"] % 250 == 0)
+    loc = get(f"/rest/v1/listing_locations?listing_id=eq.{ids['a_default']}", tb)
+    raw = get(f"/rest/v1/listings?id=eq.{ids['a_default']}", tb)
+    check("D2.2", "Il punto preciso di un annuncio approssimato non è leggibile da altri",
+          denied(loc) and "exact" not in json.dumps(raw[1]))
+    items = near(41.8902, 12.4922, tb)
+    p_ = by_id(items, ids["a_precise"])
+    check("D2.3", "Modalità precisa: gli altri vedono esattamente il punto scelto",
+          p_ is not None and p_["location_mode"] == "precise"
+          and abs(p_["approx_lat"] - 41.8902) < 1e-6 and abs(p_["approx_lon"] - 12.4922) < 1e-6)
+    both = near(41.896, 12.494, tb, radius=10000)
+    d2, p2 = by_id(both, ids["a_default"]), by_id(both, ids["a_precise"])
+    check("D2.4", "Stesso autore, due annunci: ognuno rispetta la propria modalità",
+          d2 is not None and p2 is not None and d2["location_mode"] == "approximate"
+          and p2["location_mode"] == "precise")
+    r1 = rpc("set_listing_location_mode", {"p_listing_id": ids["a_default"], "p_mode": "precise"}, tb)
+    r2 = request("PATCH", f"/rest/v1/listings?id=eq.{ids['a_default']}", jwt=tb,
+                 prefer="return=representation", body={"location_mode": "precise"})
+    after = by_id(near(41.9028, 12.4964, tb), ids["a_default"])
+    check("D2.5", "Un altro utente non può cambiare modalità o posizione di un annuncio",
+          r1[0] >= 400 and denied(r2) and after and after["location_mode"] == "approximate")
+    r3 = rpc("set_listing_location_mode", {"p_listing_id": ids["a_precise"], "p_mode": "approximate"}, ta)
+    p3 = by_id(near(41.8902, 12.4922, tb), ids["a_precise"])
+    check("D2.6", "Da precisa ad approssimata: il punto preciso non è più visibile",
+          r3[0] in (200, 204) and p3 is not None and p3["location_mode"] == "approximate"
+          and (abs(p3["approx_lat"] - 41.8902) > 1e-4 or abs(p3["approx_lon"] - 12.4922) > 1e-4))
+    own_loc = rows(get(f"/rest/v1/listing_locations?listing_id=eq.{ids['a_default']}", ta))
+    own = rows(get(f"/rest/v1/listings?id=eq.{ids['a_default']}&select=id,location_mode", ta))
+    check("D2.7", "L'autore vede la propria posizione salvata e la modalità",
+          len(own_loc) == 1 and own and own[0]["location_mode"] == "approximate")
+    s, _ = rpc("nearby_listings", {"p_lat": 41.9, "p_lon": 12.5})
+    check("D2.8", "Senza token: nessuna posizione",
+          s >= 400 and rows(get("/rest/v1/listings")) == [], f"HTTP {s}")
+
+    # E · Nessun accesso amministrativo per percorsi alternativi
+    check("E1", "Un utente normale non si inserisce tra gli admin",
+          request("POST", "/rest/v1/admin_users", jwt=tb, body={"user_id": UID_B})[0] >= 400)
+    sql(f"insert into public.admin_users (user_id, role) values ('{UID_B}', 'moderator') "
+        "on conflict do nothing;")
+    check("E2", "Un utente normale non vede l'elenco degli admin",
+          rows(get("/rest/v1/admin_users", ta)) == [])
+    m1 = request("POST", "/rest/v1/user_moderation", jwt=ta,
+                 body={"user_id": UID_B, "banned_until": "2099-01-01T00:00:00Z"})
+    m2 = request("POST", "/rest/v1/user_moderation", jwt=ta,
+                 body={"user_id": UID_A, "banned_until": None})
+    check("E3", "Un utente normale non crea sanzioni, né per altri né per sé",
+          m1[0] >= 400 and m2[0] >= 400, f"HTTP {m1[0]}, {m2[0]}")
+    sql(f"delete from public.admin_users where user_id = '{UID_B}';")
+    up = request("PATCH", f"/rest/v1/reports?id=eq.{ids['a_report']}", jwt=tb,
+                 prefer="return=representation", body={"status": "resolved"})
+    check("E4", "Un utente normale non legge né gestisce le segnalazioni altrui",
+          denied(get("/rest/v1/reports", tb)) and denied(up))
+    e5a = request("PATCH", f"/rest/v1/listings?id=eq.{ids['b_listing']}", jwt=ta,
+                  prefer="return=representation", body={"title": "Modificato da A"})
+    e5b = request("PATCH", f"/rest/v1/profiles?id=eq.{UID_A}", jwt=ta,
+                  prefer="return=representation", body={"rating_avg": 5, "rating_count": 99})
+    e5c = request("PATCH", f"/rest/v1/profiles?id=eq.{UID_A}", jwt=ta,
+                  prefer="return=representation", body={"public_name": "Admin Finto"})
+    check("E5", "Nessuna modifica di campi protetti o di dati altrui",
+          denied(e5a) and e5b[0] >= 400 and e5c[0] >= 400,
+          f"HTTP {e5a[0]}, {e5b[0]}, {e5c[0]}")
+    fake_sr = token(UID_A, role="service_role", secret=b"chiave-non-del-progetto" * 2)
+    s1, _ = get("/rest/v1/profile_private", fake_sr)
+    s2, _ = get("/rest/v1/profile_private", token(UID_A, role="supabase_admin"))
+    s3, _ = get("/rest/v1/profile_private", token(UID_A, role="admin"))
+    fake_claims = token(UID_A, extra={"is_admin": True, "user_role": "admin", "admin": True})
+    check("E6", "Ruoli o permessi falsificati non danno privilegi",
+          s1 == 401 and s2 >= 400 and s3 >= 400
+          and denied(get(f"/rest/v1/reports?reporter_id=neq.{UID_A}", fake_claims))
+          and [r["id"] for r in rows(get("/rest/v1/profile_private", fake_claims))] == [UID_A],
+          f"HTTP {s1}, {s2}, {s3}")
+    e7a = get("/rest/v1/admin_users")
+    e7b = rpc("create_listing", {"p_kind": "social", "p_title": "Anonimo", "p_description": "",
+                                 "p_lat": 41.9, "p_lon": 12.5})
+    e7c = get("/rest/v1/user_moderation")
+    check("E7", "Chiave pubblica senza token: nessun accesso alle funzioni amministrative",
+          denied(e7a) and e7b[0] >= 400 and denied(e7c), f"HTTP {e7b[0]}")
+    s, body = rpc("is_admin", {}, ta)
+    check("E8", "Funzioni con permessi elevati: nessuna azione da admin per utenti normali",
+          s == 200 and body is False
+          and rpc("set_listing_location_mode",
+                  {"p_listing_id": ids["b_listing"], "p_mode": "precise"}, ta)[0] >= 400)
+
+
+def main() -> int:
+    try:
+        ids = setup()
+    except Exception as exc:  # noqa: BLE001
+        print(f"::error::Preparazione dei dati di prova fallita: {exc}")
+        return 1
+    run(ids)
+    failed = [r for r in results if not r[2]]
+    print(f"{'Caso':6} {'Esito':9} Descrizione")
+    for case, desc, ok, detail in results:
+        print(f"{case:6} {'superato' if ok else 'FALLITO':9} {desc}" + (f"  [{detail}]" if detail else ""))
+    print(f"\n{len(results) - len(failed)} superati su {len(results)}")
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as fh:
+            fh.write("## Test di sicurezza Supabase (database temporaneo)\n\n| Caso | Esito | Descrizione |\n|---|---|---|\n")
+            for case, desc, ok, _ in results:
+                fh.write(f"| {case} | {'✅' if ok else '❌'} | {desc} |\n")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
