@@ -5,9 +5,8 @@ import 'package:nexus_social/core/services/push_device_registry.dart';
 /// Firebase simulato in memoria per i test della registrazione push (F8).
 /// Nessuna connessione: utenti e documenti esistono solo in questa classe.
 class FakePushBackend implements PushDeviceBackend {
-  final StreamController<String?> _auth = StreamController<String?>.broadcast(
-    onListen: () => authListened = true,
-  );
+  late final StreamController<String?> _auth =
+      StreamController<String?>.broadcast(onListen: () => authListened = true);
 
   bool authListened = false;
   String? uid;
