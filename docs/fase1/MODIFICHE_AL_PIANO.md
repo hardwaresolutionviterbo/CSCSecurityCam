@@ -20,9 +20,8 @@ Elenco delle differenze tra il piano ufficiale e le decisioni prese dal titolare
 
 Note:
 
-- **M-1 e M-2:**
-  - nel codice si applicano nel passaggio 1.4 del piano della Fase 1, non ancora autorizzato;
-  - oggi l'app ha ancora l'ordine del PDF e si apre sulla Mappa.
+- **M-1 e M-2:** applicate nel codice nel Blocco 2 (passaggio 1.4, ramo `fase1/blocco2`) e
+  coperte da test automatici.
 - **M-3:** `codemagic.yaml` va allineato nel passaggio 1.9. Oggi contiene ancora la build Android.
 - Decisioni che **aggiungono** dettagli senza contraddire il PDF (D1-D4, M1-M7, L1-L3, A5, R1-R3)
   non compaiono qui. Sono in:

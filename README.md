@@ -44,8 +44,9 @@ Il dettaglio è in [`docs/fase1/PIANO_OPERATIVO.md`](docs/fase1/PIANO_OPERATIVO.
 - Progetto Flutter unico per Android e iPhone (`android/`, `ios/`).
 - Barra di navigazione in basso con **Mappa, Chat, Scambia, Vendita, Profilo** e campanella
   delle notifiche in alto.
-  - L'ordine approvato è **Chat, Mappa, Scambia, Vendita, Profilo**, con apertura su Chat: si
-    applica in un passaggio successivo (A1, vedi `docs/fase1/MODIFICHE_AL_PIANO.md`).
+  - Dal Blocco 2 (ramo `fase1/blocco2`) l'ordine è quello approvato, **Chat, Mappa, Scambia,
+    Vendita, Profilo**, con Scambia come pulsante centrale arancione e apertura su Chat (A1,
+    vedi `docs/fase1/MODIFICHE_AL_PIANO.md`).
 - Tema grafico Material 3 con **modalità scura** (e chiara), colori e tipografia del brand.
 - Schermate svuotate con l'anteprima di cosa arriverà in ogni fase.
 - Collegamento pronto a **Supabase** (annunci, ricerca per distanza, foto, segnalazioni) e

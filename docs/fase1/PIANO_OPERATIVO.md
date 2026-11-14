@@ -125,6 +125,7 @@ Ogni APK prodotto riporta **versione, numero di build, commit e ramo** in tre pu
 | F7 | Riga Informazioni: versione, fase, privacy | Test di interfaccia sul Profilo (unito alla verifica di R1) | Compaiono «Versione» (con build, commit e ramo), «Fase» e «Privacy: Posizione approssimata» |
 | F8 | **Registrazione del dispositivo per le notifiche push** | Test della logica di `PushDeviceRegistry` con Firebase simulato, più i test esistenti delle regole Firestore sui dispositivi (emulatore) | Vedi «Dettaglio F8» |
 | F9 | **Avvio dell'app senza chiavi** | Test che avvia `BackendBootstrap` e l'app senza nessuna chiave (`--dart-define` assenti), più il test esistente «senza dart-define i servizi restano spenti» | Nessun errore o crash; Supabase e Firebase risultano «Non configurato»; la barra e tutte e 5 le schede funzionano; la registrazione push non parte |
+| F11 | **Selettore del raggio della Mappa** (1, 5, 10, 30 km; parte da 10) — funzione esistente non elencata in origine, aggiunta nel Blocco 2 | Test di interfaccia sulla Mappa | Le 4 scelte esistono, 10 km è selezionato all'avvio, toccando 30 km la scelta cambia |
 | F10 | **Anteprima del gestionale admin** | Test di interfaccia che apre `AdminScreen`, più i controlli sui percorsi alternativi | Vedi «Dettaglio F10» |
 
 **Dettaglio F8 · Registrazione del dispositivo push**
