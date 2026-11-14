@@ -10,8 +10,8 @@ Sviluppo a fasi: alla fine di ogni fase c'è qualcosa da installare e provare su
 
 | Fase | Contenuto | Stato |
 | --- | --- | --- |
-| 0 | Account, chiavi, grafica, costi, regole | Documentata in [`docs/FASE_0_CHECKLIST.md`](docs/FASE_0_CHECKLIST.md) |
-| 1 | Fondamenta tecniche: app installabile, servizi collegati, tema, navigazione | **Completata** in questo repository |
+| 0 | Account, chiavi, grafica, costi, regole | **Completata** (14/11/2026): [`docs/FASE_0_CHECKLIST.md`](docs/FASE_0_CHECKLIST.md) |
+| 1 | Fondamenta tecniche: app installabile, servizi collegati, tema, navigazione | **In corso**: base già presente, completamento secondo [`docs/fase1/PIANO_OPERATIVO.md`](docs/fase1/PIANO_OPERATIVO.md) |
 | 2 | Account e profili (SMS, profilo, 2FA, blocchi) | Da iniziare |
 | 3 | Mappa Sociale 3D, annunci, raggio fino a 30 km | Da iniziare |
 | 4 | Chat cifrata, gruppi, chiamate, notifiche | Da iniziare |
@@ -22,19 +22,39 @@ Sviluppo a fasi: alla fine di ogni fase c'è qualcosa da installare e provare su
 | 9 | Test, sicurezza, GDPR, beta chiusa | Da iniziare |
 | 10 | Pubblicazione e lancio | Da iniziare |
 
-Il dettaglio delle fasi è nel piano di lavoro originale (`Nexus_Social_Piano_di_Lavoro.pdf`).
+Il dettaglio delle fasi è nel piano di lavoro ufficiale
+(`Nexus_Social_Piano_di_Lavoro_COMPLETO_AGGIORNATO.pdf`, versione del 13 novembre 2026).
 
-## Cosa c'è nella Fase 1
+Documenti da leggere insieme al piano:
+- modifiche approvate al piano: [`docs/fase1/MODIFICHE_AL_PIANO.md`](docs/fase1/MODIFICHE_AL_PIANO.md);
+- corrispondenza tra le cartelle del codice e quelle del piano:
+  [`docs/fase1/STRUTTURA_CARTELLE.md`](docs/fase1/STRUTTURA_CARTELLE.md).
+
+## Base già presente per la Fase 1
+
+Questa base esiste già nel codice, ma **la Fase 1 non è conclusa**. Restano da fare:
+- la barra nell'ordine approvato e l'apertura su Chat;
+- lo stile grafico del mockup;
+- la separazione dei dati privati su Supabase;
+- la build per iPhone;
+- i test di non regressione e di sicurezza.
+
+Il dettaglio è in [`docs/fase1/PIANO_OPERATIVO.md`](docs/fase1/PIANO_OPERATIVO.md).
 
 - Progetto Flutter unico per Android e iPhone (`android/`, `ios/`).
 - Barra di navigazione in basso con **Mappa, Chat, Scambia, Vendita, Profilo** e campanella
   delle notifiche in alto.
+  - L'ordine approvato è **Chat, Mappa, Scambia, Vendita, Profilo**, con apertura su Chat: si
+    applica in un passaggio successivo (A1, vedi `docs/fase1/MODIFICHE_AL_PIANO.md`).
 - Tema grafico Material 3 con **modalità scura** (e chiara), colori e tipografia del brand.
 - Schermate svuotate con l'anteprima di cosa arriverà in ogni fase.
 - Collegamento pronto a **Supabase** (annunci, ricerca per distanza, foto, segnalazioni) e
   **Firebase** (login SMS, chat, chiamate, notifiche), attivo solo quando le chiavi ci sono.
 - Schema Supabase con **RLS** e posizione approssimata; regole **Firestore** per chat cifrate.
-- Build cloud **Codemagic**: APK di prova a ogni push su `main`, build iOS senza firma.
+  - Nello schema Supabase attuale il nome completo è leggibile da tutti gli utenti autenticati.
+  - Va corretto prima di usare dati reali (passaggio 1.7 del piano).
+- APK Android da **GitHub Actions** (decisione F11). `codemagic.yaml` è presente ma non
+  collegato: servirà solo per la build iPhone.
 
 ## Struttura del repository
 
@@ -64,14 +84,25 @@ docs/                        checklist Fase 0 e architettura
 
 ## Installare l'app sul telefono (senza PC)
 
-**GitHub Actions (già configurato).** Ogni push su `main` esegue `.github/workflows/android.yml`:
-analisi, test e build. L'APK si scarica da **Actions → Android APK → ultima esecuzione →
-Artifacts → `nexus-social-apk-debug`**, poi si apre sul telefono consentendo l'installazione da
-origini sconosciute.
+**GitHub Actions (Android).** `.github/workflows/android.yml` si esegue a ogni push su `main` o
+su un ramo di lavoro `fase1/...`, oppure a mano. Esegue analisi, test e build.
 
-**Codemagic (alternativa).** Collega il repository a [Codemagic](https://codemagic.io) e seleziona
-`codemagic.yaml`; la build iOS senza firma si avvia manualmente. Per installare su iPhone serve
-un account Apple (Fase 9/10).
+1. Apri **Actions → Android APK** e scegli l'esecuzione.
+2. In **Artifacts** scarica il file.
+3. Aprilo sul telefono, consentendo l'installazione da origini sconosciute.
+
+Ogni APK è identificabile (regola R1):
+- **nome del file:** `nexus-social-<versione>+<build>-<commit>-<ramo>.apk`;
+- **riepilogo dell'esecuzione:** la stessa tabella;
+- **nell'app:** Profilo → Informazioni → Versione.
+
+Il numero di build è `numero esecuzione × 100 + tentativo`, quindi anche una riesecuzione produce
+un APK distinto.
+
+**Codemagic (solo iPhone, decisione F11).**
+- Il collegamento del repository richiede l'autorizzazione del titolare.
+- La build iOS senza firma si avvia manualmente.
+- Per installare su iPhone serve un account Apple (Fasi 9-10).
 
 ## Sviluppo locale
 
@@ -88,7 +119,10 @@ flutter build apk --debug   # APK di prova installabile
 `env.json` non è versionato: copia `env.example.json` e compila i valori. Senza chiavi l'app
 si avvia normalmente e segnala nel Profilo quali servizi non sono configurati.
 
-## Verifiche eseguite (Fase 1)
+## Verifiche della base esistente
+
+Verifiche fatte quando la base è stata creata, prima del piano della Fase 1. Le verifiche
+aggiornate di ogni build sono nel riepilogo dell'esecuzione su GitHub Actions.
 
 - `flutter analyze`: nessun problema.
 - `flutter test`: 7 test superati (navigazione, campanella, profilo, configurazione, tema).
@@ -113,6 +147,10 @@ si avvia normalmente e segnala nel Profilo quali servizi non sono configurati.
   repository.
 
 ## Privacy della posizione
+
+Comportamento dello schema attuale (`0001`). Con la decisione **P9** la zona approssimata resta
+predefinita, ma per ogni annuncio l'autore potrà scegliere una posizione precisa (punto d'incontro,
+locale, indirizzo). Lo schema `0002` aggiunge questa scelta (piano della Fase 1, passaggio 1.7).
 
 La posizione esatta non è mai visibile agli altri utenti: resta in una tabella leggibile solo
 dal proprietario e dagli amministratori, mentre la mappa usa una posizione approssimata a una
