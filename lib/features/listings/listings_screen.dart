@@ -22,7 +22,7 @@ class ListingsScreen extends StatelessWidget {
         'Accordi in chat: l\'app non gestisce i soldi',
         'Feedback a stelle dopo lo scambio concluso',
       ],
-      accent: AppColors.brandMint,
+      accent: AppColors.brandOrange,
     );
   }
 }

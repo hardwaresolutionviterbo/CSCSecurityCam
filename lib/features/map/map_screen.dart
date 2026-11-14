@@ -18,6 +18,7 @@ class _MapScreenState extends State<MapScreen> {
     return PhasePreview(
       icon: Icons.map_outlined,
       phase: 3,
+      accent: AppColors.brandCyan,
       title: 'Mappa Sociale',
       description:
           'Qui vedrai le persone, gli annunci e le promozioni intorno a te, '

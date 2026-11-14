@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/nexus_ui.dart';
 
 class ChatScreen extends StatelessWidget {
@@ -9,6 +10,7 @@ class ChatScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const PhasePreview(
       icon: Icons.forum_outlined,
+      accent: AppColors.brandBlue,
       phase: 4,
       title: 'Chat e chiamate',
       description:

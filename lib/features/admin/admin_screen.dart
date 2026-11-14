@@ -22,7 +22,7 @@ class AdminScreen extends StatelessWidget {
         'Verifica partita IVA e assegnazione del badge alle aziende',
         'Abbonamenti, incassi e statistiche delle città più attive',
       ],
-      accent: AppColors.brandCoral,
+      accent: AppColors.brandViolet,
     );
   }
 }

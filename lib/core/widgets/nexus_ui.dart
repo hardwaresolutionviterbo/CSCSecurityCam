@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_theme.dart';
 
-/// Monogramma del brand: N su gradiente viola→menta.
+/// Monogramma del brand: «N» bianca su gradiente blu → arancio, con bagliore.
 class NexusMark extends StatelessWidget {
   const NexusMark({super.key, this.size = 32});
 
@@ -19,11 +19,20 @@ class NexusMark extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: AppColors.brandGradient,
           borderRadius: BorderRadius.circular(size * 0.32),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.22),
+            width: 1,
+          ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.brandViolet.withValues(alpha: 0.35),
-              blurRadius: size * 0.55,
-              offset: Offset(0, size * 0.14),
+              color: AppColors.brandOrange.withValues(alpha: 0.35),
+              blurRadius: size * 0.6,
+              offset: Offset(size * 0.1, size * 0.16),
+            ),
+            BoxShadow(
+              color: AppColors.brandBlue.withValues(alpha: 0.30),
+              blurRadius: size * 0.6,
+              offset: Offset(-size * 0.1, size * 0.06),
             ),
           ],
         ),
@@ -32,8 +41,9 @@ class NexusMark extends StatelessWidget {
             'N',
             style: TextStyle(
               color: Colors.white,
-              fontSize: size * 0.54,
-              fontWeight: FontWeight.w800,
+              fontSize: size * 0.56,
+              fontWeight: FontWeight.w900,
+              fontStyle: FontStyle.italic,
               height: 1,
             ),
           ),
@@ -43,7 +53,39 @@ class NexusMark extends StatelessWidget {
   }
 }
 
-/// Contenitore arrotondato usato per le sezioni delle schermate.
+/// Scritta «Nexus Social» con «Social» in arancio, come nel mockup.
+class NexusWordmark extends StatelessWidget {
+  const NexusWordmark({super.key, this.fontSize = 17});
+
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final TextStyle style = TextStyle(
+      fontSize: fontSize,
+      fontWeight: FontWeight.w900,
+      fontStyle: FontStyle.italic,
+      letterSpacing: -0.4,
+      height: 1.1,
+      color: scheme.onSurface,
+    );
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: 'Nexus ', style: style),
+          TextSpan(
+            text: 'Social',
+            style: style.copyWith(color: scheme.primary),
+          ),
+        ],
+      ),
+      semanticsLabel: 'Nexus Social',
+    );
+  }
+}
+
+/// Contenitore arrotondato «in vetro» usato per le sezioni delle schermate.
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,
@@ -56,40 +98,88 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(padding: padding, child: child),
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Card(
+        child: Padding(padding: padding, child: child),
+      ),
     );
   }
 }
 
 /// Etichetta «Fase N» che indica quando arriverà una funzione.
 class PhaseChip extends StatelessWidget {
-  const PhaseChip({super.key, required this.phase});
+  const PhaseChip({super.key, required this.phase, this.onAccent = false});
 
   final int phase;
+
+  /// Versione bianca, da usare sopra un fondo colorato.
+  final bool onAccent;
 
   @override
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
+    final Color color = onAccent ? Colors.white : scheme.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.12),
+        color: color.withValues(alpha: onAccent ? 0.18 : 0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.35)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(
         'Fase $phase',
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: scheme.primary,
-          fontWeight: FontWeight.w700,
+          color: color,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.2,
         ),
       ),
     );
   }
 }
 
-/// Anteprima di una funzione futura: icona, titolo, descrizione ed elenco di cosa arriverà.
+/// Comparsa morbida (dissolvenza e leggero scorrimento verso l'alto).
+class FadeSlideIn extends StatelessWidget {
+  const FadeSlideIn({super.key, required this.child, this.delay = 0});
+
+  final Widget child;
+
+  /// Ritardo relativo, da 0 a 1, per far entrare gli elementi uno dopo l'altro.
+  final double delay;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: Duration(milliseconds: 420 + (delay * 360).round()),
+      curve: Interval(delay.clamp(0.0, 0.6).toDouble(), 1, curve: Curves.easeOutCubic),
+      child: child,
+      builder: (BuildContext context, double t, Widget? child) {
+        return Opacity(
+          opacity: t,
+          child: Transform.translate(
+            offset: Offset(0, (1 - t) * 18),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Anteprima di una funzione futura: copertina colorata, descrizione ed elenco
+/// di cosa arriverà.
 class PhasePreview extends StatelessWidget {
   const PhasePreview({
     super.key,
@@ -119,76 +209,78 @@ class PhasePreview extends StatelessWidget {
     return ListView(
       padding: AppSpacing.pagePadding,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    color.withValues(alpha: 0.95),
-                    color.withValues(alpha: 0.45),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.28),
-                    blurRadius: 22,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Icon(icon, color: Colors.white, size: 28),
-            ),
-            const Spacer(),
-            PhaseChip(phase: phase),
-          ],
-        ),
-        const SizedBox(height: 22),
-        Text(title, style: theme.textTheme.headlineSmall),
-        const SizedBox(height: 8),
-        Text(
-          description,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: scheme.onSurfaceVariant,
+        FadeSlideIn(
+          child: _HeroCard(
+            icon: icon,
+            phase: phase,
+            title: title,
+            description: description,
+            color: color,
           ),
         ),
         if (features.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.lg),
-          SectionCard(
-            child: Column(
-              children: [
-                for (int i = 0; i < features.length; i++) ...[
-                  if (i > 0) const Divider(height: 22),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        size: 18,
-                        color: scheme.secondary,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          features[i],
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ),
-                    ],
+          const SizedBox(height: AppSpacing.md),
+          FadeSlideIn(
+            delay: 0.15,
+            child: SectionCard(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Cosa arriverà',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      letterSpacing: 0.4,
+                    ),
                   ),
+                  const SizedBox(height: 14),
+                  for (int i = 0; i < features.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 14),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 26,
+                          height: 26,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: AppColors.accentGradient(color),
+                            boxShadow: [
+                              BoxShadow(
+                                color: color.withValues(alpha: 0.30),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.check_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              features[i],
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ],
         if (footer != null) ...[
           const SizedBox(height: AppSpacing.md),
-          footer!,
+          FadeSlideIn(delay: 0.3, child: footer!),
         ],
         const SizedBox(height: AppSpacing.lg),
         Center(
@@ -196,6 +288,7 @@ class PhasePreview extends StatelessWidget {
             'Disponibile nella Fase $phase',
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -204,7 +297,125 @@ class PhasePreview extends StatelessWidget {
   }
 }
 
-/// Campanella con contatore e foglio delle notifiche.
+/// Copertina della sezione: gradiente acceso, cerchi luminosi e icona in vetro.
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({
+    required this.icon,
+    required this.phase,
+    required this.title,
+    required this.description,
+    required this.color,
+  });
+
+  final IconData icon;
+  final int phase;
+  final String title;
+  final String description;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: AppColors.accentGradient(color),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.38),
+            blurRadius: 32,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -40,
+            top: -50,
+            child: _Glow(size: 170, alpha: 0.20),
+          ),
+          Positioned(
+            left: -30,
+            bottom: -60,
+            child: _Glow(size: 140, alpha: 0.12),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Icon(icon, color: Colors.white, size: 28),
+                    ),
+                    const Spacer(),
+                    PhaseChip(phase: phase, onAccent: true),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                Text(
+                  title,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: Colors.white,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  description,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.88),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Glow extends StatelessWidget {
+  const _Glow({required this.size, required this.alpha});
+
+  final double size;
+  final double alpha;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              Colors.white.withValues(alpha: alpha),
+              Colors.white.withValues(alpha: 0),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Campanella in un cerchio di vetro, con contatore e foglio delle notifiche.
 class NotificationBell extends StatelessWidget {
   const NotificationBell({super.key, this.count = 0, this.onPressed});
 
@@ -216,21 +427,36 @@ class NotificationBell extends StatelessWidget {
       context: context,
       showDragHandle: true,
       useSafeArea: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (_) => const _NotificationsSheet(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final bool isDark = theme.brightness == Brightness.dark;
     return IconButton(
       tooltip: 'Notifiche',
       onPressed: onPressed ?? () => showNotifications(context),
+      style: IconButton.styleFrom(
+        backgroundColor: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.9),
+        side: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : theme.colorScheme.outline,
+        ),
+        fixedSize: const Size(44, 44),
+      ),
       icon: Badge.count(
         count: count,
         isLabelVisible: count > 0,
-        backgroundColor: AppColors.brandCoral,
-        child: const Icon(Icons.notifications_none_rounded),
+        backgroundColor: AppColors.brandOrange,
+        child: Icon(
+          Icons.notifications_none_rounded,
+          color: theme.colorScheme.onSurface,
+        ),
       ),
     );
   }
@@ -242,6 +468,7 @@ class _NotificationsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final ColorScheme scheme = theme.colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
       child: Column(
@@ -256,16 +483,23 @@ class _NotificationsSheet extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.lg),
           Container(
-            width: 64,
-            height: 64,
+            width: 72,
+            height: 72,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: theme.colorScheme.primary.withValues(alpha: 0.12),
+              gradient: AppColors.orangeGradient,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.brandOrange.withValues(alpha: 0.35),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-            child: Icon(
+            child: const Icon(
               Icons.notifications_none_rounded,
-              color: theme.colorScheme.primary,
-              size: 30,
+              color: Colors.white,
+              size: 34,
             ),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -275,7 +509,7 @@ class _NotificationsSheet extends StatelessWidget {
             'Qui arriveranno messaggi, richieste di contatto e avvisi importanti.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+              color: scheme.onSurfaceVariant,
             ),
           ),
         ],

@@ -23,45 +23,76 @@ class ProfileScreen extends StatelessWidget {
     return ListView(
       padding: AppSpacing.pagePadding,
       children: [
-        SectionCard(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: AppColors.brandGradient,
+        FadeSlideIn(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: AppColors.accentGradient(AppColors.brandViolet),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.brandViolet.withValues(alpha: 0.35),
+                  blurRadius: 30,
+                  offset: const Offset(0, 12),
                 ),
-                child: const Icon(
-                  Icons.person_rounded,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Profilo non configurato',
-                      style: theme.textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Registrati con il numero di telefono per iniziare.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+              ],
+            ),
+            child: Row(
+              children: [
+                // Avatar con anello arancio luminoso.
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: AppColors.orangeGradient,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.brandOrange.withValues(alpha: 0.5),
+                        blurRadius: 18,
                       ),
+                    ],
+                  ),
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.22),
+                      border: Border.all(color: Colors.white, width: 2),
                     ),
-                    const SizedBox(height: 10),
-                    const PhaseChip(phase: 2),
-                  ],
+                    child: const Icon(
+                      Icons.person_rounded,
+                      color: Colors.white,
+                      size: 34,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Profilo non configurato',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Registrati con il numero di telefono per iniziare.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const PhaseChip(phase: 2, onAccent: true),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -143,12 +174,14 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 14),
               _AccountTypeRow(
                 icon: Icons.person_outline_rounded,
+                color: AppColors.brandBlue,
                 title: 'Privato',
                 detail: 'Annunci, scambi, feedback e media delle stelle',
               ),
               const Divider(height: 22),
               _AccountTypeRow(
                 icon: Icons.storefront_outlined,
+                color: AppColors.brandOrange,
                 title: 'Azienda',
                 detail: 'Badge verificato, promozioni e coupon (9,99 €/mese)',
               ),
@@ -262,19 +295,36 @@ class _StatusBadge extends StatelessWidget {
     final Color color = _color(theme.colorScheme);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
-      child: Text(
-        _label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.1,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color,
+              boxShadow: [
+                BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 6),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            _label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.1,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -283,11 +333,13 @@ class _StatusBadge extends StatelessWidget {
 class _AccountTypeRow extends StatelessWidget {
   const _AccountTypeRow({
     required this.icon,
+    required this.color,
     required this.title,
     required this.detail,
   });
 
   final IconData icon;
+  final Color color;
   final String title;
   final String detail;
 
@@ -299,13 +351,20 @@ class _AccountTypeRow extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 38,
-          height: 38,
+          width: 42,
+          height: 42,
           decoration: BoxDecoration(
-            color: scheme.primary.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(12),
+            gradient: AppColors.accentGradient(color),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.30),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          child: Icon(icon, size: 19, color: scheme.primary),
+          child: Icon(icon, size: 21, color: Colors.white),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -315,7 +374,7 @@ class _AccountTypeRow extends StatelessWidget {
               Text(
                 title,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               Text(
@@ -338,26 +397,39 @@ class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
 
+  /// Oltre questa lunghezza il valore va sotto l'etichetta, a tutta larghezza:
+  /// la versione con commit e ramo resta su una riga senza spezzare il ramo.
+  static const int _inlineLimit = 26;
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final Text labelText = Text(
+      label,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+    final TextStyle? valueStyle = theme.textTheme.bodySmall?.copyWith(
+      fontWeight: FontWeight.w700,
+    );
+
+    if (value.length > _inlineLimit) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          labelText,
+          const SizedBox(height: 4),
+          Text(value, style: valueStyle),
+        ],
+      );
+    }
     return Row(
       children: [
-        Text(
-          label,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
+        labelText,
         const SizedBox(width: 16),
-        // Expanded + allineamento a destra: stesso aspetto di prima, ma i valori
-        // lunghi (es. versione con commit e ramo) vanno a capo invece di uscire dallo schermo.
         Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.end,
-            style: theme.textTheme.bodySmall,
-          ),
+          child: Text(value, textAlign: TextAlign.end, style: valueStyle),
         ),
       ],
     );
