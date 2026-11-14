@@ -95,7 +95,38 @@ protezione anti-abuso):
 **Spazio:** 1 GB di file corrisponde a qualche centinaio o poche migliaia di foto compresse. La
 compressione obbligatoria delle foto (già in checklist) è decisiva.
 
-## 5. Cosa serve decidere (prima della Fase 2)
+## 5. Decisioni (14 novembre 2026)
+
+**Verifica richiesta dal titolare:** si possono usare gli SMS gratuiti senza metodo di pagamento?
+**No.**
+
+| Configurazione | SMS veri | Senza metodo di pagamento |
+|---|---|---|
+| Firebase Authentication su Spark | No (errore «billing not enabled» da settembre 2024) | Sì, ma senza SMS |
+| Firebase Authentication su Blaze | Sì; primi 10 al giorno non addebitati | No |
+| Firebase Authentication con Identity Platform su Spark | No: aggiunge 2FA e altre funzioni, con un limite di 3.000 utenti attivi al giorno, ma l'invio di SMS richiede comunque la fatturazione | Sì, ma senza SMS |
+
+I **numeri di telefono di prova** configurati nella console (codice fisso, nessun SMS inviato)
+funzionano senza metodo di pagamento e con lo stesso codice Flutter e Firebase.
+
+| N. | Decisione |
+|---|---|
+| **L1** | La Fase 2 si sviluppa e si prova sul telefono con **numeri di prova**, sul piano Spark e senza carta. Il piano **Blaze** si attiva solo quando serve provare il numero reale del titolare (prima di chiudere la Fase 2) o iniziare la beta |
+| **L2** | Quando si attiva Blaze: **budget di 10 € al mese** con avvisi al 50%, 80% e 100%. L'avviso non blocca la spesa |
+| **L3** | SMS consentiti **solo verso numeri italiani (+39)** nella prima versione |
+| L4 | Ancora aperta (Supabase: pausa e backup) |
+| L5 | Ancora aperta (media delle chat, Fase 4) |
+
+**Effetto da considerare nella progettazione della Fase 2:** anche le Cloud Functions di Firebase
+richiedono Blaze.
+
+- Finché il progetto resta su Spark (L1), la logica lato server della Fase 2 (P2, rubrica
+  PSI/OPRF, scrittura dei profili riservata al server) non può usare le Cloud Functions.
+- Va progettata con strumenti disponibili gratuitamente (per esempio le funzioni di Supabase),
+  oppure si attiva Blaze prima.
+- Da decidere nel documento di progetto della Fase 2. Nessuna scelta fatta ora.
+
+## 5-bis. Proposte originali (per memoria)
 
 | N. | Decisione | Proposta |
 |---|---|---|

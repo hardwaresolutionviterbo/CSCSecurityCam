@@ -275,6 +275,8 @@ Sono indicazioni per la revisione legale, non decisioni.
    store per gli acquisti dei minori.
 5. **Promozioni e notifiche geolocalizzate ai minorenni:** compatibilità con il divieto di
    pubblicità profilata (punto 2).
+6. **Foto reale dei minorenni come marker sulla mappa** (decisione A5): misure adeguate ai sensi
+   dell'art. 28 del Digital Services Act.
 
 ## Dettagli di D1-D3 (M1-M7)
 
@@ -304,3 +306,21 @@ Note:
 | F9 | Servizio mappa | **MapLibre + OpenFreeMap approvati.** «3D» = inclinazione, rotazione ed edifici 3D; il rilievo del terreno si aggiunge quando MapLibre lo rilascerà ufficialmente. Conferma con un prototipo all'inizio della Fase 3 (mappa, posizione, avatar animato, batteria); fornitore di riserva se fallisce |
 | F10 | Chiavi e password | Confermato dal titolare: conservate in un posto sicuro |
 | F11 | Build | Android su GitHub Actions (già attivo); iPhone su Codemagic: account gratuito da creare o confermare. Per installare su iPhone serve comunque l'account Apple (Fasi 9-10) |
+
+# Decisioni su grafica e costi (14 novembre 2026)
+
+| N. | Argomento | Decisione | Dettaglio |
+|---|---|---|---|
+| A1 | Barra di navigazione | Cinque voci del PDF nell'ordine **Chat, Mappa, Scambia (centrale, arancione), Vendita, Profilo**, con lo stile del mockup; niente Home né Community | `AVATAR_E_MARKER_CONCEPT.md`, sez. 7 |
+| A5 | Immagine della persona | **Modificata dal titolare:** scelta libera tra foto propria (profilo **e** marker sulla mappa) e avatar 3D di Nexus Social; marker di attività, eventi e annunci distinti | `AVATAR_E_MARKER_CONCEPT.md`, sez. 7 |
+| L1 | Login SMS | Sviluppo con numeri di prova su Spark senza carta; Blaze solo per la prova del numero reale e la beta | `LIMITI_GRATUITI.md`, sez. 5 |
+| L2 | Budget | 10 € al mese con avvisi al 50%, 80% e 100% | `LIMITI_GRATUITI.md`, sez. 5 |
+| L3 | Paesi SMS | Solo Italia (+39) | `LIMITI_GRATUITI.md`, sez. 5 |
+| F11 | Account Codemagic | Il titolare lo crea ora; resta aperto fino alla sua conferma | — |
+
+Controlli di coerenza:
+
+- A5 è compatibile con il PDF e con P1-P15, D1-D4 e M1-M7: il marker con la foto rispetta le
+  regole sulla posizione (P9-P11, M4).
+- Da aggiungere agli «Obblighi da verificare» con il professionista: la foto reale dei minorenni
+  usata come marker sulla mappa (art. 28 del Digital Services Act).
