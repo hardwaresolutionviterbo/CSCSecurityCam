@@ -2,7 +2,7 @@
 
 Stato:
 - **tutte le verifiche superate** (14 novembre 2026);
-- in attesa dell'approvazione finale del titolare e delle decisioni aperte (sezione 4);
+- decisioni del titolare prese (sezione 4); in attesa della sua approvazione finale;
 - il Blocco 2 non è avviato.
 
 ## 1. Riferimenti
@@ -12,8 +12,8 @@ Stato:
 | Ramo | `fase1/blocco1`, derivato da `fase0/completamento` al commit `17d85de` |
 | Commit | `547b428` (documentazione, passaggio 1.1); `5910fb3` (build identificabile, passaggio 1.2) |
 | `main` | Invariato a `5e32045` |
-| Build GitHub Actions | Esecuzione 135, tentativo 1: tutti i passaggi riusciti |
-| APK | `nexus-social-0.1.0+13501-5910fb3-fase1-blocco1.apk` (debug), disponibile fino al 28/11/2026 |
+| Build GitHub Actions | Esecuzione 135: tentativo 1 (build 13501) e riesecuzione, tentativo 2 (build 13502), entrambi riusciti |
+| APK | `nexus-social-0.1.0+13501-5910fb3-fase1-blocco1.apk`, provato sul telefono; `nexus-social-0.1.0+13502-5910fb3-fase1-blocco1.apk`, prodotto dalla riesecuzione (stesso codice). Entrambi debug |
 
 ## 2. Controlli automatici (GitHub Actions)
 
@@ -46,7 +46,7 @@ autenticata avviene prima della Fase 2.
 
 | N. | Punto | Stato |
 |---|---|---|
-| 1 | Riesecuzione reale della build per dimostrare un numero distinto (atteso 13502); oggi la regola è verificata nel codice e con prove simulate | Decisione del titolare |
-| 2 | Verifica Firebase su emulatore per questo ramo (facoltativa: le parti dei servizi non sono cambiate; l'ultima verifica riuscita è del 12/11/2026 sul codice di `main`) | Decisione del titolare |
-| 3 | Repository pubblico: l'APK di prova è scaricabile da qualsiasi utente GitHub collegato | Decisione del titolare |
+| 1 | Riesecuzione reale della build per dimostrare un numero distinto | ✅ **Fatta**: la riesecuzione ha prodotto la build **13502** (versione 0.1.0, stesso commit e ramo), riletta dall'APK; 11 test su 11, Supabase HTTP 200 |
+| 2 | Verifica Firebase su emulatore per questo ramo | ✅ **Non necessaria** (titolare, 14/11/2026). Le parti dei servizi non sono cambiate; la registrazione FCM è confermata anche sul telefono reale |
+| 3 | Repository pubblico: l'APK di prova è scaricabile da qualsiasi utente GitHub collegato | ✅ **Resta così per ora** (titolare, 14/11/2026). Da riconsiderare prima della beta (Fase 9) |
 | 4 | La riga Versione va a capo dentro il nome del ramo («fase1/» · «blocco1»); tutte le informazioni restano leggibili | Miglioria estetica per il restyling |
