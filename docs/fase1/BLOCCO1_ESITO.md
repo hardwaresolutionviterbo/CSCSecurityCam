@@ -2,7 +2,9 @@
 
 Stato:
 - **tutte le verifiche superate** (14 novembre 2026);
-- decisioni del titolare prese (sezione 4); in attesa della sua approvazione finale;
+- decisioni del titolare prese (sezione 4);
+- **Blocco 1 approvato dal titolare il 14 novembre 2026.** Nessun merge su `main`: richiede
+  un'autorizzazione separata;
 - il Blocco 2 non è avviato.
 
 ## 1. Riferimenti
