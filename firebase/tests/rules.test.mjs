@@ -269,6 +269,29 @@ describe('profiles: lettura', () => {
     await assertSucceeds(getDoc(doc(db('alice'), 'profiles/ok')));
   });
 
+  // Fase 1, passaggio 1.8: coerenza con lo schema Supabase 0002 e le decisioni D1/M1.
+  // Nome completo, data di nascita, età e numero di telefono non stanno mai nella copia
+  // pubblica: un documento che li contiene non è leggibile da nessuno.
+  test('profilo con nome completo, data di nascita, età o telefono non leggibile', async () => {
+    const privati = {
+      n1: { fullName: 'Carlo Rossi' },
+      n2: { full_name: 'Carlo Rossi' },
+      n3: { birthDate: '2010-05-01' },
+      n4: { birth_date: '2010-05-01' },
+      n5: { age: 15 },
+      n6: { phoneNumber: '+393331234567' },
+    };
+    for (const [id, extra] of Object.entries(privati)) {
+      await seed(`profiles/${id}`, validProfile(extra));
+    }
+    await seed('profiles/ok', validProfile());
+    for (const id of Object.keys(privati)) {
+      await denied(getDoc(doc(db('alice'), `profiles/${id}`)));
+      await denied(getDoc(doc(db(id), `profiles/${id}`)));
+    }
+    await assertSucceeds(getDoc(doc(db('alice'), 'profiles/ok')));
+  });
+
   test('profilo legacy senza campi obbligatori non leggibile', async () => {
     await seed('profiles/p1', { username: 'carlo.c', publicName: 'Carlo C.' });
     await denied(getDoc(doc(db('alice'), 'profiles/p1')));

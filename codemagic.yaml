@@ -1,63 +1,31 @@
-# Nexus Social — build nel cloud con Codemagic (nessun PC richiesto).
+# Nexus Social — build per iPhone su Codemagic (decisione F11).
 # Documentazione: https://docs.codemagic.io/yaml/building-a-flutter-app/
 #
-# Come si usa:
-# 1. Collega il repository GitHub a Codemagic e seleziona il file codemagic.yaml.
-# 2. Nelle variabili d'ambiente del progetto (Codemagic → Environment variables) aggiungi
-#    SUPABASE_URL, SUPABASE_ANON_KEY e, quando Firebase sarà configurato, FIREBASE_ENABLED=true.
-#    I valori non vanno mai scritti in questo file né nel repository.
-# 3. Ogni push su main genera un APK di prova scaricabile dal telefono (QR code nella build).
+# Android NON si compila qui: l'APK lo produce GitHub Actions (.github/workflows/android.yml).
+# Così non si consumano minuti per build doppie.
+#
+# Come si usa (solo dopo l'autorizzazione del titolare):
+# 1. Il titolare collega il repository a Codemagic dall'app o dal sito e sceglie codemagic.yaml.
+# 2. Variabili d'ambiente del progetto (Codemagic → Environment variables), mai nel repository:
+#    SUPABASE_URL, SUPABASE_ANON_KEY. Firebase su iPhone resta spento finché non c'è il file
+#    di configurazione iOS (Fase 2 o successive).
+# 3. Avvio solo manuale («Start new build»): nessuna build automatica a ogni push.
+#
+# Per installare l'app su un iPhone serve l'account sviluppatore Apple (Fasi 9-10): questa
+# build senza firma verifica soltanto che il progetto iOS compili.
 
 workflows:
-  android-debug:
-    name: Nexus Social · APK di prova (Android)
-    instance_type: linux_x2
-    max_build_duration: 60
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-          source: true
-    environment:
-      flutter: stable
-      java: 17
-      vars:
-        # Sovrascritte dalle variabili d'ambiente del progetto su Codemagic.
-        SUPABASE_URL: ""
-        SUPABASE_ANON_KEY: ""
-        FIREBASE_ENABLED: "false"
-    cache:
-      cache_paths:
-        - $HOME/.pub-cache
-    scripts:
-      - name: Dipendenze
-        script: flutter pub get
-      - name: Analisi statica
-        script: flutter analyze
-      - name: Test unitari e widget
-        script: flutter test
-      - name: Build APK debug
-        script: |
-          flutter build apk --debug \
-            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
-            --dart-define=FIREBASE_ENABLED="$FIREBASE_ENABLED"
-    artifacts:
-      - build/app/outputs/flutter-apk/*.apk
-      - build/app/outputs/logs/*.log
-
   ios-debug:
     name: Nexus Social · build iOS senza firma (iPhone)
     instance_type: mac_mini_m2
     max_build_duration: 60
-    # Avvio manuale: consuma minuti macOS e la firma per TestFlight si aggiunge in Fase 9.
+    # Nessuna sezione «triggering»: la build parte solo a mano.
     environment:
-      flutter: stable
+      flutter: 3.50.0
       xcode: latest
       cocoapods: default
       vars:
+        # Sovrascritte dalle variabili d'ambiente del progetto su Codemagic.
         SUPABASE_URL: ""
         SUPABASE_ANON_KEY: ""
         FIREBASE_ENABLED: "false"
@@ -68,11 +36,23 @@ workflows:
     scripts:
       - name: Dipendenze
         script: flutter pub get
+      - name: Analisi statica
+        script: flutter analyze
+      - name: Test (senza chiavi né servizi reali)
+        script: flutter test
+      # Regola R1 anche su iPhone: versione, numero di build, commit e ramo.
+      # BUILD_NUMBER, CM_COMMIT e CM_BRANCH sono forniti da Codemagic.
       - name: Build iOS (senza firma)
         script: |
+          set -e
           flutter build ios --debug --no-codesign \
+            --build-number="${BUILD_NUMBER}" \
+            --dart-define=BUILD_NUMBER="${BUILD_NUMBER}" \
+            --dart-define=GIT_COMMIT="${CM_COMMIT}" \
+            --dart-define=GIT_BRANCH="${CM_BRANCH}" \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
             --dart-define=FIREBASE_ENABLED="$FIREBASE_ENABLED"
+          echo "Build iOS ${BUILD_NUMBER} · ${CM_COMMIT:0:7} · ${CM_BRANCH}"
     artifacts:
       - build/ios/iphoneos/Runner.app
