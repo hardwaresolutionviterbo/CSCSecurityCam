@@ -267,34 +267,48 @@ jobs:
           "${aapt2}" dump xmltree --file AndroidManifest.xml "${apk}" > manifest.txt
           python3 - manifest.txt <<'PY'
           import re, sys
-          # Un deep link è un intent-filter di una schermata (activity) con azione VIEW o
-          # con un elemento <data>. Le <queries> delle librerie non aprono l'app: sono ammesse.
-          stack, problems, allowed = [], [], []
-          current_action = None
+          # Un deep link è un intent-filter di un'activity con azione VIEW o con <data>.
+          # Le <queries> delle librerie non aprono l'app. Sono ammesse solo le activity
+          # elencate qui, che non portano a schermate di Nexus Social.
+          ALLOWED = {
+              # Firebase Authentication: ritorno dalla verifica reCAPTCHA/browser
+              # usata dal login con numero di telefono (Fase 2).
+              "com.google.firebase.auth.internal.GenericIdpActivity",
+              "com.google.firebase.auth.internal.RecaptchaActivity",
+          }
+          stack, found = [], {}
+          activity = None
           for line in open(sys.argv[1], encoding="utf-8", errors="replace"):
               depth = len(line) - len(line.lstrip(" "))
               text = line.strip()
               while stack and stack[-1][0] >= depth:
                   stack.pop()
+              names = [n for _, n in stack]
               if text.startswith("E: "):
                   name = text[3:].split(" ")[0]
                   stack.append((depth, name))
-                  path = [n for _, n in stack]
-                  in_screen = "intent-filter" in path and ("activity" in path or "activity-alias" in path)
-                  if name == "data" and in_screen:
-                      problems.append(" > ".join(path))
-              elif text.startswith("A: ") and 'android.intent.action.VIEW"' in text:
-                  path = " > ".join(n for _, n in stack)
+                  if name in ("activity", "activity-alias"):
+                      activity = "?"
                   names = [n for _, n in stack]
-                  if "intent-filter" in names and ("activity" in names or "activity-alias" in names):
-                      problems.append(path + " (VIEW)")
-                  else:
-                      allowed.append(path)
-          for path in sorted(set(allowed)):
-              print(f"Ammesso (non apre l'app): {path}")
+                  if name == "data" and "intent-filter" in names and activity:
+                      found.setdefault(activity, set()).add("data")
+              elif text.startswith("A: "):
+                  m = re.search(r':name\(0x01010003\)="([^"]+)"', text)
+                  if m and names and names[-1] in ("activity", "activity-alias"):
+                      activity = m.group(1)
+                  if 'android.intent.action.VIEW"' in text:
+                      if "intent-filter" in names and ("activity" in names or "activity-alias" in names):
+                          found.setdefault(activity, set()).add("VIEW")
+                      else:
+                          print("Ammesso (consultazione di altre app, non apre Nexus Social): " + " > ".join(names))
+          problems = 0
+          for name, kinds in sorted(found.items()):
+              if name in ALLOWED:
+                  print(f"Ammesso: {name} ({', '.join(sorted(kinds))}) - libreria Firebase Auth")
+              else:
+                  print(f"::error::Deep link non ammesso: {name} ({', '.join(sorted(kinds))})")
+                  problems += 1
           if problems:
-              for path in problems:
-                  print(f"::error::Deep link in una schermata dell'app: {path}")
               sys.exit(1)
           PY
           rm -f manifest.txt
