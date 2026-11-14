@@ -2,7 +2,8 @@
 
 Stato:
 - controlli automatici superati (14 novembre 2026);
-- **prova sul telefono del titolare da fare**;
+- **prova sul telefono e nuova grafica approvate dal titolare** (14 novembre 2026: «va bene,
+  pulito, semplice»);
 - Blocco 3 non avviato; `main` invariato.
 
 ## 1. Riferimenti
@@ -45,7 +46,7 @@ Stato:
   - Nei test usa una simulazione in memoria.
 - **Passaggi 1.4 e 1.5** in un solo commit, perché toccano gli stessi file.
 
-## 5. Prova sul telefono (da fare)
+## 5. Prova sul telefono (approvata dal titolare)
 
 1. L'app si apre su **Chat**.
 2. Barra: Chat, Mappa, **Scambia** (pulsante centrale arancione), Vendita, Profilo.
