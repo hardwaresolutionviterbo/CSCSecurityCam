@@ -320,9 +320,16 @@ jobs:
           problems = 0
           for name in apk.namelist():
               data = apk.read(name)
-              if b"sb_secret_" in data or b"service_role" in data:
-                  print(f"::error::Possibile chiave privilegiata in {name}.")
+              # Chiavi segrete Supabase nel formato nuovo (sb_secret_...): mai nell'app.
+              if re.search(rb"sb_secret_[A-Za-z0-9_-]{16,}", data):
+                  print(f"::error::Chiave segreta Supabase (sb_secret_) in {name}.")
                   problems += 1
+              # La parola «service_role» in chiaro non è una chiave (le chiavi sono token
+              # codificati, controllati sotto): si mostra solo il contesto, per trasparenza.
+              for m in re.finditer(rb"service_role", data):
+                  ctx = data[max(0, m.start() - 40): m.end() + 40]
+                  ctx = re.sub(rb"[^A-Za-z0-9_ .:/-]", b" ", ctx).decode()
+                  print(f"Informazione: parola service_role in {name}: ...{ctx}...")
               for match in jwt.finditer(data):
                   part = match.group(1) + b"=" * (-len(match.group(1)) % 4)
                   try:
