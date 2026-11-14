@@ -23,7 +23,7 @@ Legenda:
 | Account GitHub | ✅ | Repository attivo |
 | Account Firebase | ✅ | La build Android in CI contiene la configurazione Firebase |
 | Account Supabase | ✅ | La CI raggiunge Supabase e trova lo schema (HTTP 200) |
-| Account Codemagic | 🟡 deciso (F11), in corso | Android resta su GitHub Actions; Codemagic per le build iPhone. **Il titolare sta creando l'account gratuito: serve la sua conferma.** |
+| Account Codemagic | ✅ disponibile (F11) | Account esistente, confermato dal titolare il 14 novembre 2026. Android resta su GitHub Actions; Codemagic per le build iPhone. **Nessun collegamento al repository, nessuna configurazione e nessuna build senza autorizzazione esplicita del titolare.** |
 | Servizio mappa 3D (account e chiave gratuita) | ✅ deciso (F9) | [`fase0/DECISIONE_MAPPA.md`](fase0/DECISIONE_MAPPA.md): MapLibre + OpenFreeMap, senza account né chiave. «3D» = inclinazione ed edifici 3D. Prototipo di conferma all'inizio della Fase 3. |
 | Chiavi e password in un posto sicuro | ✅ confermato (F10) | Confermato dal titolare. Nessuna chiave nel repository. |
 | Logo, icona, colori, stile (moderno, avatar animati, modalità scura) | ✅ concept; A1 e A5 decise, A2-A4 e A6 entro la Fase 3 | Logo, icona e tema chiaro/scuro presenti. Concept di avatar e marker dal mockup del titolare: [`fase0/AVATAR_E_MARKER_CONCEPT.md`](fase0/AVATAR_E_MARKER_CONCEPT.md). Decisioni A1-A6 aperte. Icona definitiva per gli store in Fase 9/10. |
@@ -113,12 +113,13 @@ Fatte:
 
 Ancora da fare:
 
-6. 🟡 **Account Codemagic**: il titolare lo sta creando (F11). Serve la sua conferma.
+6. ✅ **Account Codemagic disponibile** (confermato il 14 novembre 2026). Collegamento e configurazione solo su autorizzazione del titolare.
 7. ✅ Concept di avatar e marker; **A1 e A5 decise**. A2, A3, A4 e A6 da decidere prima della Fase 3.
 8. ✅ Limiti gratuiti verificati; **L1, L2 e L3 decise**. L4 e L5 da decidere più avanti.
 9. ⏳ Dati del titolare nelle bozze legali; revisione del professionista in Fase 9, che copre anche
    gli obblighi sui minorenni (Digital Services Act, art. 28) e la foto dei minorenni sulla mappa
    (A5).
 
-**Per dichiarare conclusa la Fase 0 manca solo la conferma dell'account Codemagic (punto 6).** Gli
-altri punti aperti hanno una scadenza in fasi successive, come previsto dal piano.
+**Tutte le attività della Fase 0 sono completate.** I punti ancora aperti (A2-A4, A6, L4, L5,
+dati del titolare e revisione legale) hanno una scadenza in fasi successive, come previsto dal
+piano. La Fase 1 non è avviata: serve l'autorizzazione del titolare.

@@ -316,7 +316,7 @@ Note:
 | L1 | Login SMS | Sviluppo con numeri di prova su Spark senza carta; Blaze solo per la prova del numero reale e la beta | `LIMITI_GRATUITI.md`, sez. 5 |
 | L2 | Budget | 10 € al mese con avvisi al 50%, 80% e 100% | `LIMITI_GRATUITI.md`, sez. 5 |
 | L3 | Paesi SMS | Solo Italia (+39) | `LIMITI_GRATUITI.md`, sez. 5 |
-| F11 | Account Codemagic | Il titolare lo crea ora; resta aperto fino alla sua conferma | — |
+| F11 | Account Codemagic | **Disponibile** (confermato il 14 novembre 2026). Collegamenti e configurazioni solo su autorizzazione | `FASE_0_CHECKLIST.md` |
 
 Controlli di coerenza:
 
