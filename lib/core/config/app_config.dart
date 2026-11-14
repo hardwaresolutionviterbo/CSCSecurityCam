@@ -24,4 +24,33 @@ abstract final class AppInfo {
   static const String version = '0.1.0';
   static const int phase = 1;
   static const String phaseLabel = 'Fase 1 · Fondamenta';
+
+  /// Identificativi inseriti dalla build (GitHub Actions) con `--dart-define`.
+  /// Nelle build locali restano vuoti e la riga Versione lo dice chiaramente.
+  static const String buildNumber = String.fromEnvironment('BUILD_NUMBER');
+  static const String gitCommit = String.fromEnvironment('GIT_COMMIT');
+  static const String gitBranch = String.fromEnvironment('GIT_BRANCH');
+
+  /// Testo della riga «Versione» in Profilo → Informazioni,
+  /// es. `0.1.0 (1202) · a1b2c3d · fase1/blocco1`.
+  static String get versionLabel => formatVersion(
+    version: version,
+    buildNumber: buildNumber,
+    gitCommit: gitCommit,
+    gitBranch: gitBranch,
+  );
+
+  static String formatVersion({
+    required String version,
+    required String buildNumber,
+    required String gitCommit,
+    required String gitBranch,
+  }) {
+    final String build = buildNumber.isEmpty ? 'build locale' : buildNumber;
+    final String commit = gitCommit.isEmpty
+        ? 'commit n/d'
+        : gitCommit.substring(0, gitCommit.length < 7 ? gitCommit.length : 7);
+    final String branch = gitBranch.isEmpty ? 'ramo n/d' : gitBranch;
+    return '$version ($build) · $commit · $branch';
+  }
 }

@@ -162,7 +162,7 @@ class ProfileScreen extends StatelessWidget {
             children: [
               Text('Informazioni', style: theme.textTheme.titleSmall),
               const SizedBox(height: 14),
-              _InfoRow(label: 'Versione', value: '${AppInfo.version} (beta)'),
+              _InfoRow(label: 'Versione', value: AppInfo.versionLabel),
               const SizedBox(height: 10),
               _InfoRow(label: 'Fase', value: AppInfo.phaseLabel),
               const SizedBox(height: 10),
@@ -349,8 +349,16 @@ class _InfoRow extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        const Spacer(),
-        Text(value, style: theme.textTheme.bodySmall),
+        const SizedBox(width: 16),
+        // Expanded + allineamento a destra: stesso aspetto di prima, ma i valori
+        // lunghi (es. versione con commit e ramo) vanno a capo invece di uscire dallo schermo.
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
       ],
     );
   }
