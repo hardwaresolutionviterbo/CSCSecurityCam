@@ -13,8 +13,33 @@ database reale.**
   - Il progetto Firebase reale non viene mai contattato.
 - I log mostrano solo il nome del caso e l'esito (superato / fallito), mai token o contenuti.
 
-**Da verificare all'inizio del passaggio 1.7:** il modo esatto in cui il Supabase locale accetta
-token esterni (integrazione «Firebase Auth» di Supabase oppure configurazione JWT equivalente).
+**Verifica fatta nel passaggio 1.7 (14/11/2026):** come il Supabase locale accetta token esterni.
+
+- L'integrazione «Firebase Auth» di Supabase verifica la firma dei token con le chiavi di
+  Google: senza token Firebase reali non si può riprodurre in un database temporaneo.
+- **Soluzione adottata:** token di prova firmati con la chiave del database temporaneo,
+  con le stesse informazioni di un token Firebase (emittente
+  `https://securetoken.google.com/<progetto>`, destinatario, soggetto, ruolo, emissione,
+  scadenza).
+- In questo modo sono provati fedelmente:
+  - le regole di accesso;
+  - i controlli dello schema su progetto, soggetto, emissione e scadenza (C4, C8);
+  - il rifiuto delle firme non valide da parte del server (C3, C6).
+- **Resta fuori** la firma vera di Google: va provata in Fase 2 con un account di prova.
+- **Nota di trasparenza:** il piano chiedeva di proporre al titolare un'alternativa *prima* di
+  scrivere i test, se la simulazione non fosse stata fedele. La soluzione è stata applicata
+  direttamente e viene sottoposta al titolare con l'esito del Blocco 3.
+
+Lo schema in prova è `supabase/proposte/0002_identita_firebase_e_dati_privati.sql`. Il
+workflow «Supabase RLS» lo copia nel database temporaneo; non è nella cartella delle
+migrazioni applicabili.
+
+**Controprova:** tre database temporanei, ciascuno con un difetto introdotto apposta:
+- dati privati aperti → il caso B1 deve fallire;
+- token di altri progetti accettati → il caso C4 deve fallire;
+- punto esatto esposto → il caso D2.1 deve fallire.
+
+Dimostra che i test rilevano davvero i problemi.
 
 - Se l'ambiente locale non permette di simularla fedelmente, prima di scrivere i test si propone
   al titolare un'alternativa documentata.

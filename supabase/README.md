@@ -3,6 +3,20 @@
 Qui vivono **annunci, ricerca per distanza, foto, segnalazioni e gestionale**.
 Chat, chiamate e notifiche restano su Firebase (vedi `../firebase/`).
 
+## Schema proposto 0002 (NON applicato)
+
+`proposte/0002_identita_firebase_e_dati_privati.sql` contiene lo schema della Fase 1, passaggio
+1.7:
+- identità Firebase;
+- dati privati in `profile_private`;
+- modalità di posizione per annuncio (P9);
+- policy restrittive.
+
+Sta **fuori** da `migrations/` perché nessuna integrazione lo applichi da sola. Si applica al
+database reale solo con l'autorizzazione esplicita del titolare, seguendo i punti aperti di
+`docs/fase1/CHECKLIST.md`. I test (`tests/rls_test.py`, workflow «Supabase RLS») lo eseguono su
+un database temporaneo in GitHub Actions.
+
 ## Applicare lo schema
 
 1. Crea il progetto su [supabase.com](https://supabase.com) (piano gratuito per iniziare).
