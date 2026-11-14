@@ -71,12 +71,38 @@ Authentication.
 | N. | Caso | Esito atteso |
 |---|---|---|
 | D1 | Un utente non diventa admin da solo | Rifiutato |
-| D2 | Posizione degli annunci solo approssimata per gli altri utenti | Verificato |
+| D2 | Posizione degli annunci: rispettata la modalità scelta per ciascun annuncio (P9) | Vedi sezione 3-bis |
 | D3 | Le segnalazioni di un utente non sono leggibili da altri utenti | Verificato |
+
+## 3-bis. Posizione degli annunci (decisione P9)
+
+P9:
+- la posizione **approssimata** è quella **predefinita**;
+- per ogni annuncio l'autore può scegliere invece la posizione **precisa** scelta a mano.
+
+I test verificano che sia rispettata la modalità di ciascun annuncio.
+
+| N. | Caso | Esito atteso |
+|---|---|---|
+| D2.1 | Annuncio creato senza indicare la modalità | Modalità **approssimata**; gli altri utenti vedono solo la posizione approssimata e una distanza a fasce |
+| D2.2 | Annuncio in modalità approssimata | Il punto preciso non è leggibile da altri utenti in nessun modo: né dalla tabella, né dalle funzioni come `nearby_listings`, né con filtri o ordinamenti per distanza |
+| D2.3 | Annuncio in modalità **precisa** scelta dall'autore | Gli altri utenti autenticati vedono esattamente il punto scelto dall'autore |
+| D2.4 | Stesso autore, due annunci con modalità diverse | Ogni annuncio rispetta la propria modalità; la scelta su uno non cambia l'altro |
+| D2.5 | Un altro utente tenta di cambiare la modalità o la posizione di un annuncio non suo | Rifiutato; annuncio invariato |
+| D2.6 | L'autore passa da precisa ad approssimata | Da quel momento il punto preciso non è più leggibile dagli altri |
+| D2.7 | L'autore legge il proprio annuncio | Vede sempre la posizione salvata e la modalità scelta |
+| D2.8 | Utente non autenticato | Nessuna posizione, né approssimata né precisa |
+
+Note:
+- Lo schema attuale (`0001`) salva sempre una posizione approssimata pubblica e una precisa
+  riservata, ma non registra la modalità scelta. Lo schema `0002` del passaggio 1.7 aggiunge la
+  modalità per ogni annuncio, con «approssimata» come valore predefinito.
+- Il **GPS in tempo reale** (terza modalità di P9, con P10, P11 e M4) appartiene alla Fase 3 e
+  sarà provato lì. Lo schema `0002` non deve impedirlo.
 
 ## 4. Criterio di superamento
 
-- Tutti i casi A, B, C e D superati in GitHub Actions.
+- Tutti i casi A, B, C, D e D2.1-D2.8 superati in GitHub Actions.
 - Se anche un solo caso fallisce, il passaggio 1.7 non è concluso e la migrazione non viene
   proposta per il database reale.
 - L'applicazione al database reale resta comunque soggetta all'autorizzazione esplicita del

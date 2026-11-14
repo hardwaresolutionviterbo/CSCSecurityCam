@@ -51,8 +51,8 @@ Inoltre:
 | **A1** | Barra: **Chat, Mappa, Scambia** (pulsante centrale arancione), **Vendita, Profilo**; stile del mockup; niente Home né Community. **Modifica dell'ordine del PDF** (Mappa, Chat, …) approvata dal titolare |
 | **Schermata iniziale** (14/11/2026) | All'apertura l'app mostra **Chat**, come WhatsApp (D4) |
 | **Verifica dei servizi** (14/11/2026) | **Nessuna nuova schermata «Stato servizi».** Firebase e Supabase si verificano con i log delle build e i test automatici |
-| **R1 · Identificazione dell'APK** (14/11/2026) | Ogni APK riporta chiaramente **versione, commit Git e ramo** di provenienza (sez. 5) |
-| **R2 · Restyling senza perdite** (14/11/2026) | Il restyling non elimina, non altera e non compromette nessuna funzione esistente (sez. 6) |
+| **R1 · Identificazione dell'APK** (14/11/2026) | Ogni APK riporta chiaramente **versione, commit Git e ramo** di provenienza, con un numero di build diverso anche per le riesecuzioni (sez. 5) |
+| **R2 · Restyling senza perdite** (14/11/2026) | Il restyling non elimina, non altera e non compromette nessuna funzione esistente; ogni funzione ha una verifica automatica (sez. 6) |
 | **R3 · Test di sicurezza Supabase** (14/11/2026) | Test automatici delle regole di accesso (RLS): separazione tra dati pubblici e privati, nessuna lettura dei dati privati altrui, rifiuto dei token Firebase non validi o di altri utenti (`TEST_SUPABASE_RLS.md`) |
 | **F11** | Android su GitHub Actions; Codemagic solo per iPhone. **Modifica rispetto al PDF** (che indica Codemagic per le build) approvata dal titolare |
 | **F8** | Identificativo `com.nexussocial.app` invariato in questa fase; cambio entro la Fase 9 |
@@ -78,53 +78,90 @@ Inoltre:
 
 ## 5. R1 · Identificazione di ogni APK
 
-Ogni APK prodotto riporta **versione, commit e ramo** in tre punti:
+Ogni APK prodotto riporta **versione, numero di build, commit e ramo** in tre punti:
 
 | Dove | Esempio |
 |---|---|
-| Nome dell'artifact e del file APK scaricato da GitHub | `nexus-social-0.1.0+12-a1b2c3d-fase1-lavori.apk` |
-| Riepilogo della build su GitHub Actions | Tabella con versione, commit completo, ramo, data |
-| Dentro l'app: riga «Versione» già esistente in **Profilo → Informazioni** | `0.1.0 (12) · a1b2c3d · fase1/lavori` |
+| Nome dell'artifact e del file APK scaricato da GitHub | `nexus-social-0.1.0+1202-a1b2c3d-fase1-lavori.apk` |
+| Riepilogo della build su GitHub Actions | Tabella con versione, numero di build, esecuzione e tentativo, commit completo, ramo, data |
+| Dentro l'app: riga «Versione» già esistente in **Profilo → Informazioni** | `0.1.0 (1202) · a1b2c3d · fase1/lavori` |
 
-Dettagli:
-- il numero di build (`+12`) cresce a ogni esecuzione, così un APK nuovo si distingue sempre da
-  uno vecchio;
-- commit e ramo sono inseriti dalla build in automatico (`--dart-define`), mai scritti a mano;
+**Numero di build sempre diverso, anche rieseguendo la stessa build:**
+- GitHub assegna a ogni esecuzione un numero progressivo (`run_number`) e a ogni riesecuzione della
+  stessa esecuzione un numero di tentativo (`run_attempt`: 1, 2, 3…).
+- Il numero di build è `run_number × 100 + run_attempt`. Esempio: esecuzione 12, primo tentativo →
+  `1201`; stessa esecuzione rieseguita → `1202`.
+- Il numero cresce sempre, quindi Android accetta l'aggiornamento sopra un APK precedente dello
+  stesso ramo.
+- Se i tentativi superassero 99, la build si ferma con un messaggio chiaro invece di produrre un
+  numero già usato.
+- Il nome dell'artifact contiene il numero di build, quindi due tentativi non si sovrascrivono.
+
+**Regole:**
+- versione, commit e ramo sono inseriti dalla build in automatico (`--dart-define` e
+  `--build-number`), mai scritti a mano;
+- nel nome del file la `/` del ramo diventa `-`; nell'app il ramo resta scritto per intero;
 - non viene aggiunta nessuna nuova schermata: si completa la riga «Versione» che esiste già.
+
+**Verifica automatica (passaggio 1.2):**
+- un controllo nella build rilegge dall'APK prodotto numero di build e nome della versione e li
+  confronta con quelli attesi;
+- un test dell'interfaccia controlla che la riga «Versione» mostri versione, numero di build,
+  commit e ramo;
+- se un dato manca, la build fallisce.
 
 ## 6. R2 · Restyling senza perdite
 
-**Funzioni esistenti su `main` che devono restare intatte:**
+**Ogni funzione esistente su `main` ha una verifica automatica e un criterio di superamento.**
 
-| Funzione | Dove |
+| N. | Funzione | Verifica automatica | Criterio di superamento |
+|---|---|---|---|
+| F1 | Cinque sezioni con schermate di anteprima | Test di interfaccia: tocca ogni voce della barra e controlla la schermata aperta | Le 5 voci esistono con i nomi del PDF; ciascuna apre la propria anteprima; nessun errore |
+| F2 | Campanella con il foglio delle notifiche | Test di interfaccia esistente («la campanella apre il foglio delle notifiche vuote») | La campanella è visibile su ogni scheda e apre il foglio delle notifiche |
+| F3 | Tema chiaro e scuro che segue il telefono, icone di sistema adeguate | Test esistente sulle icone di sistema, più un test che avvia l'app in modalità chiara e scura | In ciascuna modalità l'app usa il tema corrispondente e le icone di sistema restano leggibili |
+| F4 | Scelta Privato / Azienda (anteprima) | Test di interfaccia sul Profilo | Entrambe le voci sono presenti e selezionabili come oggi |
+| F5 | Indicatori Supabase e Firebase nel Profilo | Test esistente («il profilo mostra i servizi non configurati») più un test con lo stato «configurato» simulato | Ogni stato possibile mostra la propria scritta; nessuna chiave o indirizzo visibile |
+| F6 | Diagnostica push (solo debug con Firebase attivo) | Test di interfaccia in due condizioni | Con debug e Firebase la voce c'è e apre la schermata «Diagnostica push»; senza Firebase la voce non compare |
+| F7 | Riga Informazioni: versione, fase, privacy | Test di interfaccia sul Profilo (unito alla verifica di R1) | Compaiono «Versione» (con build, commit e ramo), «Fase» e «Privacy: Posizione approssimata» |
+| F8 | **Registrazione del dispositivo per le notifiche push** | Test della logica di `PushDeviceRegistry` con Firebase simulato, più i test esistenti delle regole Firestore sui dispositivi (emulatore) | Vedi «Dettaglio F8» |
+| F9 | **Avvio dell'app senza chiavi** | Test che avvia `BackendBootstrap` e l'app senza nessuna chiave (`--dart-define` assenti), più il test esistente «senza dart-define i servizi restano spenti» | Nessun errore o crash; Supabase e Firebase risultano «Non configurato»; la barra e tutte e 5 le schede funzionano; la registrazione push non parte |
+| F10 | **Anteprima del gestionale admin** | Test di interfaccia che apre `AdminScreen` | Mostra l'anteprima «Gestionale Admin» senza azioni attive; resta **non raggiungibile** dalla barra e dal Profilo, come oggi (il gestionale arriva in Fase 7) |
+
+**Dettaglio F8 · Registrazione del dispositivo push**
+
+| Caso | Criterio di superamento |
 |---|---|
-| Cinque sezioni con schermate di anteprima | Barra in basso |
-| Campanella con il foglio delle notifiche | Barra in alto |
-| Tema chiaro e scuro che segue il telefono, icone di sistema adeguate | Tutta l'app |
-| Scelta Privato / Azienda (anteprima) | Profilo |
-| Indicatori Supabase e Firebase già esistenti («Non configurato», ecc.) | Profilo |
-| Diagnostica push (solo nelle build di debug con Firebase attivo) | Profilo |
-| Riga Informazioni: versione, fase, privacy | Profilo |
-| Registrazione del dispositivo per le notifiche push | Avvio, servizi |
-| Avvio dell'app anche senza chiavi (servizi spenti senza errori) | Avvio |
-| Gestionale admin (anteprima) | `features/admin` |
+| Firebase non configurato | Nessuna chiamata a Firebase; stato finale «idle»; nessun errore |
+| Utente non ancora entrato | Stato «in attesa dell'utente»; nessuna scrittura |
+| Utente entrato e identificativo del dispositivo disponibile | Un solo documento in `profiles/{uid}/devices/{id}`; stato «collegato» |
+| L'identificativo del dispositivo cambia per lo stesso utente | Il vecchio collegamento viene rimosso e il nuovo creato; mai due dispositivi attivi per la stessa installazione |
+| Errore di rete | Stato «non riuscito»; il pulsante «Riprova associazione» riprende la registrazione |
+| Regole Firestore (emulatore, test esistenti) | Solo il proprietario legge, crea, modifica e cancella i propri dispositivi; la data di creazione non si può alterare |
 
-Gli indicatori dei servizi nel Profilo **esistono già**: restano come sono, in base alla regola R2.
+Per F8 serve poter sostituire Firebase con una versione simulata nei test.
+
+- Se oggi il codice non lo permette, si fa una modifica minima, **senza cambiare il comportamento**.
+- La modifica è dichiarata nel commit e coperta dai test qui sopra.
+
+Resta anche la verifica già presente nel repository `firebase/verify_android_runtime.sh`, che il
+titolare può usare sul telefono reale.
+
+Gli indicatori dei servizi nel Profilo **esistono già** e restano come sono, in base alla regola R2.
 La decisione di non aggiungere la schermata «Stato servizi» riguarda solo schermate nuove.
 
-**Come si garantisce:**
-1. Prima del restyling:
-   - si registra l'elenco delle funzioni qui sopra;
-   - si confermano verdi i 7 test esistenti (4 di interfaccia, 3 di configurazione).
-2. Si aggiungono test che bloccano le regressioni:
-   - ogni scheda si apre;
-   - la campanella funziona;
-   - gli indicatori, la diagnostica push e la riga «Versione» sono presenti;
-   - tema chiaro e scuro.
-3. Restyling: cambiano solo aspetto, colori, ordine della barra e scheda iniziale.
-4. Tutti i test devono restare verdi. Nessun test esistente viene cancellato o indebolito: se uno
-   va adattato (per esempio all'ordine nuovo della barra), lo si dichiara nel commit.
-5. Prova manuale sul telefono con la tabella qui sopra, voce per voce.
+**Regole sui test:**
+1. I test F1-F10 si aggiungono e devono essere verdi **sull'app attuale, prima** del restyling
+   (passaggio 1.3).
+2. Nessun test esistente viene cancellato o indebolito:
+   - i 7 test Flutter;
+   - i test delle regole Firestore;
+   - i test dell'audit.
+
+   Se un test va adattato a una decisione approvata (per esempio l'ordine A1 della barra), il
+   commit lo dichiara e il controllo resta almeno altrettanto severo.
+3. Il restyling cambia solo aspetto, colori, ordine della barra e scheda iniziale.
+4. Dopo ogni passaggio grafico tutti i test devono essere verdi, poi c'è la prova manuale sul
+   telefono, voce per voce.
 
 ## 7. Passaggi
 
@@ -132,7 +169,7 @@ La decisione di non aggiungere la schermata «Stato servizi» riguarda solo sche
 |---|---|---|
 | **1.1** | Documentazione: incoerenze 1, 2 e 3; corrispondenza tra le cartelle del codice e quelle del PDF | Leggere i file su GitHub |
 | **1.2** | Identificazione dell'APK (R1) e avvio della build anche dal ramo di lavoro (incoerenza 6). Poi build dell'app attuale come punto di partenza | Scaricare l'APK da GitHub: il nome riporta versione, commit e ramo. Installato, in Profilo → Informazioni compaiono gli stessi dati. 5 schede, campanella e tema scuro funzionano |
-| **1.3** | Test di non regressione (R2, sez. 6, punti 1-2) sull'app attuale, prima di ogni cambio grafico | Spunta verde dei test su GitHub |
+| **1.3** | Test automatici F1-F10 di non regressione (R2, sez. 6) sull'app attuale, prima di ogni cambio grafico | Spunta verde dei test su GitHub, con l'elenco F1-F10 superati |
 | **1.4** | Barra A1 (Chat, Mappa, Scambia centrale arancione, Vendita, Profilo) e apertura su **Chat** | Nuovo APK: l'app si apre su Chat; ordine corretto; pulsante arancione; ogni scheda si apre; tutte le voci della sez. 6 funzionano |
 | **1.5** | Tema con lo stile grafico del mockup, chiaro e scuro | Cambiare il tema del telefono: l'app si adegua. Ricontrollare la sez. 6 voce per voce |
 | **1.6** | Verifica dei servizi con log e test: controllo dei passaggi già presenti nella build Android («Verifica connessione Supabase», «Verifica Firebase nell'APK») | Su GitHub, nella build, i passaggi di verifica sono verdi; nessuna chiave o dato personale nei log |
