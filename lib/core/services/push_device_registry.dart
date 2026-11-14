@@ -17,6 +17,88 @@ enum PushDeviceLinkState {
   failed,
 }
 
+/// Operazioni sui servizi Firebase usate dalla registrazione del dispositivo.
+///
+/// In produzione è [FirebasePushDeviceBackend]; nei test si usa una versione
+/// simulata in memoria, così nessun test contatta Firebase reale.
+abstract class PushDeviceBackend {
+  /// Identificativo dell'utente autenticato a ogni cambio (null se nessuno).
+  Stream<String?> authUidChanges();
+
+  /// Utente autenticato in questo momento.
+  String? get currentUid;
+
+  /// Crea o aggiorna `profiles/{uid}/devices/{fid}`.
+  Future<void> link({
+    required String uid,
+    required String fid,
+    required String platform,
+  });
+
+  /// Elimina `profiles/{uid}/devices/{fid}`.
+  Future<void> unlink({required String uid, required String fid});
+
+  Future<void> signOut();
+}
+
+/// Implementazione reale con Firebase Auth e Cloud Firestore.
+class FirebasePushDeviceBackend implements PushDeviceBackend {
+  const FirebasePushDeviceBackend();
+
+  @override
+  Stream<String?> authUidChanges() =>
+      FirebaseAuth.instance.authStateChanges().map((User? user) => user?.uid);
+
+  @override
+  String? get currentUid => FirebaseAuth.instance.currentUser?.uid;
+
+  @override
+  Future<void> link({
+    required String uid,
+    required String fid,
+    required String platform,
+  }) async {
+    final DocumentReference<Map<String, dynamic>> document = _document(
+      uid,
+      fid,
+    );
+
+    await FirebaseFirestore.instance.runTransaction((
+      Transaction transaction,
+    ) async {
+      final DocumentSnapshot<Map<String, dynamic>> snapshot = await transaction
+          .get(document);
+      final Map<String, Object?> data = <String, Object?>{
+        'platform': platform,
+        'appVersion': AppInfo.version,
+        'enabled': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'lastSeenAt': FieldValue.serverTimestamp(),
+      };
+      if (!snapshot.exists) {
+        data['createdAt'] = FieldValue.serverTimestamp();
+      }
+      transaction.set(document, data, SetOptions(merge: true));
+    });
+  }
+
+  @override
+  Future<void> unlink({required String uid, required String fid}) =>
+      _document(uid, fid).delete();
+
+  @override
+  Future<void> signOut() => FirebaseAuth.instance.signOut();
+
+  static DocumentReference<Map<String, dynamic>> _document(
+    String uid,
+    String fid,
+  ) {
+    return FirebaseFirestore.instance.doc(
+      PushDeviceRegistry.devicePath(uid, fid),
+    );
+  }
+}
+
 /// Associa il Firebase Installation ID all'utente autenticato.
 ///
 /// Il documento vive in `profiles/{uid}/devices/{fid}` e le regole Firestore
@@ -27,13 +109,49 @@ abstract final class PushDeviceRegistry {
   static final ValueNotifier<PushDeviceLinkState> state =
       ValueNotifier<PushDeviceLinkState>(PushDeviceLinkState.idle);
 
-  static User? _user;
+  static String? _uid;
   static String? _fid;
   static String? _linkedUid;
   static String? _linkedFid;
   static bool _started = false;
   static bool _syncing = false;
   static bool _syncRequested = false;
+  static StreamSubscription<String?>? _authSubscription;
+
+  static PushDeviceBackend? _backendOverride;
+  static bool? _firebaseEnabledOverride;
+  static PushDeviceBackend? _defaultBackend;
+
+  static PushDeviceBackend get _backend =>
+      _backendOverride ?? (_defaultBackend ??= const FirebasePushDeviceBackend());
+
+  static bool get _firebaseEnabled =>
+      _firebaseEnabledOverride ?? AppConfig.hasFirebase;
+
+  /// Percorso Firestore del dispositivo: `profiles/{uid}/devices/{fid}`.
+  static String devicePath(String uid, String fid) =>
+      'profiles/$uid/devices/$fid';
+
+  /// Solo per i test: azzera lo stato e sostituisce Firebase con una simulazione.
+  @visibleForTesting
+  static Future<void> debugReset({
+    PushDeviceBackend? backend,
+    bool? firebaseEnabled,
+  }) async {
+    await _authSubscription?.cancel();
+    _authSubscription = null;
+    PushNotifications.installationId.removeListener(_onInstallationIdChanged);
+    _backendOverride = backend;
+    _firebaseEnabledOverride = firebaseEnabled;
+    _uid = null;
+    _fid = null;
+    _linkedUid = null;
+    _linkedFid = null;
+    _started = false;
+    _syncing = false;
+    _syncRequested = false;
+    state.value = PushDeviceLinkState.idle;
+  }
 
   /// Avvia l'ascolto dell'autenticazione e del FID.
   ///
@@ -43,7 +161,7 @@ abstract final class PushDeviceRegistry {
     if (_started) return;
     _started = true;
 
-    if (kIsWeb || !AppConfig.hasFirebase) {
+    if (kIsWeb || !_firebaseEnabled) {
       state.value = PushDeviceLinkState.idle;
       return;
     }
@@ -52,7 +170,7 @@ abstract final class PushDeviceRegistry {
     PushNotifications.installationId.addListener(_onInstallationIdChanged);
 
     try {
-      FirebaseAuth.instance.authStateChanges().listen(
+      _authSubscription = _backend.authUidChanges().listen(
         _onAuthChanged,
         onError: (Object error) {
           state.value = PushDeviceLinkState.failed;
@@ -84,8 +202,8 @@ abstract final class PushDeviceRegistry {
     unawaited(_sync());
   }
 
-  static void _onAuthChanged(User? user) {
-    _user = user;
+  static void _onAuthChanged(String? uid) {
+    _uid = uid;
     unawaited(_sync());
   }
 
@@ -111,14 +229,14 @@ abstract final class PushDeviceRegistry {
   }
 
   static Future<void> _syncOnce() async {
-    final User? user = _user;
+    final String? uid = _uid;
     final String? fid = _fid;
 
     // Un FID nuovo per lo stesso account può essere rimosso subito. Dopo un
     // cambio account, invece, l'utente autenticato non è più il proprietario
     // del vecchio documento: la pulizia deve avvenire prima del logout con
     // `unlinkCurrentDevice()` o `signOut()`.
-    final bool sameUser = _linkedUid == user?.uid;
+    final bool sameUser = _linkedUid == uid;
     final bool sameFid = _linkedFid == fid;
     if (_linkedUid != null && _linkedFid != null && sameUser && !sameFid) {
       final bool removed = await _unlink(_linkedUid!, _linkedFid!);
@@ -130,7 +248,7 @@ abstract final class PushDeviceRegistry {
       _linkedFid = null;
     }
 
-    if (user == null) {
+    if (uid == null) {
       state.value = PushDeviceLinkState.waitingForUser;
       return;
     }
@@ -154,8 +272,8 @@ abstract final class PushDeviceRegistry {
 
     state.value = PushDeviceLinkState.linking;
     try {
-      await _link(uid: user.uid, fid: fid, platform: platform);
-      _linkedUid = user.uid;
+      await _backend.link(uid: uid, fid: fid, platform: platform);
+      _linkedUid = uid;
       _linkedFid = fid;
       state.value = PushDeviceLinkState.linked;
       debugPrint('NEXUS_DEVICE linked=true');
@@ -165,47 +283,16 @@ abstract final class PushDeviceRegistry {
     }
   }
 
-  static Future<void> _link({
-    required String uid,
-    required String fid,
-    required String platform,
-  }) async {
-    final DocumentReference<Map<String, dynamic>> document = _document(
-      uid,
-      fid,
-    );
-
-    await FirebaseFirestore.instance.runTransaction((
-      Transaction transaction,
-    ) async {
-      final DocumentSnapshot<Map<String, dynamic>> snapshot = await transaction
-          .get(document);
-      final Map<String, Object?> data = <String, Object?>{
-        'platform': platform,
-        'appVersion': AppInfo.version,
-        'enabled': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'lastSeenAt': FieldValue.serverTimestamp(),
-      };
-      if (!snapshot.exists) {
-        data['createdAt'] = FieldValue.serverTimestamp();
-      }
-      transaction.set(document, data, SetOptions(merge: true));
-    });
-  }
-
   /// Scollega il dispositivo mentre l'utente è ancora autenticato.
   ///
   /// Va chiamato prima di `FirebaseAuth.signOut()` o di un cambio account:
   /// dopo il cambio di autenticazione le regole owner-only impediscono di
   /// eliminare il documento del vecchio utente.
   static Future<void> unlinkCurrentDevice() async {
-    final User? user = FirebaseAuth.instance.currentUser;
+    final String? uid = _backend.currentUid;
     final String? fid = _fid ?? PushNotifications.installationId.value;
-    if (user == null || fid == null || fid.isEmpty) return;
-    if (await _unlink(user.uid, fid) &&
-        _linkedUid == user.uid &&
-        _linkedFid == fid) {
+    if (uid == null || fid == null || fid.isEmpty) return;
+    if (await _unlink(uid, fid) && _linkedUid == uid && _linkedFid == fid) {
       _linkedUid = null;
       _linkedFid = null;
     }
@@ -214,29 +301,18 @@ abstract final class PushDeviceRegistry {
   /// Uscita sicura: prova a scollegare il dispositivo, poi chiude la sessione.
   static Future<void> signOut() async {
     await unlinkCurrentDevice();
-    await FirebaseAuth.instance.signOut();
+    await _backend.signOut();
   }
 
   static Future<bool> _unlink(String uid, String fid) async {
     try {
-      await _document(uid, fid).delete();
+      await _backend.unlink(uid: uid, fid: fid);
       return true;
     } catch (error) {
       state.value = PushDeviceLinkState.failed;
       debugPrint('NEXUS_DEVICE error=${_errorCode(error)}');
       return false;
     }
-  }
-
-  static DocumentReference<Map<String, dynamic>> _document(
-    String uid,
-    String fid,
-  ) {
-    return FirebaseFirestore.instance
-        .collection('profiles')
-        .doc(uid)
-        .collection('devices')
-        .doc(fid);
   }
 
   /// Il FID è un identificativo base64url di Firebase Installation.

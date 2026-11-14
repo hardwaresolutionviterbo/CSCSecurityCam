@@ -107,13 +107,34 @@ jobs:
       - name: Analisi statica
         run: flutter analyze
 
+      # Regola F8: i test non ricevono chiavi né configurazioni di servizi reali.
+      - name: Isolamento dei test
+        run: |
+          set -euo pipefail
+          for f in android/app/google-services.json ios/Runner/GoogleService-Info.plist lib/firebase_options.dart env.json; do
+            if [ -e "${f}" ]; then
+              echo "::error::${f} presente prima dei test: i test devono girare senza configurazioni reali."
+              exit 1
+            fi
+          done
+          for v in GOOGLE_SERVICES_JSON SUPABASE_URL SUPABASE_ANON_KEY; do
+            if [ -n "${!v:-}" ]; then
+              echo "::error::${v} presente nell'ambiente dei test."
+              exit 1
+            fi
+          done
+          echo "Test isolati: nessuna chiave e nessuna configurazione di servizi reali."
+
       # I test ricevono gli stessi identificativi dell'APK (nessuna chiave, nessun servizio).
+      # Seconda esecuzione: solo F6 con FIREBASE_ENABLED=true, senza inizializzare Firebase.
       - name: Test
         run: |
           flutter test \
             --dart-define=BUILD_NUMBER="${BUILD_NUMBER}" \
             --dart-define=GIT_COMMIT="${GIT_COMMIT}" \
             --dart-define=GIT_BRANCH="${GIT_BRANCH}"
+          flutter test test/regression/f6_push_diagnostics_test.dart \
+            --dart-define=FIREBASE_ENABLED=true
 
       - name: Configura Firebase (google-services.json)
         env:
@@ -235,8 +256,53 @@ jobs:
           grep -aqF "${GIT_COMMIT}" "${kernel}" || { echo "::error::Commit assente dal codice dell'app."; exit 1; }
           grep -aqF "${GIT_BRANCH}" "${kernel}" || { echo "::error::Ramo assente dal codice dell'app."; exit 1; }
           rm -f "${kernel}"
+          echo "Identificativi letti dall'APK: OK"
+
+      # Regola F10: nessun link esterno verso schermate interne, nessuna chiave privilegiata.
+      - name: Controlli di sicurezza sull'APK
+        run: |
+          set -euo pipefail
+          apk=build/app/outputs/flutter-apk/app-debug.apk
+          aapt2=$(ls -d "${ANDROID_HOME}"/build-tools/*/ | sort -V | tail -1)aapt2
+          manifest=$("${aapt2}" dump xmltree --file AndroidManifest.xml "${apk}")
+          if printf '%s' "${manifest}" | grep -q 'android.intent.action.VIEW'; then
+            echo "::error::Il manifesto contiene link esterni (VIEW) verso l'app."
+            exit 1
+          fi
+          if printf '%s' "${manifest}" | grep -qE 'E: data'; then
+            echo "::error::Il manifesto dichiara schemi o indirizzi (deep link)."
+            exit 1
+          fi
+          echo "Manifesto: solo avvio normale, nessun deep link."
+          python3 - "${apk}" <<'PY'
+          import base64, json, re, sys, zipfile
+          apk = zipfile.ZipFile(sys.argv[1])
+          jwt = re.compile(rb"eyJ[A-Za-z0-9_-]{8,}\.(eyJ[A-Za-z0-9_-]{8,})\.[A-Za-z0-9_-]{8,}")
+          problems = 0
+          for name in apk.namelist():
+              data = apk.read(name)
+              if b"sb_secret_" in data or b"service_role" in data:
+                  print(f"::error::Possibile chiave privilegiata in {name}.")
+                  problems += 1
+              for match in jwt.finditer(data):
+                  part = match.group(1) + b"=" * (-len(match.group(1)) % 4)
+                  try:
+                      role = json.loads(base64.urlsafe_b64decode(part)).get("role")
+                  except Exception:
+                      continue
+                  if role not in (None, "anon"):
+                      print(f"::error::Token con ruolo non pubblico in {name}.")
+                      problems += 1
+          if problems:
+              sys.exit(1)
+          print("Nessuna chiave privilegiata nell'APK (solo chiavi pubbliche previste).")
+          PY
+
+      - name: Prepara APK per la consegna
+        run: |
+          set -euo pipefail
           mkdir -p build/consegna
-          cp "${apk}" "build/consegna/${APK_NAME}.apk"
+          cp build/app/outputs/flutter-apk/app-debug.apk "build/consegna/${APK_NAME}.apk"
           echo "Identificativi verificati: ${APK_NAME}.apk"
 
       - name: Carica APK
