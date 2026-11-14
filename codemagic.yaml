@@ -4,15 +4,23 @@
 # Android NON si compila qui: l'APK lo produce GitHub Actions (.github/workflows/android.yml).
 # Così non si consumano minuti per build doppie.
 #
+# Regola F10: nessun file di configurazione Firebase nel repository (pubblico).
+# GoogleService-Info.plist è escluso da Git (.gitignore) e viene creato durante la build
+# a partire da un segreto di Codemagic, DOPO analisi e test (isolamento dei test, F8).
+#
 # Come si usa (solo dopo l'autorizzazione del titolare):
-# 1. Il titolare collega il repository a Codemagic dall'app o dal sito e sceglie codemagic.yaml.
-# 2. Variabili d'ambiente del progetto (Codemagic → Environment variables), mai nel repository:
-#    SUPABASE_URL, SUPABASE_ANON_KEY. Firebase su iPhone resta spento finché non c'è il file
-#    di configurazione iOS (Fase 2 o successive).
+# 1. Il titolare collega il repository a Codemagic e sceglie codemagic.yaml.
+# 2. In Codemagic → app → Environment variables crea il gruppo «nexus_social» con,
+#    tutte marcate «Secure»:
+#    - GOOGLE_SERVICE_INFO_PLIST: il contenuto del file GoogleService-Info.plist (testo XML
+#      così com'è, oppure codificato in base64);
+#    - SUPABASE_URL e SUPABASE_ANON_KEY (facoltative: senza, l'app mostra
+#      «Non configurato» per Supabase).
+#    Istruzioni passo passo: docs/fase1/FIREBASE_IOS.md.
 # 3. Avvio solo manuale («Start new build»): nessuna build automatica a ogni push.
 #
 # Per installare l'app su un iPhone serve l'account sviluppatore Apple (Fasi 9-10): questa
-# build senza firma verifica soltanto che il progetto iOS compili.
+# build senza firma verifica che il progetto iOS compili con Firebase configurato.
 
 workflows:
   ios-debug:
@@ -21,14 +29,11 @@ workflows:
     max_build_duration: 60
     # Nessuna sezione «triggering»: la build parte solo a mano.
     environment:
+      groups:
+        - nexus_social
       flutter: 3.50.0
       xcode: latest
       cocoapods: default
-      vars:
-        # Sovrascritte dalle variabili d'ambiente del progetto su Codemagic.
-        SUPABASE_URL: ""
-        SUPABASE_ANON_KEY: ""
-        FIREBASE_ENABLED: "false"
     cache:
       cache_paths:
         - $HOME/.pub-cache
@@ -39,7 +44,51 @@ workflows:
       - name: Analisi statica
         script: flutter analyze
       - name: Test (senza chiavi né servizi reali)
-        script: flutter test
+        script: |
+          set -e
+          if [ -e ios/Runner/GoogleService-Info.plist ]; then
+            echo "GoogleService-Info.plist presente prima dei test: non deve stare nel repository."
+            exit 1
+          fi
+          flutter test
+      # Il file nasce solo qui, dopo i test, dal segreto GOOGLE_SERVICE_INFO_PLIST.
+      # Il contenuto non viene mai stampato.
+      - name: Configura Firebase iOS (dal segreto)
+        script: |
+          set -euo pipefail
+          target=ios/Runner/GoogleService-Info.plist
+          if [ -z "${GOOGLE_SERVICE_INFO_PLIST:-}" ]; then
+            echo "Segreto GOOGLE_SERVICE_INFO_PLIST assente: aggiungilo al gruppo nexus_social (vedi docs/fase1/FIREBASE_IOS.md)."
+            exit 1
+          fi
+          # Accetta il file così com'è (testo XML) oppure codificato in base64.
+          case "${GOOGLE_SERVICE_INFO_PLIST}" in
+            "<"*) printf '%s' "${GOOGLE_SERVICE_INFO_PLIST}" > "${target}" ;;
+            *)
+              if ! printf '%s' "${GOOGLE_SERVICE_INFO_PLIST}" | tr -d ' \n\r' | base64 --decode > "${target}" 2> /dev/null; then
+                rm -f "${target}"
+                echo "Il segreto non è un plist né un base64 valido: incolla il contenuto di GoogleService-Info.plist."
+                exit 1
+              fi
+              ;;
+          esac
+          if ! plutil -lint "${target}" > /dev/null; then
+            rm -f "${target}"
+            echo "Il segreto non contiene un plist valido: incolla il contenuto di GoogleService-Info.plist (testo o base64)."
+            exit 1
+          fi
+          bundle=$(/usr/libexec/PlistBuddy -c 'Print :BUNDLE_ID' "${target}")
+          if [ "${bundle}" != "com.nexussocial.app" ]; then
+            rm -f "${target}"
+            echo "Il plist è di un'altra app (BUNDLE_ID diverso da com.nexussocial.app)."
+            exit 1
+          fi
+          for key in API_KEY GCM_SENDER_ID PROJECT_ID GOOGLE_APP_ID; do
+            /usr/libexec/PlistBuddy -c "Print :${key}" "${target}" > /dev/null || {
+              rm -f "${target}"; echo "Nel plist manca ${key}."; exit 1; }
+          done
+          echo "FIREBASE_ENABLED=true" >> "${CM_ENV}"
+          echo "GoogleService-Info.plist pronto per com.nexussocial.app (contenuto non stampato)."
       # Regola R1 anche su iPhone: versione, numero di build, commit e ramo.
       # BUILD_NUMBER, CM_COMMIT e CM_BRANCH sono forniti da Codemagic.
       - name: Build iOS (senza firma)
@@ -50,9 +99,18 @@ workflows:
             --dart-define=BUILD_NUMBER="${BUILD_NUMBER}" \
             --dart-define=GIT_COMMIT="${CM_COMMIT}" \
             --dart-define=GIT_BRANCH="${CM_BRANCH}" \
-            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
-            --dart-define=FIREBASE_ENABLED="$FIREBASE_ENABLED"
-          echo "Build iOS ${BUILD_NUMBER} · ${CM_COMMIT:0:7} · ${CM_BRANCH}"
+            --dart-define=SUPABASE_URL="${SUPABASE_URL:-}" \
+            --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-}" \
+            --dart-define=FIREBASE_ENABLED="${FIREBASE_ENABLED:-false}"
+          echo "Build iOS ${BUILD_NUMBER} · ${CM_COMMIT:0:7} · ${CM_BRANCH} · Firebase ${FIREBASE_ENABLED:-false}"
+      - name: Verifica Firebase nell'app iOS
+        script: |
+          set -e
+          app=build/ios/iphoneos/Runner.app
+          if [ ! -f "${app}/GoogleService-Info.plist" ]; then
+            echo "GoogleService-Info.plist non è nel bundle dell'app."
+            exit 1
+          fi
+          echo "GoogleService-Info.plist incluso nel bundle Runner.app."
     artifacts:
       - build/ios/iphoneos/Runner.app

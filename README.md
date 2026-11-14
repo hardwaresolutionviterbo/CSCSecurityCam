@@ -102,6 +102,9 @@ un APK distinto.
 
 **Codemagic (solo iPhone, decisione F11).**
 - Il collegamento del repository richiede l'autorizzazione del titolare.
+- Firebase su iOS: il file `GoogleService-Info.plist` non sta nel repository (regola F10). La
+  build lo crea dal segreto `GOOGLE_SERVICE_INFO_PLIST` del gruppo `nexus_social`: istruzioni
+  in [`docs/fase1/FIREBASE_IOS.md`](docs/fase1/FIREBASE_IOS.md).
 - La build iOS senza firma si avvia manualmente.
 - Per installare su iPhone serve un account Apple (Fasi 9-10).
 
